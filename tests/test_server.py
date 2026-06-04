@@ -40,3 +40,28 @@ def test_transpile_parse_error_is_graceful() -> None:
     assert r.status_code == 200
     data = r.json()
     assert any(i["code"] == "PARSE_ERROR" for i in data["issues"])
+
+
+def test_emit_mitsubishi() -> None:
+    r = client.post(
+        "/api/emit",
+        json={"st_code": "MOTOR := (START OR MOTOR) AND NOT STOP;", "vendor": "MITSUBISHI_FX"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert "ORB" in data["text"]
+    assert "LD " in data["text"]
+
+
+def test_emit_unknown_vendor() -> None:
+    r = client.post("/api/emit", json={"st_code": "Y := A;", "vendor": "NOPE"})
+    data = r.json()
+    assert data["ok"] is False
+    assert "알 수 없는 벤더" in data["error"]
+
+
+def test_safety_endpoint_returns_notice() -> None:
+    r = client.get("/api/safety")
+    assert r.status_code == 200
+    assert "하드와이어" in r.json()["notice"]

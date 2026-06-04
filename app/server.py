@@ -1,8 +1,10 @@
 """FastAPI 서버 — 라이브 미리보기 + 자연어 생성 백엔드.
 
   POST /api/transpile  : ST → 래더 JSON + 검증(결정론, 키 불필요)
+  POST /api/emit       : ST → 벤더별 래더 명령어 텍스트(IL/STL)
   POST /api/generate   : 자연어 → ST + 래더 + 검증 (LLM)
   GET  /api/errorcodes : 에러코드 조회
+  GET  /api/safety     : 안전 경계 고지
   GET  /healthz · /version
   GET  /               : 정적 프론트(웹 래더 에디터)
 """
@@ -20,12 +22,14 @@ from pydantic import BaseModel, Field
 
 from app import __version__
 from app.config import settings
+from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.safety import safety_payload
 from app.transpiler import transpile_st
+from app.vendors.profiles import available_profiles, get_profile
 from app.verifier import check_double_coils
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -96,6 +100,38 @@ def transpile(req: TranspileRequest) -> TranspileResponse:
         ladder = LadderProgram(title=req.title)
     ok = not any(i.severity == "error" for i in issues)
     return TranspileResponse(ladder=ladder, issues=issues, ok=ok)
+
+
+class EmitRequest(BaseModel):
+    st_code: str = Field(..., max_length=settings.max_st_chars)
+    vendor: str = Field(default="LS_XGK")
+
+
+class EmitResponse(BaseModel):
+    vendor: str
+    text: str
+    ok: bool
+    error: str | None = None
+
+
+@app.post("/api/emit", response_model=EmitResponse)
+def emit(req: EmitRequest) -> EmitResponse:
+    """ST → 벤더별 래더 명령어 텍스트(IL/STL) 렌더(결정론, Phase N)."""
+    try:
+        profile = get_profile(req.vendor)
+    except KeyError:
+        return EmitResponse(
+            vendor=req.vendor,
+            text="",
+            ok=False,
+            error=f"알 수 없는 벤더: {req.vendor} (가능: {', '.join(available_profiles())})",
+        )
+    try:
+        program = transpile_st(req.st_code)
+        text = emit_ladder(program, profile)
+    except ValueError as exc:
+        return EmitResponse(vendor=req.vendor, text="", ok=False, error=str(exc))
+    return EmitResponse(vendor=req.vendor, text=text, ok=True)
 
 
 class GenerateRequest(BaseModel):

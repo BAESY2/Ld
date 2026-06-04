@@ -70,6 +70,7 @@ class VendorProfile:
     bits_per_word: int = 0  # 0=문자+인덱스, >0=비트주소(byte.bit / channel.bit)
     bit_template: str = "%{letter}{word}.{bit}"
     timer_is_countdown: bool = False
+    il_style: str = "orb"  # "orb"=LD/AND/ORB 계열, "stl"=지멘스 A/O 블록
     mnemonics: Mapping[str, str] = field(default_factory=dict)
 
     def letter_of(self, role: DeviceRole) -> str:
@@ -133,6 +134,9 @@ LS_XGK = VendorProfile(
     mnemonics={
         "contact_no": "LOAD",
         "contact_nc": "LOAD NOT",
+        "and_no": "AND",
+        "and_nc": "AND NOT",
+        "or_block": "ORB",
         "coil": "OUT",
         "set": "SET",
         "reset": "RST",
@@ -161,6 +165,9 @@ MITSUBISHI_FX = VendorProfile(
     mnemonics={
         "contact_no": "LD",
         "contact_nc": "LDI",
+        "and_no": "AND",
+        "and_nc": "ANI",
+        "or_block": "ORB",
         "coil": "OUT",
         "set": "SET",
         "reset": "RST",
@@ -186,9 +193,13 @@ SIEMENS_S7 = VendorProfile(
     },
     bits_per_word=8,
     bit_template="%{letter}{word}.{bit}",
+    il_style="stl",
     mnemonics={
         "contact_no": "A",
         "contact_nc": "AN",
+        "and_no": "A",
+        "and_nc": "AN",
+        "or_no": "O",
         "coil": "=",
         "set": "S",
         "reset": "R",
@@ -218,6 +229,9 @@ OMRON_CJ = VendorProfile(
     mnemonics={
         "contact_no": "LD",
         "contact_nc": "LD NOT",
+        "and_no": "AND",
+        "and_nc": "AND NOT",
+        "or_block": "ORB",
         "coil": "OUT",
         "set": "SET",
         "reset": "RSET",
