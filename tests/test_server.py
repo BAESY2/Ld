@@ -124,3 +124,22 @@ def test_read_generated_file(tmp_path, monkeypatch) -> None:
     # 경로 탈출 차단
     bad = client.get("/api/generated/web2/../../etc/passwd")
     assert bad.status_code in (400, 404)
+
+
+def test_responses_carry_safety_notice() -> None:
+    """코드를 내보내는 응답에 안전 경계 고지가 포함된다(K3)."""
+    t = client.post("/api/transpile", json={"st_code": "M := A;"}).json()
+    assert "하드와이어" in t["safety_notice"]
+    e = client.post("/api/emit", json={"st_code": "M := A;", "vendor": "LS_XGK"}).json()
+    assert "하드와이어" in e["safety_notice"]
+    x = client.post("/api/export/plcopen", json={"st_code": "M := A;"}).json()
+    assert "하드와이어" in x["safety_notice"]
+
+
+def test_garbage_st_is_not_ok() -> None:
+    """대입문이 아닌 입력은 NO_LOGIC 으로 ok=False (가짜 통과 방지)."""
+    t = client.post("/api/transpile", json={"st_code": "이건 ST 가 아님"}).json()
+    assert t["ok"] is False
+    assert any(i["code"] == "NO_LOGIC" for i in t["issues"])
+    e = client.post("/api/emit", json={"st_code": "이건 ST 가 아님", "vendor": "LS_XGK"}).json()
+    assert e["ok"] is False

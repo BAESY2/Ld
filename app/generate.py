@@ -25,7 +25,7 @@ from app.emit import render_for_vendor
 from app.export import infer_io_spec, to_plcopen_xml
 from app.memory_map import DeviceAllocator
 from app.models import LadderProgram, StateMachineSpec, VerificationReport
-from app.safety import SAFETY_NOTICE
+from app.safety import SAFETY_INLINE_HINT, SAFETY_NOTICE
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import verify
@@ -260,7 +260,8 @@ def generate_project(
 
     put("SAFETY.md", SAFETY_NOTICE + "\n", "safety")
     put("spec.json", art.spec.model_dump_json(indent=2), "spec")
-    put("program.st", art.st if art.st.endswith("\n") else art.st + "\n", "st")
+    st_body = art.st if art.st.endswith("\n") else art.st + "\n"
+    put("program.st", f"{SAFETY_INLINE_HINT}\n{st_body}", "st")
     put("ladder.json", art.ladder.model_dump_json(indent=2), "ladder")
     put("verification.json", art.report.model_dump_json(indent=2), "verification")
     put("plcopen.xml", art.plcopen, "plcopen")

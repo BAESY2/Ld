@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -35,7 +36,7 @@ from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
-from app.safety import safety_payload
+from app.safety import SAFETY_NOTICE, safety_payload
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import check_double_coils
@@ -71,6 +72,18 @@ class TranspileResponse(BaseModel):
     ladder: LadderProgram
     issues: list[VerificationIssue]
     ok: bool
+    safety_notice: str = SAFETY_NOTICE
+
+
+def _no_logic_issue(st_code: str, rung_count: int) -> VerificationIssue | None:
+    """입력이 비어있지 않은데 렁이 0개면 'NO_LOGIC' 경고를 만든다(가짜 통과 방지)."""
+    if st_code.strip() and rung_count == 0:
+        return VerificationIssue(
+            code="NO_LOGIC",
+            severity="warning",
+            message="유효한 래더 로직이 생성되지 않았습니다(ST 가 대입문이 아닐 수 있음).",
+        )
+    return None
 
 
 @app.get("/healthz")
@@ -106,7 +119,12 @@ def transpile(req: TranspileRequest) -> TranspileResponse:
             VerificationIssue(code="PARSE_ERROR", severity="error", message=str(exc))
         )
         ladder = LadderProgram(title=req.title)
-    ok = not any(i.severity == "error" for i in issues)
+    nl = _no_logic_issue(req.st_code, len(ladder.rungs))
+    if nl is not None:
+        issues.append(nl)
+    ok = not any(i.severity == "error" for i in issues) and not any(
+        i.code == "NO_LOGIC" for i in issues
+    )
     return TranspileResponse(ladder=ladder, issues=issues, ok=ok)
 
 
@@ -120,6 +138,7 @@ class EmitResponse(BaseModel):
     text: str
     ok: bool
     error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
 
 
 @app.post("/api/emit", response_model=EmitResponse)
@@ -139,6 +158,10 @@ def emit(req: EmitRequest) -> EmitResponse:
         text = emit_ladder(program, profile)
     except ValueError as exc:
         return EmitResponse(vendor=req.vendor, text="", ok=False, error=str(exc))
+    if _no_logic_issue(req.st_code, len(program.rungs)) is not None:
+        return EmitResponse(
+            vendor=req.vendor, text=text, ok=False, error="유효한 래더 로직이 없습니다."
+        )
     return EmitResponse(vendor=req.vendor, text=text, ok=True)
 
 
@@ -152,6 +175,7 @@ class ExportResponse(BaseModel):
     content: str
     ok: bool
     error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
 
 
 @app.post("/api/export/plcopen", response_model=ExportResponse)
@@ -168,7 +192,7 @@ def export_plcopen(req: ExportRequest) -> ExportResponse:
 class GenerateFilesRequest(BaseModel):
     st_code: str = Field(default="", max_length=settings.max_st_chars)
     request: str = Field(default="", max_length=settings.max_request_chars)
-    vendors: list[str] = Field(default_factory=lambda: [DEFAULT_PROFILE.name])
+    vendors: list[str] = Field(default_factory=lambda: [DEFAULT_PROFILE.name], max_length=8)
     name: str | None = None
     title: str = ""
 
@@ -182,6 +206,8 @@ async def generate_files(req: GenerateFilesRequest) -> StreamingResponse:
     """
     from_nl = not req.st_code.strip()
     source = req.st_code if not from_nl else req.request
+    # 이름 미지정 시 고유 run-id 로 → 동시 요청이 같은 디렉터리에 충돌하지 않음
+    run_name = req.name or f"run-{uuid.uuid4().hex[:8]}"
 
     async def event_stream() -> AsyncIterator[str]:
         queue: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue()
@@ -199,7 +225,7 @@ async def generate_files(req: GenerateFilesRequest) -> StreamingResponse:
                     settings.gen_out_dir,
                     from_nl=from_nl,
                     vendors=req.vendors,
-                    name=req.name,
+                    name=run_name,
                     title=req.title,
                     force=True,
                     allow_llm=from_nl,
@@ -249,6 +275,7 @@ class GenerateResponse(BaseModel):
     ladder: LadderProgram | None
     verification: VerificationReport | None
     error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
 
 
 def _logic_analysis(spec: StateMachineSpec) -> str:
