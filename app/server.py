@@ -1,12 +1,13 @@
 """FastAPI 서버 — 라이브 미리보기 + 자연어 생성 백엔드.
 
-  POST /api/transpile  : ST → 래더 JSON + 검증(결정론, 키 불필요)
-  POST /api/emit       : ST → 벤더별 래더 명령어 텍스트(IL/STL)
-  POST /api/generate   : 자연어 → ST + 래더 + 검증 (LLM)
-  GET  /api/errorcodes : 에러코드 조회
-  GET  /api/safety     : 안전 경계 고지
+  POST /api/transpile      : ST → 래더 JSON + 검증(결정론, 키 불필요)
+  POST /api/emit           : ST → 벤더별 래더 명령어 텍스트(IL/STL)
+  POST /api/export/plcopen : ST → PLCopen XML(OpenPLC/CODESYS 임포트)
+  POST /api/generate       : 자연어 → ST + 래더 + 검증 (LLM)
+  GET  /api/errorcodes     : 에러코드 조회
+  GET  /api/safety         : 안전 경계 고지
   GET  /healthz · /version
-  GET  /               : 정적 프론트(웹 래더 에디터)
+  GET  /                   : 정적 프론트(웹 래더 에디터)
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from app.config import settings
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
+from app.export import infer_io_spec, to_plcopen_xml
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.safety import safety_payload
@@ -132,6 +134,29 @@ def emit(req: EmitRequest) -> EmitResponse:
     except ValueError as exc:
         return EmitResponse(vendor=req.vendor, text="", ok=False, error=str(exc))
     return EmitResponse(vendor=req.vendor, text=text, ok=True)
+
+
+class ExportRequest(BaseModel):
+    st_code: str = Field(..., max_length=settings.max_st_chars)
+    title: str = Field(default="", max_length=200)
+
+
+class ExportResponse(BaseModel):
+    format: str
+    content: str
+    ok: bool
+    error: str | None = None
+
+
+@app.post("/api/export/plcopen", response_model=ExportResponse)
+def export_plcopen(req: ExportRequest) -> ExportResponse:
+    """ST → PLCopen XML(OpenPLC/CODESYS 임포트 가능, Phase N)."""
+    try:
+        spec = infer_io_spec(req.st_code, title=req.title)
+        xml = to_plcopen_xml(spec, req.st_code)
+    except ValueError as exc:
+        return ExportResponse(format="plcopen-xml", content="", ok=False, error=str(exc))
+    return ExportResponse(format="plcopen-xml", content=xml, ok=True)
 
 
 class GenerateRequest(BaseModel):

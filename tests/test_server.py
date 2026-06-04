@@ -65,3 +65,15 @@ def test_safety_endpoint_returns_notice() -> None:
     r = client.get("/api/safety")
     assert r.status_code == 200
     assert "하드와이어" in r.json()["notice"]
+
+
+def test_export_plcopen() -> None:
+    r = client.post(
+        "/api/export/plcopen",
+        json={"st_code": "MOTOR := (START OR MOTOR) AND NOT STOP;", "title": "t"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert "http://www.plcopen.org/xml/tc6_0201" in data["content"]
+    assert "MOTOR" in data["content"]
