@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# venv
+.venv/
+venv/
+env/
+
+# env / secrets
+.env
+*.env
+!.env.example
+
+# test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# RAG / models
+*.faiss
+*.index
+models/
+*.gguf
+*.safetensors
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
