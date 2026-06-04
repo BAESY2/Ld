@@ -25,7 +25,10 @@
       {"from_state": "FIRST_A", "to_state": "NORMAL",  "condition": "ALM_RST AND NOT FAULT_A", "description": "A 리셋"},
       {"from_state": "FIRST_B", "to_state": "NORMAL",  "condition": "ALM_RST AND NOT FAULT_B", "description": "B 리셋"}
     ],
-    "interlocks": []
+    "interlocks": [],
+    "derived_outputs": [
+      {"output": "HORN", "expression": "(LATCH_A OR LATCH_B) AND NOT ALM_ACK", "description": "경음기(조합 출력)"}
+    ]
   },
   "golden_st": "LATCH_A := (FAULT_A AND NOT LATCH_B OR LATCH_A) AND NOT (ALM_RST AND NOT FAULT_A);\nLATCH_B := (FAULT_B AND NOT LATCH_A OR LATCH_B) AND NOT (ALM_RST AND NOT FAULT_B);\nHORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK;",
   "expect": {

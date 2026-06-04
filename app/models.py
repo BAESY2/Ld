@@ -129,6 +129,19 @@ class Interlock(BaseModel):
     reason: str = Field(default="", description="인터락 사유 (예: 정/역 동시 구동 금지)")
 
 
+class DerivedOutput(BaseModel):
+    """on_entry 로 구동되지 않는 조합(파생) 출력.
+
+    예: 경음기 ``HORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK``.
+    expression 은 boolexpr 가 파싱 가능한 불리언식(AND/OR/NOT/괄호/심볼).
+    이 필드 덕분에 합성기가 상태구동이 아닌 출력도 결정론적으로 덮을 수 있다.
+    """
+
+    output: str
+    expression: str = Field(..., description="불리언식 RHS (예: '(A OR B) AND NOT C')")
+    description: str = ""
+
+
 class StateMachineSpec(BaseModel):
     """analyst(A1) 산출물 — 전체 상태머신 명세."""
 
@@ -139,6 +152,10 @@ class StateMachineSpec(BaseModel):
     states: list[SfcState] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)
     interlocks: list[Interlock] = Field(default_factory=list)
+    derived_outputs: list[DerivedOutput] = Field(
+        default_factory=list,
+        description="상태구동이 아닌 조합 출력(예: 알람 경음기)을 불리언식으로 정의",
+    )
 
 
 # ---------------------------------------------------------------------------

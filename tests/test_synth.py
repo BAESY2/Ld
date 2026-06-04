@@ -81,16 +81,52 @@ def test_interlock_adds_partner_not() -> None:
     assert "NOT MOTOR_FWD" in st
 
 
-def test_combinational_output_not_covered() -> None:
-    """on_entry 로 구동되지 않는 조합 출력은 합성 불가(폴백 대상)."""
+def test_derived_output_now_covered() -> None:
+    """derived_outputs 로 정의된 조합 출력(HORN)은 이제 합성으로 덮인다."""
     spec = StateMachineSpec(**json.loads(
         (_GOLDEN_DIR / "18_first_out_alarm.json").read_text(encoding="utf-8")
     )["spec"])
-    outputs = {p.symbol for p in spec.io_points if p.direction == IODirection.OUTPUT}
-    # HORN 은 어떤 상태 on_entry 에도 없으므로 합성 불가
-    assert "HORN" not in synthesizable_outputs(spec)
+    assert "HORN" in synthesizable_outputs(spec)
+    assert covers_all_outputs(spec)
+    st = synthesize_st(spec)
+    assert "HORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK;" in st
+
+
+def test_combinational_output_without_derived_not_covered() -> None:
+    """derived_outputs 가 없는 조합 출력은 여전히 합성 불가(LLM 폴백 대상)."""
+    from app.models import IOPoint, SfcState
+
+    spec = StateMachineSpec(
+        io_points=[
+            IOPoint(symbol="A", direction=IODirection.INPUT),
+            IOPoint(symbol="LAMP", direction=IODirection.OUTPUT),  # 어디서도 구동 안 됨
+        ],
+        states=[SfcState(name="IDLE", is_initial=True)],
+    )
+    assert "LAMP" not in synthesizable_outputs(spec)
     assert not covers_all_outputs(spec)
-    assert synthesizable_outputs(spec) < outputs
+
+
+def test_derived_collision_with_on_entry_raises() -> None:
+    """파생 출력이 on_entry 로도 구동되면(이중 정의) 합성이 거부된다."""
+    import pytest
+
+    from app.models import DerivedOutput, IOPoint, SfcState, Transition
+
+    spec = StateMachineSpec(
+        io_points=[
+            IOPoint(symbol="GO", direction=IODirection.INPUT),
+            IOPoint(symbol="OUT", direction=IODirection.OUTPUT),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="ON", on_entry=["OUT := TRUE;"]),
+        ],
+        transitions=[Transition(from_state="IDLE", to_state="ON", condition="GO")],
+        derived_outputs=[DerivedOutput(output="OUT", expression="GO")],
+    )
+    with pytest.raises(ValueError, match="이중 정의"):
+        synthesize_st(spec)
 
 
 def test_fully_state_driven_spec_is_covered() -> None:

@@ -4,10 +4,58 @@ from __future__ import annotations
 
 import pytest
 
-from app.models import SfcState, StateMachineSpec, Transition
-from app.verifier import _HAS_Z3, _to_z3, check_reachability, verify
+from app.models import Interlock, IODirection, IOPoint, SfcState, StateMachineSpec, Transition
+from app.synth import synthesize_st
+from app.verifier import (
+    _HAS_Z3,
+    _to_z3,
+    check_interlocks_st,
+    check_reachability,
+    verify,
+)
 
 z3_only = pytest.mark.skipif(not _HAS_Z3, reason="z3 미설치")
+
+_INTERLOCK_SPEC = StateMachineSpec(
+    io_points=[
+        IOPoint(symbol="FWD_PB", direction=IODirection.INPUT),
+        IOPoint(symbol="REV_PB", direction=IODirection.INPUT),
+        IOPoint(symbol="MOTOR_FWD", direction=IODirection.OUTPUT),
+        IOPoint(symbol="MOTOR_REV", direction=IODirection.OUTPUT),
+    ],
+    states=[
+        SfcState(name="IDLE", is_initial=True),
+        SfcState(name="FWD", on_entry=["MOTOR_FWD := TRUE;"]),
+        SfcState(name="REV", on_entry=["MOTOR_REV := TRUE;"]),
+    ],
+    transitions=[
+        Transition(from_state="IDLE", to_state="FWD", condition="FWD_PB AND NOT REV_PB"),
+        Transition(from_state="IDLE", to_state="REV", condition="REV_PB AND NOT FWD_PB"),
+    ],
+    interlocks=[Interlock(output_a="MOTOR_FWD", output_b="MOTOR_REV")],
+)
+
+
+@z3_only
+def test_interlocks_st_passes_for_synthesized_output() -> None:
+    """합성된 ST(자기유지+상대 NOT)는 ST-수준 인터락 검사를 통과한다."""
+    st = synthesize_st(_INTERLOCK_SPEC)
+    assert check_interlocks_st(_INTERLOCK_SPEC, st) == []
+
+
+@z3_only
+def test_interlocks_st_catches_missing_partner_not() -> None:
+    """상대 출력 NOT 보호가 빠진 ST 는 ST-수준 검사에서 잡힌다(회귀 가드)."""
+    bad_st = "MOTOR_FWD := FWD_PB OR MOTOR_FWD;\nMOTOR_REV := REV_PB OR MOTOR_REV;"
+    issues = check_interlocks_st(_INTERLOCK_SPEC, bad_st)
+    assert any(i.code == "INTERLOCK" and i.severity == "error" for i in issues)
+
+
+@z3_only
+def test_interlocks_st_ignores_non_boolean_gracefully() -> None:
+    """비불리언 토큰이 섞여도 예외 없이 건너뛴다."""
+    st = "MOTOR_FWD := A + 1;\nMOTOR_REV := REV_PB;"
+    assert check_interlocks_st(_INTERLOCK_SPEC, st) == []
 
 
 @z3_only

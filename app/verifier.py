@@ -179,6 +179,62 @@ def check_interlocks_z3(spec: StateMachineSpec) -> list[VerificationIssue]:
     return issues
 
 
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+
+
+def _coil_equations(st_code: str) -> dict[str, str]:
+    """ST 에서 `OUT := expr;` 의 좌변→우변식을 수집한다(주석/비대입 라인 무시)."""
+    eqs: dict[str, str] = {}
+    for line in st_code.splitlines():
+        m = _ASSIGN_RE.match(line)
+        if m:
+            eqs[m.group(1)] = m.group(2)
+    return eqs
+
+
+def check_interlocks_st(spec: StateMachineSpec, st_code: str) -> list[VerificationIssue]:
+    """**실제 합성 ST** 의 코일식으로 인터락을 검증한다(명세-only 검사 보강).
+
+    seal-in 래치(`OR OUT`)와 `AND NOT partner` 항을 포함한 다음-상태식을 Z3 로
+    귀납 검사한다: 현재 ¬(a∧b) 라고 가정했을 때 다음 스캔에 a'∧b' 가 가능하면 위반.
+    동작 ST 가 상대 출력의 NOT 보호를 잃으면(회귀) 여기서 잡힌다.
+    """
+    if not spec.interlocks or not _HAS_Z3:
+        return []
+    eqs = _coil_equations(st_code)
+    issues: list[VerificationIssue] = []
+    for lock in spec.interlocks:
+        a, b = lock.output_a, lock.output_b
+        if a not in eqs or b not in eqs:
+            continue
+        shared: dict[str, z3.BoolRef] = {}
+        try:
+            a_next = _to_z3(eqs[a], shared)
+            b_next = _to_z3(eqs[b], shared)
+        except ValueError:
+            continue  # 비불리언 토큰 등은 ST 검사 건너뜀(명세 검사로 충분)
+        a_cur = shared.setdefault(a, z3.Bool(a))
+        b_cur = shared.setdefault(b, z3.Bool(b))
+        solver = z3.Solver()
+        solver.add(z3.Not(z3.And(a_cur, b_cur)))  # 귀납 가정: 현재 동시 ON 아님
+        solver.add(z3.And(a_next, b_next))  # 다음 스캔 동시 ON 가능?
+        if solver.check() == z3.sat:
+            model = solver.model()
+            ce = ", ".join(f"{d.name()}={model[d]}" for d in model.decls())
+            issues.append(
+                VerificationIssue(
+                    code="INTERLOCK",
+                    severity="error",
+                    message=(
+                        f"인터락 위반(ST): '{a}' 와 '{b}' 의 합성식이 동시에 켜질 수 "
+                        f"있습니다. ({lock.reason})"
+                    ),
+                    counterexample=ce,
+                )
+            )
+    return issues
+
+
 def check_reachability(spec: StateMachineSpec) -> list[VerificationIssue]:
     """초기 상태 존재 + 각 상태 도달성."""
     issues: list[VerificationIssue] = []
@@ -224,6 +280,7 @@ def verify(spec: StateMachineSpec, st_code: str) -> VerificationReport:
     issues: list[VerificationIssue] = []
     issues.extend(check_double_coils(st_code))
     issues.extend(check_interlocks_z3(spec))
+    issues.extend(check_interlocks_st(spec, st_code))
     issues.extend(check_reachability(spec))
 
     passed = not any(i.severity == "error" for i in issues)

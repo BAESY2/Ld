@@ -20,9 +20,23 @@ from __future__ import annotations
 
 import re
 
+from app.boolexpr import parse
 from app.models import IODirection, StateMachineSpec
 
 _SET_TRUE_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*TRUE\s*;\s*$", re.IGNORECASE)
+
+
+def _derived_map(spec: StateMachineSpec) -> dict[str, str]:
+    """파생(조합) 출력 심볼 → 불리언식. on_entry 와 충돌하면 ValueError."""
+    result: dict[str, str] = {}
+    for d in spec.derived_outputs:
+        if _on_states(spec, d.output):
+            raise ValueError(
+                f"파생 출력 '{d.output}' 이 상태 on_entry 로도 구동됩니다(이중 정의)."
+            )
+        parse(d.expression)  # 파싱 불가하면 즉시 ValueError
+        result[d.output] = d.expression
+    return result
 
 
 def _output_symbols(spec: StateMachineSpec) -> list[str]:
@@ -60,7 +74,14 @@ def _interlock_partners(spec: StateMachineSpec, output: str) -> list[str]:
 
 
 def _synth_one(spec: StateMachineSpec, output: str) -> str | None:
-    """단일 출력의 자기유지 ST 한 줄을 합성한다(불가 시 None)."""
+    """단일 출력의 ST 한 줄을 합성한다(불가 시 None).
+
+    파생 출력은 그 불리언식을 그대로, 그 외는 상태머신에서 자기유지로 합성한다.
+    """
+    derived = _derived_map(spec)
+    if output in derived:
+        return f"{output} := {derived[output]};"
+
     on_states = _on_states(spec, output)
     if not on_states:
         return None
