@@ -236,8 +236,13 @@ def check_interlocks_st(spec: StateMachineSpec, st_code: str) -> list[Verificati
 
 
 def check_reachability(spec: StateMachineSpec) -> list[VerificationIssue]:
-    """초기 상태 존재 + 각 상태 도달성."""
+    """초기 상태 존재 + 각 상태 도달성.
+
+    상태머신이 아예 없으면(순수 조합 ST) 초기 상태를 요구하지 않는다.
+    """
     issues: list[VerificationIssue] = []
+    if not spec.states:
+        return issues
     initials = [s for s in spec.states if s.is_initial]
     if not initials:
         issues.append(
