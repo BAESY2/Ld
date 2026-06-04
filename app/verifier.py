@@ -179,7 +179,7 @@ def check_interlocks_z3(spec: StateMachineSpec) -> list[VerificationIssue]:
     return issues
 
 
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 
 
 def _coil_equations(st_code: str) -> dict[str, str]:

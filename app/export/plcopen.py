@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 from app.models import DataType, IODirection, IOPoint, StateMachineSpec
 
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _IDENT_RE = re.compile(r"[A-Za-z_]\w*")
 _KEYWORDS = {"AND", "OR", "NOT", "TRUE", "FALSE"}
 

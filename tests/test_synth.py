@@ -134,3 +134,24 @@ def test_fully_state_driven_spec_is_covered() -> None:
         (_GOLDEN_DIR / "01_conveyor_fwd_rev.json").read_text(encoding="utf-8")
     )["spec"])
     assert covers_all_outputs(spec)
+
+
+def test_invalid_transition_condition_raises() -> None:
+    """파싱 불가한 전이 조건은 합성 시 ValueError(다운스트림 크래시 방지)."""
+    import pytest
+
+    from app.models import IOPoint, SfcState, Transition
+
+    spec = StateMachineSpec(
+        io_points=[
+            IOPoint(symbol="GO", direction=IODirection.INPUT),
+            IOPoint(symbol="OUT", direction=IODirection.OUTPUT),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="ON", on_entry=["OUT := TRUE;"]),
+        ],
+        transitions=[Transition(from_state="IDLE", to_state="ON", condition="GO +")],
+    )
+    with pytest.raises(ValueError):
+        synthesize_st(spec)

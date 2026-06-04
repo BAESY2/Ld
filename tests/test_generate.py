@@ -120,3 +120,13 @@ def test_cli_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rc = main(["--st", _ST, "--out", str(tmp_path), "--no-llm", "--name", "cli", "-q"])
     assert rc == 0
     assert (tmp_path / "cli" / "manifest.json").exists()
+
+
+def test_force_removes_stale_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """force 재생성 시 이전 벤더의 orphan IL 파일이 남지 않는다."""
+    _no_llm(monkeypatch)
+    generate_project(_ST, tmp_path, from_nl=False, vendors=["LS_XGK", "SIEMENS_S7"], name="d")
+    assert (tmp_path / "d" / "il" / "SIEMENS_S7.stl").exists()
+    generate_project(_ST, tmp_path, from_nl=False, vendors=["LS_XGK"], name="d", force=True)
+    assert not (tmp_path / "d" / "il" / "SIEMENS_S7.stl").exists()
+    assert (tmp_path / "d" / "il" / "LS_XGK.il").exists()

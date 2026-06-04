@@ -114,15 +114,36 @@ class DeviceAllocator:
 # ---------------------------------------------------------------------------
 # 이중 코일 검출 / 병합
 # ---------------------------------------------------------------------------
-# `SYMBOL := expr;` 형태의 단순 대입문. 좌변은 식별자 1개.
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+# `SYMBOL := expr;` 형태의 단순 대입문. 좌변은 식별자 1개, 우변엔 `;` 불가.
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
+# 문장 단위(세미콜론 분할 후) 대입 매처.
+_STMT_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*$")
+# FB 인스턴스 호출 `TON_1(IN := .., PT := ..)` — 코일 아님.
+_FB_CALL_RE = re.compile(r"^\s*[A-Za-z_]\w*\s*\(.*\)\s*$")
+
+
+def _statements(st_code: str) -> list[str]:
+    """주석(//)을 제거하고 세미콜론으로 분할한 문장 목록."""
+    stmts: list[str] = []
+    for line in st_code.splitlines():
+        code = line.split("//", 1)[0]
+        for piece in code.split(";"):
+            piece = piece.strip()
+            if piece:
+                stmts.append(piece)
+    return stmts
 
 
 def detect_double_coils(st_code: str) -> dict[str, list[str]]:
-    """동일 좌변 심볼에 2회 이상 대입하는 경우만 {심볼: [우변식, ...]} 로 반환."""
+    """동일 좌변 심볼에 2회 이상 대입하는 경우만 {심볼: [우변식, ...]} 로 반환.
+
+    다중문 한 줄(`OUT := A; OUT := B;`)·주석·FB 호출을 안전하게 처리한다.
+    """
     assigns: dict[str, list[str]] = {}
-    for line in st_code.splitlines():
-        m = _ASSIGN_RE.match(line)
+    for stmt in _statements(st_code):
+        if _FB_CALL_RE.match(stmt):
+            continue  # 타이머/카운터 FB 호출은 코일이 아님
+        m = _STMT_ASSIGN_RE.match(stmt)
         if not m:
             continue
         symbol, expr = m.group(1), m.group(2)

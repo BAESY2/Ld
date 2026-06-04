@@ -122,6 +122,9 @@ def parse(expr: str) -> Node:
 # ---------------------------------------------------------------------------
 # DNF (Sum-of-Products)
 # ---------------------------------------------------------------------------
+# DNF 항 폭발 가드(지수 폭발로 인한 행 방지). 초과 시 ValueError.
+_MAX_DNF_TERMS = 4096
+
 # 리터럴: (이름, 부정여부)  예: ("A", False) = A,  ("B", True) = NOT B
 Literal = tuple[str, bool]
 # 곱항(AND term): 리터럴 집합.  None = 항상 거짓(FALSE)
@@ -179,6 +182,11 @@ def to_dnf(node: Node) -> list[Term]:
                     acc = new_acc
                     if not acc:  # 한쪽이 FALSE 면 전체 FALSE
                         return []
+                    if len(acc) > _MAX_DNF_TERMS:
+                        raise ValueError(
+                            f"DNF 항이 {_MAX_DNF_TERMS}개를 초과했습니다(식이 너무 복잡). "
+                            "패턴/LLM 경로로 분해하세요."
+                        )
                 return acc
         raise TypeError(f"NNF 위반 노드: {n!r}")
 

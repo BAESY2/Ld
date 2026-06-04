@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -238,6 +239,9 @@ def generate_project(
         emit(GenEvent(stage="done", status="error", message=str(exc)))
         raise
 
+    # force 재생성 시 기존 트리를 비워 잔여(orphan) 파일이 남지 않게 한다
+    if project_dir.exists() and force:
+        shutil.rmtree(project_dir)
     project_dir.mkdir(parents=True, exist_ok=True)
     files: list[GeneratedFile] = []
 

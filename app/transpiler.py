@@ -19,7 +19,7 @@ from app.models import (
     LadderRung,
 )
 
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _COMMENT_RE = re.compile(r"^\s*//\s?(.*)$")
 
 

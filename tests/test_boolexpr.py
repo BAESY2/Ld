@@ -55,3 +55,13 @@ def test_precedence_or_of_and() -> None:
         frozenset({("A", False)}),
         frozenset({("B", False), ("C", False)}),
     }
+
+
+def test_dnf_blowup_guard_raises() -> None:
+    """지수 폭발하는 식은 ValueError 로 막는다(행 방지)."""
+    import pytest
+
+    from app.boolexpr import parse, to_dnf
+    expr = " AND ".join(f"(a{i} OR b{i})" for i in range(20))
+    with pytest.raises(ValueError, match="DNF"):
+        to_dnf(parse(expr))

@@ -88,6 +88,9 @@ def _synth_one(spec: StateMachineSpec, output: str) -> str | None:
     turn_on = [tr.condition for tr in spec.transitions if tr.to_state in on_states]
     if not turn_on:
         return None
+    # 전이 조건이 파싱 가능한 불리언식인지 검증(다운스트림 크래시 방지)
+    for cond in turn_on:
+        parse(cond)
     turn_off = [
         tr.condition
         for tr in spec.transitions
