@@ -10,7 +10,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# LLM/오케스트레이션/API 레이어 (Phase D 이후 필요)
+# 웹 서버(라이브 미리보기) — LLM 없이 결정론 경로만 (맥에서 가볍게 실행)
+web = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+]
+# LLM/오케스트레이션 레이어 (Phase D 이후 필요)
 llm = [
   "langgraph>=0.2,<0.4",
   "langchain-anthropic>=0.3,<0.4",
