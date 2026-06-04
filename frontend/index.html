@@ -12,33 +12,90 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-         background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+         background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
-           border-bottom: 1px solid var(--border); background: var(--panel); }
+           border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header .status { margin-left: auto; font-size: 12px; color: var(--muted); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
-  .main { display: grid; grid-template-columns: 1fr 1fr; height: calc(100vh - 49px); }
-  .pane { display: flex; flex-direction: column; min-width: 0; }
+
+  /* 자연어 입력 패널 */
+  .nl-panel {
+    flex-shrink: 0; background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 0;
+  }
+  .nl-panel-head {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+    font-size: 12px; color: var(--muted); cursor: default;
+  }
+  .nl-panel-head span { font-weight: 600; color: var(--text); }
+  .nl-panel-head button.toggle-btn {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 12px; margin-left: auto; padding: 2px 6px;
+  }
+  #nl-body {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px 10px;
+    flex-wrap: wrap;
+  }
+  #nl-input {
+    flex: 1; min-width: 200px; background: #11141a; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 6px 10px; font-size: 13px; outline: none;
+  }
+  #nl-input:focus { border-color: var(--accent); }
+  #nl-btn {
+    background: #1e4db7; color: #fff; border: none; border-radius: 6px;
+    padding: 6px 16px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  #nl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #nl-info {
+    display: none; width: 100%; font-size: 12px; color: #8ecfff;
+    padding: 4px 2px 0; white-space: pre-wrap; word-break: break-word;
+  }
+
+  .main { display: grid; grid-template-columns: 1fr 1fr; flex: 1; min-height: 0; }
+  .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .pane.left { border-right: 1px solid var(--border); }
   .pane-head { padding: 8px 14px; font-size: 12px; color: var(--muted);
-               border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+               border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .pane-head select, .pane-head button { background: var(--panel); color: var(--text);
                border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
   textarea#st { flex: 1; resize: none; border: none; outline: none; padding: 14px;
                background: #11141a; color: #d7e0ec; font-family: ui-monospace, "SF Mono", Menlo, monospace;
-               font-size: 13px; line-height: 1.6; tab-size: 2; }
+               font-size: 13px; line-height: 1.6; tab-size: 2; min-height: 0; }
   .preview { flex: 1; overflow: auto; background:
-             repeating-linear-gradient(0deg,#10131a,#10131a 27px,#141821 27px,#141821 28px); }
+             repeating-linear-gradient(0deg,#10131a,#10131a 27px,#141821 27px,#141821 28px); min-height: 0; }
   .preview svg { display: block; }
-  .issues { border-top: 1px solid var(--border); max-height: 32%; overflow: auto; background: var(--panel); }
+  .issues { border-top: 1px solid var(--border); max-height: 28%; overflow: auto; background: var(--panel); flex-shrink: 0; }
   .issue { padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
   .issue .tag { font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 10px; align-self: flex-start; }
   .issue.error .tag { background: rgba(255,93,93,.15); color: var(--err); }
   .issue.warning .tag { background: rgba(245,177,76,.15); color: var(--warn); }
   .issue .fix { color: var(--muted); display: block; margin-top: 2px; }
   .empty { padding: 24px; color: var(--muted); font-size: 13px; }
+
+  /* 에러코드 패널 */
+  .ec-panel {
+    flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--border);
+  }
+  .ec-panel-head {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+    font-size: 12px; color: var(--muted);
+  }
+  .ec-panel-head span { font-weight: 600; color: var(--text); }
+  .ec-panel-head button.toggle-btn {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 12px; margin-left: auto; padding: 2px 6px;
+  }
+  #ec-body { display: none; padding: 8px 14px 10px; }
+  .ec-controls { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .ec-controls select, .ec-controls input {
+    background: #11141a; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 5px 9px; font-size: 12px; outline: none;
+  }
+  .ec-controls input { flex: 1; min-width: 120px; }
+  .ec-controls input:focus, .ec-controls select:focus { border-color: var(--accent); }
+  #ec-results { max-height: 220px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -47,6 +104,21 @@
   <span style="font-size:12px;color:var(--muted)">ST → 래더 · 결정론 · 즉시 변환</span>
   <span class="status" id="status"><span class="dot ok"></span>준비</span>
 </header>
+
+<!-- 자연어 입력 패널 -->
+<div class="nl-panel">
+  <div class="nl-panel-head">
+    <span>자연어 입력</span>
+    <span style="color:var(--muted);font-weight:400">— 한국어로 회로를 설명하면 ST 코드를 생성합니다</span>
+    <button class="toggle-btn" id="nl-toggle" title="패널 접기/펼치기">▼</button>
+  </div>
+  <div id="nl-body">
+    <input id="nl-input" type="text" placeholder="예: 시작 버튼을 누르면 모터가 돌고, 정지 버튼으로 멈추는 자기유지 회로" />
+    <button id="nl-btn">생성</button>
+    <div id="nl-info"></div>
+  </div>
+</div>
+
 <div class="main">
   <div class="pane left">
     <div class="pane-head">
@@ -66,6 +138,26 @@
     <div class="pane-head"><span>래더 미리보기</span><span id="rungcount" style="margin-left:auto"></span></div>
     <div class="preview" id="preview"><div class="empty">왼쪽에 ST를 입력하면 즉시 래더가 그려집니다.</div></div>
     <div class="issues" id="issues"></div>
+    <!-- 에러코드 조회 패널 -->
+    <div class="ec-panel">
+      <div class="ec-panel-head">
+        <span>에러코드 조회</span>
+        <button class="toggle-btn" id="ec-toggle" title="패널 접기/펼치기">▼</button>
+      </div>
+      <div id="ec-body">
+        <div class="ec-controls">
+          <select id="ec-vendor">
+            <option value="GENERIC">GENERIC</option>
+            <option value="LS_ELECTRIC">LS ELECTRIC</option>
+            <option value="MITSUBISHI">MITSUBISHI</option>
+            <option value="SIEMENS">SIEMENS</option>
+            <option value="OMRON">OMRON</option>
+          </select>
+          <input id="ec-search" type="text" placeholder="에러코드 또는 키워드 검색…" />
+        </div>
+        <div id="ec-results"><div style="color:var(--muted);font-size:12px;padding:6px 0">검색어를 입력하세요.</div></div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="/app.js"></script>

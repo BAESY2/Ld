@@ -15,7 +15,12 @@
 ```
 
 왼쪽에 ST를 입력하면 **즉시** 오른쪽에 래더가 그려진다(결정론 변환, API 키 불필요).
-접점을 클릭하면 NO↔NC가 토글되며 ST에 반영된다. 이중코일은 실시간으로 검출된다.
+- 접점 클릭 → NO↔NC 토글, 라벨 클릭 → 심볼 일괄 리네임, Ctrl/Cmd+Z 실행취소.
+- 상단 **자연어 입력** → ST 자동 생성 (LLM, `ANTHROPIC_API_KEY` 필요 · `pip install -e ".[llm]"`).
+- 우측 하단 **에러코드 조회** → 벤더별(LS/미쓰비시/지멘스/옴론) 검색.
+- 이중코일·인터락은 실시간 검출.
+
+데스크톱 앱(.app)으로 감싸려면 [`desktop/README.md`](desktop/README.md) 참조 (Tauri).
 
 > Windows: `python -m venv .venv && .venv\Scripts\activate && pip install -e ".[web]" && uvicorn app.server:app`
 
@@ -27,11 +32,14 @@
 | B | Pydantic 데이터 계약 (spec/verification/ladder) | ✅ |
 | C | 디바이스 할당기 · 이중코일 OR 병합 · **Z3 인터락 검증** | ✅ |
 | H1 | **결정론 ST→래더 트랜스파일러** (boolexpr DNF) | ✅ |
-| F | FastAPI `/api/transpile` · `/healthz` + 정적 프론트 | ✅ |
-| — | 웹 래더 에디터 (라이브 SVG 미리보기 + 접점 토글 편집) | ✅ |
-| — | 에러코드 KB 스키마 (출처 추적 · ToS 존중 원칙) | ✅(스텁) |
-| D/E | LLM 4-에이전트 + LangGraph 피드백 루프 | ⏳ |
-| D/E 후 | `/api/generate` 자연어 경로 | ⏳ |
+| D | 4-에이전트 (analyst LLM · architect LLM · verifier/renderer 결정론) | ✅ |
+| E | 파이프라인 피드백 루프 (verify→architect, give_up 게이트) | ✅ |
+| F | FastAPI `/api/transpile` · `/api/generate` · `/api/errorcodes` · `/healthz` | ✅ |
+| — | 웹 래더 에디터 (라이브 SVG · 접점 토글 · 심볼 리네임 · undo/redo · 자연어 입력) | ✅ |
+| — | 에러코드 KB (37개 시드, LS/미쓰비시/지멘스/옴론, 출처추적·ToS존중) | ✅ |
+| — | 데스크톱 앱 (Tauri 셸 스캐폴드) | ✅(스캐폴드) |
+| G | RAG FAISS 적재 | ⏳ |
+| I | 골든 100세트 평가 하니스 | ⏳ |
 
 ## 개발
 
