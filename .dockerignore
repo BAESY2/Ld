@@ -19,3 +19,4 @@ tests/
 *.faiss
 *.index
 models/
+out/
