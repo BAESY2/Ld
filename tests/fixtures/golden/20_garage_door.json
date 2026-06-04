@@ -1,0 +1,37 @@
+{
+  "name": "garage_door",
+  "request": "차고 문 개폐를 제어하세요. 열림 버튼(OPEN_PB)을 누르면 열림 모터(MOTOR_OPEN)가 동작하여 자기유지되고 상한 리밋(UPPER_LS)에 닿으면 멈춥니다. 닫힘 버튼(CLOSE_PB)을 누르면 닫힘 모터(MOTOR_CLOSE)가 동작하여 하한 리밋(LOWER_LS)에 닿으면 멈춥니다. 열림과 닫힘은 동시에 동작하면 안 됩니다.",
+  "spec": {
+    "title": "차고 문 개폐 제어",
+    "io_points": [
+      {"symbol": "OPEN_PB",     "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "열림 버튼"},
+      {"symbol": "CLOSE_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "닫힘 버튼"},
+      {"symbol": "UPPER_LS",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "상한 리밋 스위치"},
+      {"symbol": "LOWER_LS",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "하한 리밋 스위치"},
+      {"symbol": "MOTOR_OPEN",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "열림 모터"},
+      {"symbol": "MOTOR_CLOSE", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "닫힘 모터"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "STOPPED", "is_initial": true,  "on_entry": [],                        "description": "정지"},
+      {"name": "OPENING", "is_initial": false, "on_entry": ["MOTOR_OPEN := TRUE;"],   "description": "열리는 중"},
+      {"name": "CLOSING", "is_initial": false, "on_entry": ["MOTOR_CLOSE := TRUE;"],  "description": "닫히는 중"}
+    ],
+    "transitions": [
+      {"from_state": "STOPPED", "to_state": "OPENING", "condition": "OPEN_PB AND NOT CLOSE_PB AND NOT UPPER_LS", "description": "열림 시작"},
+      {"from_state": "STOPPED", "to_state": "CLOSING", "condition": "CLOSE_PB AND NOT OPEN_PB AND NOT LOWER_LS", "description": "닫힘 시작"},
+      {"from_state": "OPENING", "to_state": "STOPPED", "condition": "UPPER_LS OR CLOSE_PB",                      "description": "상한 도달/정지"},
+      {"from_state": "CLOSING", "to_state": "STOPPED", "condition": "LOWER_LS OR OPEN_PB",                       "description": "하한 도달/정지"}
+    ],
+    "interlocks": [
+      {"output_a": "MOTOR_OPEN", "output_b": "MOTOR_CLOSE", "reason": "열림/닫힘 모터 동시 구동 금지"}
+    ]
+  },
+  "golden_st": "MOTOR_OPEN := (OPEN_PB OR MOTOR_OPEN) AND NOT UPPER_LS AND NOT CLOSE_PB AND NOT MOTOR_CLOSE;\nMOTOR_CLOSE := (CLOSE_PB OR MOTOR_CLOSE) AND NOT LOWER_LS AND NOT OPEN_PB AND NOT MOTOR_OPEN;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "two_hand_safety",
+  "request": "프레스의 양수(兩手) 조작 회로를 작성하세요. 좌측 버튼(LH_BTN)과 우측 버튼(RH_BTN)을 모두 누르고, 가드가 닫혀 있고(GUARD_CLOSED), 비상정지가 정상(ESTOP_OK)일 때만 프레스 기동 허가(PRESS_ENABLE)가 출력됩니다. 주의: 이 로직은 보조용이며 실제 안전 기능은 안전릴레이/안전 PLC로 하드와이어 구현해야 합니다(ISO 13849).",
+  "spec": {
+    "title": "양수 조작 안전 허가(보조)",
+    "io_points": [
+      {"symbol": "LH_BTN",       "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "좌측 조작 버튼"},
+      {"symbol": "RH_BTN",       "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "우측 조작 버튼"},
+      {"symbol": "GUARD_CLOSED", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "가드 닫힘 감지"},
+      {"symbol": "ESTOP_OK",     "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "비상정지 정상(NC, TRUE=정상)"},
+      {"symbol": "PRESS_ENABLE", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "프레스 기동 허가(보조 인터록)"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "SAFE",    "is_initial": true,  "on_entry": [],                         "description": "허가 차단"},
+      {"name": "ENABLED", "is_initial": false, "on_entry": ["PRESS_ENABLE := TRUE;"],  "description": "기동 허가"}
+    ],
+    "transitions": [
+      {"from_state": "SAFE",    "to_state": "ENABLED", "condition": "LH_BTN AND RH_BTN AND GUARD_CLOSED AND ESTOP_OK", "description": "양수+가드+E-stop 정상"},
+      {"from_state": "ENABLED", "to_state": "SAFE",    "condition": "NOT LH_BTN OR NOT RH_BTN OR NOT ESTOP_OK",        "description": "조건 해제"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "PRESS_ENABLE := LH_BTN AND RH_BTN AND GUARD_CLOSED AND ESTOP_OK;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

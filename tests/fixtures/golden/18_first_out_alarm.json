@@ -1,0 +1,36 @@
+{
+  "name": "first_out_alarm",
+  "request": "최초 고장(first-out) 알람을 작성하세요. 고장 A(FAULT_A)와 고장 B(FAULT_B) 중 먼저 발생한 쪽만 래치(LATCH_A 또는 LATCH_B)되어 어느 고장이 먼저 났는지 식별합니다. 어느 한쪽이 래치되면 다른 쪽은 잠겨(lock-out) 래치되지 않습니다. 둘 중 하나라도 래치되면 경음기(HORN)가 울리며 확인 버튼(ALM_ACK)으로 경음기를 끕니다. 리셋(ALM_RST)은 해당 고장이 해소된 래치만 소거합니다.",
+  "spec": {
+    "title": "최초고장(first-out) 알람",
+    "io_points": [
+      {"symbol": "FAULT_A", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 A 신호"},
+      {"symbol": "FAULT_B", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 B 신호"},
+      {"symbol": "ALM_ACK", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "알람 확인(경음기 소거)"},
+      {"symbol": "ALM_RST", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "알람 리셋"},
+      {"symbol": "LATCH_A", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "고장 A 최초 래치"},
+      {"symbol": "LATCH_B", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "고장 B 최초 래치"},
+      {"symbol": "HORN",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "경음기"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "NORMAL",  "is_initial": true,  "on_entry": [],                    "description": "정상"},
+      {"name": "FIRST_A", "is_initial": false, "on_entry": ["LATCH_A := TRUE;"],  "description": "고장 A가 최초"},
+      {"name": "FIRST_B", "is_initial": false, "on_entry": ["LATCH_B := TRUE;"],  "description": "고장 B가 최초"}
+    ],
+    "transitions": [
+      {"from_state": "NORMAL",  "to_state": "FIRST_A", "condition": "FAULT_A AND NOT LATCH_B", "description": "A 최초 래치"},
+      {"from_state": "NORMAL",  "to_state": "FIRST_B", "condition": "FAULT_B AND NOT LATCH_A", "description": "B 최초 래치"},
+      {"from_state": "FIRST_A", "to_state": "NORMAL",  "condition": "ALM_RST AND NOT FAULT_A", "description": "A 리셋"},
+      {"from_state": "FIRST_B", "to_state": "NORMAL",  "condition": "ALM_RST AND NOT FAULT_B", "description": "B 리셋"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "LATCH_A := (FAULT_A AND NOT LATCH_B OR LATCH_A) AND NOT (ALM_RST AND NOT FAULT_A);\nLATCH_B := (FAULT_B AND NOT LATCH_A OR LATCH_B) AND NOT (ALM_RST AND NOT FAULT_B);\nHORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 3
+  }
+}

@@ -121,3 +121,20 @@ desktop/          Tauri 데스크톱 셸
 제조사 사이트 무차별 스크래핑은 하지 않는다. `app/error_codes.py` 참조:
 robots.txt/ToS 존중, 매뉴얼 본문 복제 금지, **에러코드 사실 데이터 + 출처 명기**만,
 공식·공개 레퍼런스만 정식 경로로 수집, 라이선스 모호 항목은 법무 확인.
+
+## ⚠️ 안전 경계 (필독)
+
+**이 도구의 검증(이중코일 제거·Z3 인터락 증명·도달성)은 논리 보조이며 기능 안전을
+보장하지 않는다.** E-stop·가드·정역 전원차단 등 안전 기능은 표준 PLC 래더의 소프트웨어
+인터락이 아니라 **하드와이어 안전릴레이 / 안전인증 PLC로 전원을 차단**해 구현해야 한다
+(ISO 13849 / IEC 62061 / IEC 60204-1 / NFPA 79). 생성 코드는 SIL2+ 안전로직에 그대로
+쓰지 말고 유자격 엔지니어가 반드시 검토·검증한다. 자세한 내용은 [`docs/SAFETY.md`](docs/SAFETY.md),
+실무 근거는 [`docs/research/real-world-ladder-practices.md`](docs/research/real-world-ladder-practices.md) §4.
+고지문은 `GET /api/safety` 로도 제공된다.
+
+## 학습·설계 문서 (docs/research)
+
+웹의 래더 교육·실무 자료를 조사·학습해 정리한 문서:
+- [`real-world-ladder-practices.md`](docs/research/real-world-ladder-practices.md) — 실무 래더 작성·사용 실태 + 갭 분석
+- [`ladder-knowledge-base.md`](docs/research/ladder-knowledge-base.md) — 커리큘럼·벤더 명령어셋·한일 용어·예제·표현포맷
+- [`design-direction.md`](docs/research/design-direction.md) — 학습 기반 설계 방향 + 로드맵(Phase K~N)

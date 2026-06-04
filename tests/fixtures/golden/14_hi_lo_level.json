@@ -1,0 +1,29 @@
+{
+  "name": "hi_lo_level",
+  "request": "물탱크 수위를 상/하한 스위치로 제어하세요. 저수위 스위치(LO_LS)가 감지되면 급수 펌프(PUMP)가 켜지고 자기유지됩니다. 고수위 스위치(HI_LS)가 감지되면 펌프가 꺼집니다. 즉, 저수위에서 켜져 고수위까지 채운 뒤 멈추는 히스테리시스 동작입니다.",
+  "spec": {
+    "title": "수위 상/하한 히스테리시스 제어",
+    "io_points": [
+      {"symbol": "LO_LS", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "저수위 스위치(TRUE=수위 낮음)"},
+      {"symbol": "HI_LS", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고수위 스위치(TRUE=수위 높음)"},
+      {"symbol": "PUMP",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "급수 펌프"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "DRY",     "is_initial": true,  "on_entry": [],                "description": "정지(수위 충분)"},
+      {"name": "FILLING", "is_initial": false, "on_entry": ["PUMP := TRUE;"],  "description": "급수 중"}
+    ],
+    "transitions": [
+      {"from_state": "DRY",     "to_state": "FILLING", "condition": "LO_LS AND NOT HI_LS", "description": "저수위 → 급수 시작"},
+      {"from_state": "FILLING", "to_state": "DRY",     "condition": "HI_LS",               "description": "고수위 → 급수 정지"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "PUMP := (LO_LS OR PUMP) AND NOT HI_LS;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

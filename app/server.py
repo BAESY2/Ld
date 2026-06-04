@@ -24,6 +24,7 @@ from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
+from app.safety import safety_payload
 from app.transpiler import transpile_st
 from app.verifier import check_double_coils
 
@@ -73,6 +74,12 @@ def version() -> dict[str, str]:
         "use_z3": str(settings.use_z3),
         "use_rag": str(settings.use_rag),
     }
+
+
+@app.get("/api/safety")
+def safety() -> dict[str, str]:
+    """안전 경계 고지 — 검증은 논리 보조이며 안전 인증이 아님(K3)."""
+    return safety_payload()
 
 
 @app.post("/api/transpile", response_model=TranspileResponse)
