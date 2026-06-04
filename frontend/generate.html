@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>⚡ 래더 생성기 (Codex 식)</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#c9d1d9;
+          --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950; --err:#f85149; --amber:#d29922; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+         background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; }
+  header { padding:10px 16px; border-bottom:1px solid var(--border); display:flex;
+           gap:12px; align-items:center; }
+  header h1 { font-size:15px; margin:0; }
+  header .sp { flex:1; }
+  select, button, input, textarea { font:inherit; background:var(--panel);
+    color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 10px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); color:#08111f; border:none; font-weight:600; }
+  .shell { flex:1; display:grid; grid-template-columns:300px 1fr 260px; min-height:0; }
+  .rail { border-right:1px solid var(--border); overflow:auto; padding:10px; }
+  .rail.ws { border-right:none; border-left:1px solid var(--border); }
+  .center { overflow:auto; padding:12px; min-height:0; display:flex; flex-direction:column; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+       margin:0 0 8px; }
+  .ev { padding:3px 6px; border-radius:4px; margin-bottom:2px; white-space:pre-wrap; }
+  .ev .mk { display:inline-block; width:1.2em; }
+  .ev.done { color:var(--ok); } .ev.error { color:var(--err); } .ev.skip { color:var(--muted); }
+  .ev.write { color:var(--accent); }
+  ul.tree { list-style:none; margin:0; padding:0; }
+  ul.tree li { padding:4px 6px; border-radius:4px; cursor:pointer; display:flex; gap:6px; }
+  ul.tree li:hover { background:#1f2630; }
+  ul.tree li .chip { margin-left:auto; font-size:11px; color:var(--ok); }
+  pre#view { flex:1; margin:0; background:var(--panel); border:1px solid var(--border);
+             border-radius:8px; padding:12px; overflow:auto; white-space:pre; }
+  .promptbar { border-top:1px solid var(--border); padding:10px 16px; display:flex; gap:8px; }
+  .promptbar textarea { flex:1; resize:none; height:48px; }
+  .modes { display:flex; gap:6px; }
+  .modes label { color:var(--muted); }
+  .verdict { font-size:12px; padding:2px 8px; border-radius:10px; }
+  .verdict.ok { background:#10311c; color:var(--ok); } .verdict.fail { background:#3a1416; color:var(--err); }
+  a.dl { color:var(--accent); text-decoration:none; font-size:12px; }
+  .safety { color:var(--amber); font-size:12px; border:1px solid var(--amber);
+            border-radius:6px; padding:6px 8px; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ 래더 생성기</h1>
+  <span class="modes">
+    <label><input type="radio" name="mode" value="st" checked /> ST</label>
+    <label><input type="radio" name="mode" value="nl" /> 자연어(LLM)</label>
+  </span>
+  <select id="vendors" multiple size="1" title="Ctrl/Cmd 로 다중 선택">
+    <option value="LS_XGK" selected>LS_XGK</option>
+    <option value="MITSUBISHI_FX" selected>MITSUBISHI_FX</option>
+    <option value="SIEMENS_S7">SIEMENS_S7</option>
+    <option value="OMRON_CJ">OMRON_CJ</option>
+  </select>
+  <span class="sp"></span>
+  <span id="verdict"></span>
+</header>
+
+<div class="shell">
+  <aside class="rail">
+    <h2>생성 과정</h2>
+    <div id="timeline"><div class="ev skip">입력 후 [생성]을 누르면 단계가 실시간 표시됩니다.</div></div>
+  </aside>
+
+  <main class="center">
+    <h2 id="view-title">미리보기</h2>
+    <pre id="view">파일을 선택하면 내용이 여기 표시됩니다.</pre>
+    <div class="safety" id="safety" hidden></div>
+  </main>
+
+  <aside class="rail ws">
+    <h2>워크스페이스</h2>
+    <ul class="tree" id="tree"></ul>
+  </aside>
+</div>
+
+<div class="promptbar">
+  <textarea id="input" spellcheck="false">MOTOR := (START OR MOTOR) AND NOT STOP;</textarea>
+  <button class="primary" id="go">생성 ▶</button>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const timeline = $("timeline"), tree = $("tree"), view = $("view");
+let project = null;
+
+const MARK = { start:"▶", ok:"✓", error:"✗", skip:"·" };
+
+function logEvent(ev) {
+  const div = document.createElement("div");
+  div.className = "ev " + (ev.stage === "done" ? ev.status : ev.status === "ok" && ev.file ? "write" : ev.status);
+  let line = `${MARK[ev.status] || " "} ${ev.stage}`;
+  if (ev.detail && ev.detail.vendor) line += `  [${ev.detail.vendor}]`;
+  if (ev.file) line += `  ${ev.file}`;
+  if (ev.message) line += `  — ${ev.message}`;
+  div.innerHTML = `<span class="mk"></span>${line.replace(/</g,"&lt;")}`;
+  timeline.appendChild(div);
+  timeline.scrollTop = timeline.scrollHeight;
+}
+
+function renderTree(manifest) {
+  project = manifest.project;
+  tree.innerHTML = "";
+  for (const f of manifest.files) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${f.path}</span><span class="chip">✓</span>`;
+    li.onclick = () => openFile(f.path);
+    tree.appendChild(li);
+  }
+  const v = $("verdict");
+  v.className = "verdict " + (manifest.verification_passed ? "ok" : "fail");
+  v.textContent = manifest.verification_passed ? "검증 통과" : "검증 실패";
+  $("safety").hidden = false;
+  $("safety").textContent = "⚠️ " + manifest.safety_notice;
+}
+
+async function openFile(path) {
+  $("view-title").textContent = path;
+  const r = await fetch(`/api/generated/${project}/${path}`);
+  view.textContent = await r.text();
+}
+
+function selectedVendors() {
+  return [...$("vendors").selectedOptions].map(o => o.value);
+}
+
+async function generate() {
+  timeline.innerHTML = ""; tree.innerHTML = ""; view.textContent = "생성 중…";
+  $("verdict").textContent = "";
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  const text = $("input").value;
+  const body = mode === "st"
+    ? { st_code: text, vendors: selectedVendors() }
+    : { request: text, vendors: selectedVendors() };
+
+  const res = await fetch("/api/generate/files", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  // SSE 프레임을 스트림으로 파싱
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      const ev = frame.match(/^event: (.+)$/m)?.[1];
+      const data = frame.match(/^data: (.+)$/m)?.[1];
+      if (!data) continue;
+      const payload = JSON.parse(data);
+      if (ev === "progress") logEvent(payload);
+      else if (ev === "manifest") { renderTree(payload); openFile("program.st"); }
+      else if (ev === "error") { logEvent({ stage:"error", status:"error", message: payload.error }); }
+    }
+  }
+}
+
+$("go").onclick = generate;
+$("input").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate();
+});
+</script>
+</body>
+</html>

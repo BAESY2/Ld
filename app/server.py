@@ -1,23 +1,28 @@
 """FastAPI 서버 — 라이브 미리보기 + 자연어 생성 백엔드.
 
-  POST /api/transpile      : ST → 래더 JSON + 검증(결정론, 키 불필요)
-  POST /api/emit           : ST → 벤더별 래더 명령어 텍스트(IL/STL)
-  POST /api/export/plcopen : ST → PLCopen XML(OpenPLC/CODESYS 임포트)
-  POST /api/generate       : 자연어 → ST + 래더 + 검증 (LLM)
-  GET  /api/errorcodes     : 에러코드 조회
-  GET  /api/safety         : 안전 경계 고지
+  POST /api/transpile        : ST → 래더 JSON + 검증(결정론, 키 불필요)
+  POST /api/emit             : ST → 벤더별 래더 명령어 텍스트(IL/STL)
+  POST /api/export/plcopen   : ST → PLCopen XML(OpenPLC/CODESYS 임포트)
+  POST /api/generate         : 자연어 → ST + 래더 + 검증 (LLM)
+  POST /api/generate/files   : 파일 생성 진행 SSE 스트림(Codex 식)
+  GET  /api/generated/{p}/.. : 생성된 파일 조회
+  GET  /api/errorcodes       : 에러코드 조회
+  GET  /api/safety           : 안전 경계 고지
   GET  /healthz · /version
-  GET  /                   : 정적 프론트(웹 래더 에디터)
+  GET  /                     : 정적 프론트(웹 래더 에디터)
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -27,11 +32,12 @@ from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
 from app.export import infer_io_spec, to_plcopen_xml
+from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.safety import safety_payload
 from app.transpiler import transpile_st
-from app.vendors.profiles import available_profiles, get_profile
+from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import check_double_coils
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -157,6 +163,80 @@ def export_plcopen(req: ExportRequest) -> ExportResponse:
     except ValueError as exc:
         return ExportResponse(format="plcopen-xml", content="", ok=False, error=str(exc))
     return ExportResponse(format="plcopen-xml", content=xml, ok=True)
+
+
+class GenerateFilesRequest(BaseModel):
+    st_code: str = Field(default="", max_length=settings.max_st_chars)
+    request: str = Field(default="", max_length=settings.max_request_chars)
+    vendors: list[str] = Field(default_factory=lambda: [DEFAULT_PROFILE.name])
+    name: str | None = None
+    title: str = ""
+
+
+@app.post("/api/generate/files")
+async def generate_files(req: GenerateFilesRequest) -> StreamingResponse:
+    """파일 생성 진행을 SSE 로 스트리밍한다(Codex 식 실시간 생성).
+
+    ST 입력이면 LLM 미사용. 진행 이벤트(event: progress) → 최종 event: manifest.
+    파일은 서버 gen_out_dir 아래에 쓰이며 /api/generated/... 로 조회한다.
+    """
+    from_nl = not req.st_code.strip()
+    source = req.st_code if not from_nl else req.request
+
+    async def event_stream() -> AsyncIterator[str]:
+        queue: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue()
+
+        def on_progress(ev: GenEvent) -> None:
+            queue.put_nowait(("progress", ev.model_dump_json()))
+
+        async def worker() -> None:
+            try:
+                if not source.strip():
+                    raise ValueError("입력이 비어 있습니다(st_code 또는 request 필요).")
+                manifest = await asyncio.to_thread(
+                    generate_project,
+                    source,
+                    settings.gen_out_dir,
+                    from_nl=from_nl,
+                    vendors=req.vendors,
+                    name=req.name,
+                    title=req.title,
+                    force=True,
+                    allow_llm=from_nl,
+                    on_progress=on_progress,
+                )
+                queue.put_nowait(("manifest", manifest.model_dump_json()))
+            except Exception as exc:  # noqa: BLE001
+                queue.put_nowait(("error", json.dumps({"error": str(exc)}, ensure_ascii=False)))
+            queue.put_nowait(None)
+
+        task = asyncio.create_task(worker())
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            name, data = item
+            yield f"event: {name}\ndata: {data}\n\n"
+        await task
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/generated/{project}/{path:path}", response_class=PlainTextResponse)
+def read_generated(project: str, path: str) -> PlainTextResponse:
+    """생성된 파일 내용을 반환한다(gen_out_dir 아래로 경로 제한)."""
+    base = Path(settings.gen_out_dir)
+    try:
+        target = _safe_join(base, f"{project}/{path}")
+    except ValueError:
+        return PlainTextResponse("경로 거부", status_code=400)
+    if not target.is_file():
+        return PlainTextResponse("파일 없음", status_code=404)
+    return PlainTextResponse(target.read_text(encoding="utf-8"))
 
 
 class GenerateRequest(BaseModel):

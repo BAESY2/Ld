@@ -77,3 +77,50 @@ def test_export_plcopen() -> None:
     assert data["ok"] is True
     assert "http://www.plcopen.org/xml/tc6_0201" in data["content"]
     assert "MOTOR" in data["content"]
+
+
+def test_generate_files_stream(tmp_path, monkeypatch) -> None:
+    # 서버 출력 디렉터리를 tmp 로, LLM 호출 차단
+    import dataclasses
+
+    import app.server as srv
+    from app import agents
+
+    new_settings = dataclasses.replace(srv.settings, gen_out_dir=str(tmp_path))
+    monkeypatch.setattr(srv, "settings", new_settings)
+    monkeypatch.setattr(
+        agents, "_llm", lambda m: (_ for _ in ()).throw(AssertionError("no LLM"))
+    )
+    r = client.post(
+        "/api/generate/files",
+        json={"st_code": "MOTOR := (START OR MOTOR) AND NOT STOP;", "name": "web",
+              "vendors": ["LS_XGK"]},
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert "event: progress" in body
+    assert "event: manifest" in body
+    assert "program.st" in body
+
+
+def test_read_generated_file(tmp_path, monkeypatch) -> None:
+    import dataclasses
+
+    import app.server as srv
+    from app import agents
+
+    new_settings = dataclasses.replace(srv.settings, gen_out_dir=str(tmp_path))
+    monkeypatch.setattr(srv, "settings", new_settings)
+    monkeypatch.setattr(
+        agents, "_llm", lambda m: (_ for _ in ()).throw(AssertionError("no LLM"))
+    )
+    client.post(
+        "/api/generate/files",
+        json={"st_code": "MOTOR := START AND NOT STOP;", "name": "web2", "vendors": ["LS_XGK"]},
+    )
+    r = client.get("/api/generated/web2/program.st")
+    assert r.status_code == 200
+    assert "MOTOR" in r.text
+    # 경로 탈출 차단
+    bad = client.get("/api/generated/web2/../../etc/passwd")
+    assert bad.status_code in (400, 404)
