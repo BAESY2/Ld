@@ -90,14 +90,29 @@ class TimerSpec(BaseModel):
     name: str
     timer_type: TimerType = TimerType.TON
     preset_ms: int = Field(..., ge=0, description="프리셋 시간(ms)")
+    enable_condition: str = Field(
+        default="", description="타이머 IN(인에이블) 불리언식 (예: 'MOTOR_RUN')"
+    )
     description: str = ""
+
+    @property
+    def done_ref(self) -> str:
+        """다운스트림에서 참조할 완료비트 (예: 'T1.Q')."""
+        return f"{self.name}.Q"
 
 
 class CounterSpec(BaseModel):
     name: str
     counter_type: CounterType = CounterType.CTU
     preset: int = Field(..., ge=0)
+    count_condition: str = Field(default="", description="CU(증가) 펄스 불리언식")
+    reset_condition: str = Field(default="", description="R(리셋) 불리언식")
     description: str = ""
+
+    @property
+    def done_ref(self) -> str:
+        """완료비트 참조 (CV >= PV), 예: 'C1.Q'."""
+        return f"{self.name}.Q"
 
 
 class Transition(BaseModel):

@@ -27,7 +27,19 @@ def _coil_mnemonic(profile: VendorProfile, el: LadderElement) -> str:
         return profile.mnemonic("set")
     if el.element_type == ElementType.COIL_RESET:
         return profile.mnemonic("reset")
+    if el.element_type == ElementType.TIMER:
+        return profile.mnemonic("timer_on")
+    if el.element_type == ElementType.COUNTER:
+        return profile.mnemonic("counter_up")
     return profile.mnemonic("coil")
+
+
+def _output_line(profile: VendorProfile, el: LadderElement) -> str:
+    """출력 명령 한 줄. 타이머/카운터는 프리셋(description)을 피연산자로 덧붙인다."""
+    mnem = _coil_mnemonic(profile, el)
+    if el.element_type in (ElementType.TIMER, ElementType.COUNTER) and el.description:
+        return f"{mnem} {_operand(el)} {el.description}"
+    return f"{mnem} {_operand(el)}"
 
 
 def _nonempty_branches(branches: list[LadderBranch]) -> list[LadderBranch]:
@@ -60,7 +72,7 @@ def _emit_orb(program: LadderProgram, profile: VendorProfile) -> list[str]:
             if i > 0:
                 lines.append(orb)  # 이전 블록과 OR 결합
         for out in rung.outputs:
-            lines.append(f"{_coil_mnemonic(profile, out)} {_operand(out)}")
+            lines.append(_output_line(profile, out))
         lines.append("")
     return lines
 
@@ -90,7 +102,7 @@ def _emit_stl(program: LadderProgram, profile: VendorProfile) -> list[str]:
                     lines.append(lit(el))
                 lines.append(")")
         for out in rung.outputs:
-            lines.append(f"{_coil_mnemonic(profile, out)} {_operand(out)}")
+            lines.append(_output_line(profile, out))
         lines.append("")
     return lines
 

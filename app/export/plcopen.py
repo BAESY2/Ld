@@ -17,7 +17,9 @@ from datetime import UTC, datetime
 from app.models import DataType, IODirection, IOPoint, StateMachineSpec
 
 _ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
-_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+_FB_CALL_RE = re.compile(r"^\s*[A-Za-z_]\w*\s*\(.*\)\s*;\s*$")
+# 점표기 멤버(T1.Q) 포함 식별자
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 _KEYWORDS = {"AND", "OR", "NOT", "TRUE", "FALSE"}
 
 
@@ -30,6 +32,8 @@ def infer_io_spec(st_code: str, title: str = "") -> StateMachineSpec:
     rhs_ids: list[str] = []
     out_set: set[str] = set()
     for line in st_code.splitlines():
+        if _FB_CALL_RE.match(line):
+            continue  # 타이머/카운터 FB 호출은 변수 추론에서 제외
         m = _ASSIGN_RE.match(line)
         if not m:
             continue
@@ -38,7 +42,8 @@ def infer_io_spec(st_code: str, title: str = "") -> StateMachineSpec:
             out_set.add(lhs)
             outputs.append(lhs)
         for tok in _IDENT_RE.findall(m.group(2)):
-            if tok.upper() not in _KEYWORDS:
+            # 점표기(예: T1.Q)는 FB 출력 참조이므로 입력으로 만들지 않음
+            if tok.upper() not in _KEYWORDS and "." not in tok:
                 rhs_ids.append(tok)
     inputs = [s for s in dict.fromkeys(rhs_ids) if s not in out_set]
     points = [IOPoint(symbol=s, direction=IODirection.INPUT) for s in inputs]

@@ -21,7 +21,40 @@ from __future__ import annotations
 import re
 
 from app.boolexpr import parse
-from app.models import IODirection, StateMachineSpec
+from app.models import CounterSpec, IODirection, StateMachineSpec, TimerSpec
+
+
+def _ms_to_iec_time(ms: int) -> str:
+    """500 -> 'T#500ms', 5000 -> 'T#5s' (1000 배수는 초로 가독화)."""
+    if ms and ms % 1000 == 0:
+        return f"T#{ms // 1000}s"
+    return f"T#{ms}ms"
+
+
+def _timer_call(t: TimerSpec) -> str:
+    cond = t.enable_condition.strip() or "FALSE"
+    parse(cond)  # 조기 검증
+    return f"{t.name}(IN := {cond}, PT := {_ms_to_iec_time(t.preset_ms)});"
+
+
+def _counter_call(c: CounterSpec) -> str:
+    cu = c.count_condition.strip() or "FALSE"
+    r = c.reset_condition.strip() or "FALSE"
+    parse(cu)
+    parse(r)
+    return f"{c.name}(CU := {cu}, RESET := {r}, PV := {c.preset});"
+
+
+def synthesize_fb_calls(spec: StateMachineSpec) -> list[str]:
+    """타이머/카운터 IEC FB 인스턴스 호출 라인(코일 라인보다 먼저)."""
+    lines: list[str] = []
+    for t in spec.timers:
+        lines.append(f"// 타이머 {t.name} ({t.timer_type}, {t.preset_ms}ms)")
+        lines.append(_timer_call(t))
+    for c in spec.counters:
+        lines.append(f"// 카운터 {c.name} ({c.counter_type}, PV={c.preset})")
+        lines.append(_counter_call(c))
+    return lines
 
 _SET_TRUE_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*TRUE\s*;\s*$", re.IGNORECASE)
 
@@ -122,9 +155,15 @@ def synthesize_st(spec: StateMachineSpec) -> str:
 
     합성 가능한 출력만 한 줄씩 대입문으로 만든다(이중코일 0 보장).
     """
-    lines: list[str] = []
+    coil_lines: list[str] = []
     for output in _output_symbols(spec):
         line = _synth_one(spec, output)
         if line is not None:
-            lines.append(line)
-    return "\n".join(lines)
+            coil_lines.append(line)
+    fb_lines = synthesize_fb_calls(spec)
+    blocks: list[str] = []
+    if fb_lines:
+        blocks.append("\n".join(fb_lines))  # FB 호출이 코일보다 먼저(스캔 순서)
+    if coil_lines:
+        blocks.append("\n".join(coil_lines))
+    return "\n\n".join(blocks)

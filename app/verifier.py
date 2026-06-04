@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - 환경에 z3 없을 때
 # ---------------------------------------------------------------------------
 # 불리언식 → Z3 (재귀하강 파서)
 # ---------------------------------------------------------------------------
-_TOKEN_RE = re.compile(r"\s*(\(|\)|[A-Za-z_]\w*)")
+_TOKEN_RE = re.compile(r"\s*(\(|\)|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
 
 
 def _tokenize(expr: str) -> list[str]:
@@ -268,6 +268,30 @@ def check_reachability(spec: StateMachineSpec) -> list[VerificationIssue]:
     return issues
 
 
+def check_timers_counters(spec: StateMachineSpec) -> list[VerificationIssue]:
+    """타이머/카운터 명세 위생 검사(경고 수준)."""
+    issues: list[VerificationIssue] = []
+    for t in spec.timers:
+        if t.preset_ms <= 0:
+            issues.append(VerificationIssue(
+                code="TIMER_PRESET", severity="warning",
+                message=f"타이머 '{t.name}' 프리셋이 0 이하입니다."))
+        if not t.enable_condition.strip():
+            issues.append(VerificationIssue(
+                code="TIMER_ENABLE", severity="warning",
+                message=f"타이머 '{t.name}' 의 IN(인에이블) 조건이 비어있습니다."))
+    for c in spec.counters:
+        if c.preset <= 0:
+            issues.append(VerificationIssue(
+                code="COUNTER_PRESET", severity="warning",
+                message=f"카운터 '{c.name}' PV 가 0 이하입니다."))
+        if not c.reset_condition.strip():
+            issues.append(VerificationIssue(
+                code="COUNTER_RESET", severity="warning",
+                message=f"카운터 '{c.name}' 리셋 조건이 없습니다(누적 위험)."))
+    return issues
+
+
 def check_double_coils(st_code: str) -> list[VerificationIssue]:
     dups = detect_double_coils(st_code)
     return [
@@ -287,6 +311,7 @@ def verify(spec: StateMachineSpec, st_code: str) -> VerificationReport:
     issues.extend(check_interlocks_z3(spec))
     issues.extend(check_interlocks_st(spec, st_code))
     issues.extend(check_reachability(spec))
+    issues.extend(check_timers_counters(spec))
 
     passed = not any(i.severity == "error" for i in issues)
     report = VerificationReport(issues=issues, passed=passed)

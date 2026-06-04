@@ -1,0 +1,31 @@
+{
+  "name": "part_counter",
+  "request": "컨베이어 부품 카운터를 작성하세요. 부품 감지 센서(PART_SENSOR)가 한 개씩 감지할 때마다 카운터(C1)가 증가하고, 10개에 도달하면 배출 솔레노이드(EJECT)가 동작합니다. 리셋 버튼(RESET_PB)을 누르면 카운터가 0으로 초기화됩니다.",
+  "spec": {
+    "title": "부품 카운터(실카운터)",
+    "io_points": [
+      {"symbol": "PART_SENSOR", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "부품 감지 센서"},
+      {"symbol": "RESET_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "카운터 리셋 버튼"},
+      {"symbol": "EJECT",       "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "배출 솔레노이드"}
+    ],
+    "timers": [],
+    "counters": [
+      {"name": "C1", "counter_type": "CTU", "preset": 10, "count_condition": "PART_SENSOR", "reset_condition": "RESET_PB", "description": "10개 카운트"}
+    ],
+    "states": [
+      {"name": "COUNTING", "is_initial": true,  "on_entry": [],                "description": "계수 중"},
+      {"name": "FULL",     "is_initial": false, "on_entry": ["EJECT := TRUE;"], "description": "10개 도달 → 배출"}
+    ],
+    "transitions": [
+      {"from_state": "COUNTING", "to_state": "FULL",     "condition": "C1.Q AND NOT RESET_PB", "description": "프리셋 도달"},
+      {"from_state": "FULL",     "to_state": "COUNTING", "condition": "RESET_PB",              "description": "리셋"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "C1(CU := PART_SENSOR, RESET := RESET_PB, PV := 10);\n\nEJECT := (C1.Q OR EJECT) AND NOT RESET_PB;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

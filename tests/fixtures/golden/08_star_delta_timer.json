@@ -1,17 +1,18 @@
 {
   "name": "star_delta_timer",
-  "request": "스타-델타 기동 제어를 래더로 작성하세요. 기동 버튼(START_PB)을 누르면 먼저 스타 접속(STAR_CON)으로 기동하고, 타이머 완료 조건(TIMER_DONE)이 되면 스타 접속을 해제하고 델타 접속(DELTA_CON)으로 전환합니다. 정지 버튼(STOP_PB)을 누르면 모든 출력이 차단됩니다. 스타와 델타는 동시에 동작하면 안 됩니다.",
+  "request": "스타-델타 기동 제어를 래더로 작성하세요. 기동 버튼(START_PB)을 누르면 먼저 스타 접속(STAR_CON)으로 기동하고, 5초 후 타이머(T1)가 완료되면 스타를 해제하고 델타 접속(DELTA_CON)으로 전환합니다. 정지 버튼(STOP_PB)을 누르면 모든 출력이 차단됩니다. 스타와 델타는 동시에 동작하면 안 됩니다.",
   "spec": {
-    "title": "스타-델타 기동 제어",
+    "title": "스타-델타 기동 제어(실타이머)",
     "io_points": [
       {"symbol": "START_PB",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "기동 버튼"},
       {"symbol": "STOP_PB",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지 버튼"},
-      {"symbol": "TIMER_DONE","direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "타이머 완료 신호 (스타→델타 전환)"},
       {"symbol": "MAIN_CON",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "주접촉기"},
       {"symbol": "STAR_CON",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "스타 접촉기"},
       {"symbol": "DELTA_CON", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "델타 접촉기"}
     ],
-    "timers": [],
+    "timers": [
+      {"name": "T1", "timer_type": "TON", "preset_ms": 5000, "enable_condition": "STAR_CON", "description": "스타→델타 전환 지연 5초"}
+    ],
     "counters": [],
     "states": [
       {"name": "IDLE",  "is_initial": true,  "on_entry": [],                                            "description": "정지"},
@@ -19,16 +20,16 @@
       {"name": "DELTA", "is_initial": false, "on_entry": ["MAIN_CON := TRUE;", "DELTA_CON := TRUE;"],   "description": "델타 운전"}
     ],
     "transitions": [
-      {"from_state": "IDLE",  "to_state": "STAR",  "condition": "(START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT TIMER_DONE", "description": "스타 기동"},
-      {"from_state": "STAR",  "to_state": "DELTA", "condition": "TIMER_DONE AND NOT STOP_PB AND MAIN_CON",                   "description": "델타 전환"},
-      {"from_state": "DELTA", "to_state": "IDLE",  "condition": "STOP_PB",                                                   "description": "정지"},
-      {"from_state": "STAR",  "to_state": "IDLE",  "condition": "STOP_PB",                                                   "description": "기동 중 정지"}
+      {"from_state": "IDLE",  "to_state": "STAR",  "condition": "(START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q", "description": "스타 기동"},
+      {"from_state": "STAR",  "to_state": "DELTA", "condition": "T1.Q AND NOT STOP_PB AND MAIN_CON",                  "description": "타이머 완료 → 델타 전환"},
+      {"from_state": "DELTA", "to_state": "IDLE",  "condition": "STOP_PB",                                            "description": "정지"},
+      {"from_state": "STAR",  "to_state": "IDLE",  "condition": "STOP_PB",                                            "description": "기동 중 정지"}
     ],
     "interlocks": [
       {"output_a": "STAR_CON", "output_b": "DELTA_CON", "reason": "스타/델타 동시 투입 금지"}
     ]
   },
-  "golden_st": "MAIN_CON  := (START_PB OR MAIN_CON) AND NOT STOP_PB;\nSTAR_CON  := MAIN_CON AND NOT TIMER_DONE AND NOT DELTA_CON;\nDELTA_CON := MAIN_CON AND TIMER_DONE AND NOT STAR_CON;",
+  "golden_st": "T1(IN := STAR_CON, PT := T#5s);\n\nMAIN_CON  := (START_PB OR MAIN_CON) AND NOT STOP_PB;\nSTAR_CON  := MAIN_CON AND NOT T1.Q AND NOT DELTA_CON;\nDELTA_CON := MAIN_CON AND T1.Q AND NOT STAR_CON;",
   "expect": {
     "double_coils": 0,
     "interlock_errors": 0,

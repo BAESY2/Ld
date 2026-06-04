@@ -21,6 +21,58 @@ from app.models import (
 
 _ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _COMMENT_RE = re.compile(r"^\s*//\s?(.*)$")
+# FB 인스턴스 호출: TON_1(IN := <식>, PT := T#5s);  /  C1(CU := <식>, RESET := .., PV := 10);
+_FB_CALL_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*\((.*)\)\s*;\s*$")
+_FB_ARG_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*$")
+
+
+def _rung_from_fb_call(
+    name: str,
+    args_text: str,
+    comment: str,
+    allocator: DeviceAllocator | None,
+) -> LadderRung | None:
+    """FB 호출을 입력=인에이블 조건, 출력=TIMER/COUNTER 요소인 렁으로 변환.
+
+    인자 `IN`(타이머)/`CU`(카운터)를 인에이블 조건으로, `PT`/`PV`를 프리셋으로 쓴다.
+    """
+    args: dict[str, str] = {}
+    for piece in args_text.split(","):
+        m = _FB_ARG_RE.match(piece)
+        if m:
+            args[m.group(1).upper()] = m.group(2)
+    is_counter = "CU" in args
+    enable_expr = args.get("CU") if is_counter else args.get("IN")
+    preset = args.get("PV") if is_counter else args.get("PT")
+    if enable_expr is None:
+        return None  # 인식 불가 FB 호출은 무시
+    terms = to_dnf(parse(enable_expr))
+
+    def addr(sym: str) -> str:
+        return allocator.address_of(sym) or "" if allocator else ""
+
+    branches: list[LadderBranch] = []
+    for term in terms:
+        literals = sorted(term, key=lambda lit: (lit[0], lit[1]))
+        branches.append(
+            LadderBranch(
+                elements=[
+                    LadderElement(
+                        element_type=(
+                            ElementType.CONTACT_NC if negated else ElementType.CONTACT_NO
+                        ),
+                        symbol=nm,
+                        address=addr(nm),
+                    )
+                    for nm, negated in literals
+                ]
+            )
+        )
+    el_type = ElementType.COUNTER if is_counter else ElementType.TIMER
+    output = LadderElement(
+        element_type=el_type, symbol=name, address=addr(name), description=(preset or "").strip()
+    )
+    return LadderRung(comment=comment, input_branches=branches, outputs=[output])
 
 
 def _rung_from_assignment(
@@ -69,6 +121,14 @@ def transpile_st(
     pending_comment = ""
 
     for line in st_code.splitlines():
+        fb = _FB_CALL_RE.match(line)
+        if fb:
+            rung = _rung_from_fb_call(fb.group(1), fb.group(2), pending_comment, allocator)
+            if rung is not None:
+                rungs.append(rung)
+            pending_comment = ""
+            continue
+
         assign = _ASSIGN_RE.match(line)
         if assign:
             rungs.append(

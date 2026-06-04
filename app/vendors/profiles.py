@@ -143,6 +143,7 @@ LS_XGK = VendorProfile(
         "oneshot_rising": "OUTP",
         "oneshot_falling": "OUTN",
         "timer_on": "TON",
+        "counter_up": "CTU",
     },
 )
 
@@ -174,6 +175,7 @@ MITSUBISHI_FX = VendorProfile(
         "oneshot_rising": "PLS",
         "oneshot_falling": "PLF",
         "timer_on": "OUT T",
+        "counter_up": "OUT C",
     },
 )
 
@@ -206,6 +208,7 @@ SIEMENS_S7 = VendorProfile(
         "oneshot_rising": "P",
         "oneshot_falling": "N",
         "timer_on": "TON",
+        "counter_up": "CTU",
     },
 )
 
@@ -238,6 +241,7 @@ OMRON_CJ = VendorProfile(
         "oneshot_rising": "DIFU",
         "oneshot_falling": "DIFD",
         "timer_on": "TIM",
+        "counter_up": "CNT",
     },
 )
 
