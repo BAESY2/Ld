@@ -1,22 +1,25 @@
-"""FastAPI 서버 — 라이브 미리보기 백엔드.
+"""FastAPI 서버 — 라이브 미리보기 + 자연어 생성 백엔드.
 
-결정론 경로(키 불필요)만 우선 노출한다:
-  POST /api/transpile : ST → 래더 JSON + 검증(이중코일)
-  GET  /healthz
-  GET  /                : 정적 프론트(웹 래더 에디터)
-
-LLM 자연어 경로(/api/generate)는 Phase D/E 완료 후 추가한다.
+  POST /api/transpile  : ST → 래더 JSON + 검증(결정론, 키 불필요)
+  POST /api/generate   : 자연어 → ST + 래더 + 검증 (LLM)
+  GET  /api/errorcodes : 에러코드 조회
+  GET  /healthz · /version
+  GET  /               : 정적 프론트(웹 래더 에디터)
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app import __version__
+from app.config import settings
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
 from app.graph import run_pipeline
@@ -24,21 +27,31 @@ from app.models import LadderProgram, StateMachineSpec, VerificationIssue, Verif
 from app.transpiler import transpile_st
 from app.verifier import check_double_coils
 
-app = FastAPI(title="PLC Ladder Live Preview", version="0.1.0")
+logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
+logger = logging.getLogger("plc.server")
+
+app = FastAPI(title="PLC Ladder Agent", version=__version__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=settings.cors_origin_list(),
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
+@app.exception_handler(Exception)
+async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+    """예기치 못한 예외를 깔끔한 JSON 에러로 (스택 노출 금지)."""
+    logger.exception("처리되지 않은 예외: %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"error": "내부 서버 오류"})
+
+
 class TranspileRequest(BaseModel):
-    st_code: str
-    title: str = ""
+    st_code: str = Field(..., max_length=settings.max_st_chars)
+    title: str = Field(default="", max_length=200)
 
 
 class TranspileResponse(BaseModel):
@@ -50,6 +63,16 @@ class TranspileResponse(BaseModel):
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/version")
+def version() -> dict[str, str]:
+    return {
+        "version": __version__,
+        "llm_provider": settings.llm_provider,
+        "use_z3": str(settings.use_z3),
+        "use_rag": str(settings.use_rag),
+    }
 
 
 @app.post("/api/transpile", response_model=TranspileResponse)
@@ -69,7 +92,7 @@ def transpile(req: TranspileRequest) -> TranspileResponse:
 
 
 class GenerateRequest(BaseModel):
-    request: str
+    request: str = Field(..., min_length=1, max_length=settings.max_request_chars)
 
 
 class GenerateResponse(BaseModel):

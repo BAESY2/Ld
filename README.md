@@ -1,5 +1,9 @@
 # PLC 래더 변환 멀티 에이전트
 
+![CI](https://github.com/baesy2/ld/actions/workflows/ci.yml/badge.svg)
+![python](https://img.shields.io/badge/python-3.11+-blue)
+![license](https://img.shields.io/badge/license-Apache--2.0-green)
+
 자연어(한국어) → 상태머신 명세 → IEC 61131-3 ST → **정형 검증** → 래더 JSON.
 산업 자동화(LS일렉트릭/메카피온 등) PLC 래더 변환 백엔드 + 라이브 웹 에디터.
 
@@ -24,6 +28,22 @@
 
 > Windows: `python -m venv .venv && .venv\Scripts\activate && pip install -e ".[web]" && uvicorn app.server:app`
 
+## Docker 로 실행
+
+```bash
+docker compose up --build           # http://localhost:8000
+# 자연어 생성까지: .env 에 ANTHROPIC_API_KEY 설정 후 위 명령
+```
+
+## API
+
+| 메서드 | 경로 | 설명 | 키 |
+|---|---|---|---|
+| POST | `/api/transpile` | ST → 래더 JSON + 검증 | 불필요 |
+| POST | `/api/generate` | 자연어 → ST + 래더 + 검증 | 필요 |
+| GET | `/api/errorcodes?vendor=&q=` | 에러코드 조회 | 불필요 |
+| GET | `/healthz` · `/version` | 헬스/버전 | 불필요 |
+
 ## 현재 구현 상태
 
 | Phase | 내용 | 상태 |
@@ -38,17 +58,39 @@
 | — | 웹 래더 에디터 (라이브 SVG · 접점 토글 · 심볼 리네임 · undo/redo · 자연어 입력) | ✅ |
 | — | 에러코드 KB (37개 시드, LS/미쓰비시/지멘스/옴론, 출처추적·ToS존중) | ✅ |
 | — | 데스크톱 앱 (Tauri 셸 스캐폴드) | ✅(스캐폴드) |
-| G | RAG FAISS 적재 | ⏳ |
-| I | 골든 100세트 평가 하니스 | ⏳ |
+| G | RAG 명령어 규격 검색 (BM25-lite, FAISS 옵션) | ✅ |
+| I | 골든셋 평가 하니스 (이중코일 0 · 인터락 0 게이트) | ✅ |
+| — | 자체모델 LoRA 튜닝 파이프라인 (Qwen2.5-Coder) | ✅(스캐폴드) |
+| J | Docker · CI · 입력가드 · 로깅 · 재시도 | ✅ |
 
 ## 개발
 
 ```bash
 uv venv --python 3.11 && uv pip install -e ".[dev,web]"
-pytest          # 단위 테스트 (API 키 불필요)
-ruff check app  # 린트
-mypy app        # 타입 (strict)
+source .venv/bin/activate
+
+pytest                  # 단위 테스트 (API 키 불필요)
+ruff check app tests scripts training
+mypy app                # 타입 (strict)
+python scripts/eval.py  # 골든셋 회귀 게이트
 ```
+
+CI(`.github/workflows/ci.yml`)가 위 전부를 PR마다 검증한다. Claude Code 웹 세션은
+`.claude/settings.json` 의 SessionStart 훅으로 환경을 자동 구성한다.
+
+## 자체 모델 튜닝 (선택)
+
+API 의존을 줄이고 온프레미스(공장 폐쇄망)로 가려면 허용 라이선스 모델을
+자체 클린 데이터로 튜닝한다. [`training/README.md`](training/README.md):
+
+```bash
+python training/export_dataset.py --kind both --out data/sft.jsonl  # verify 통과분만 학습셋
+# GPU 박스에서: python training/train_lora.py --data data/sft.jsonl
+# vLLM 서빙 후: LLM_PROVIDER=openai_compatible LOCAL_BASE_URL=http://localhost:8000/v1
+```
+
+**안전장치**: `verify()` 를 통과한 샘플만 학습 데이터로 채택 → 모델이 나빠도
+결정론 게이트가 불량을 거른다.
 
 ## 프로젝트 구조
 
@@ -59,12 +101,19 @@ app/
   memory_map.py   디바이스 할당기 + 이중코일 병합
   verifier.py     정형 검증 (이중코일 · Z3 인터락 · 도달성)
   boolexpr.py     불리언 AST + DNF(Sum-of-Products)
-  transpiler.py   결정론 ST → 래더
+  transpiler.py   결정론 ST → 래더 (Phase H1)
+  prompts.py      에이전트 시스템 프롬프트
+  rag.py          명령어 규격 검색 (BM25-lite + FAISS 옵션)
+  agents.py       4 에이전트 (_llm 팩토리 = vendor-agnostic + 재시도)
+  graph.py        파이프라인 오케스트레이션 (피드백 루프 + give_up)
   error_codes.py  에러코드 KB (스키마 + 합법 수집 원칙)
-  server.py       FastAPI
-frontend/
-  index.html      웹 래더 에디터
-  app.js          라이브 변환 + SVG 렌더러 + 접점 토글
+  server.py       FastAPI (입력가드 · CORS · 로깅 · 예외핸들러)
+frontend/         웹 래더 에디터 (라이브 SVG · 토글 · 리네임 · undo/redo · 자연어)
+data/             instructions.jsonl (RAG 코퍼스)
+scripts/          eval.py (골든셋 게이트) · setup.sh
+training/         LoRA 튜닝 파이프라인 (export_dataset · train_lora)
+desktop/          Tauri 데스크톱 셸
+.github/          CI 워크플로
 ```
 
 ## 에러코드 통합 — 합법 수집 원칙

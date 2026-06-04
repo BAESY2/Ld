@@ -1,0 +1,29 @@
+{
+  "name": "motor_self_hold",
+  "request": "자기유지(셀프홀드) 회로로 모터를 제어하세요. 기동 버튼(START_PB)을 누르면 모터(MOTOR_RUN)가 동작하고, 모터 자기유지 접점(MOTOR_RUN)으로 기동 버튼을 병렬 바이패스합니다. 정지 버튼(STOP_PB, NC 접점)을 누르면 모터가 정지합니다.",
+  "spec": {
+    "title": "자기유지 모터 기동/정지",
+    "io_points": [
+      {"symbol": "START_PB",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "기동 버튼 (NO)"},
+      {"symbol": "STOP_PB",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지 버튼 (NC 논리 반전: 1=정상)"},
+      {"symbol": "MOTOR_RUN", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "모터 구동 코일"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "STOP",    "is_initial": true,  "on_entry": [], "description": "정지"},
+      {"name": "RUNNING", "is_initial": false, "on_entry": ["MOTOR_RUN := TRUE;"], "description": "운전 중"}
+    ],
+    "transitions": [
+      {"from_state": "STOP",    "to_state": "RUNNING", "condition": "(START_PB OR MOTOR_RUN) AND NOT STOP_PB", "description": "기동(자기유지)"},
+      {"from_state": "RUNNING", "to_state": "STOP",    "condition": "STOP_PB", "description": "정지"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "MOTOR_RUN := (START_PB OR MOTOR_RUN) AND NOT STOP_PB;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

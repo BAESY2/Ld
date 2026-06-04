@@ -1,0 +1,36 @@
+{
+  "name": "conveyor_fwd_rev",
+  "request": "컨베이어 벨트의 정방향/역방향 운전을 제어하는 래더 프로그램을 작성하세요. 정방향 버튼(FWD_PB)을 누르면 정방향 모터(MOTOR_FWD)가 동작하고, 역방향 버튼(REV_PB)을 누르면 역방향 모터(MOTOR_REV)가 동작합니다. 정방향과 역방향이 동시에 동작하면 안 됩니다(인터락). 정지 버튼(STOP_PB)을 누르면 모든 동작이 중단됩니다.",
+  "spec": {
+    "title": "컨베이어 정/역 인터락",
+    "io_points": [
+      {"symbol": "FWD_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정방향 기동 버튼"},
+      {"symbol": "REV_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "역방향 기동 버튼"},
+      {"symbol": "STOP_PB",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지 버튼(NC 접점이므로 TRUE=정상)"},
+      {"symbol": "MOTOR_FWD", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "정방향 모터 출력"},
+      {"symbol": "MOTOR_REV", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "역방향 모터 출력"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",    "is_initial": true,  "on_entry": [], "description": "대기"},
+      {"name": "FORWARD", "is_initial": false, "on_entry": ["MOTOR_FWD := TRUE;"], "description": "정방향 운전"},
+      {"name": "REVERSE", "is_initial": false, "on_entry": ["MOTOR_REV := TRUE;"], "description": "역방향 운전"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",    "to_state": "FORWARD", "condition": "FWD_PB AND NOT REV_PB AND NOT STOP_PB", "description": "정방향 기동"},
+      {"from_state": "FORWARD", "to_state": "IDLE",    "condition": "STOP_PB OR REV_PB", "description": "정방향 정지"},
+      {"from_state": "IDLE",    "to_state": "REVERSE", "condition": "REV_PB AND NOT FWD_PB AND NOT STOP_PB", "description": "역방향 기동"},
+      {"from_state": "REVERSE", "to_state": "IDLE",    "condition": "STOP_PB OR FWD_PB", "description": "역방향 정지"}
+    ],
+    "interlocks": [
+      {"output_a": "MOTOR_FWD", "output_b": "MOTOR_REV", "reason": "정/역 동시 구동 금지"}
+    ]
+  },
+  "golden_st": "MOTOR_FWD := FWD_PB AND NOT REV_PB AND NOT STOP_PB;\nMOTOR_REV := REV_PB AND NOT FWD_PB AND NOT STOP_PB;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

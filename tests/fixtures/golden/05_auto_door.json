@@ -1,0 +1,37 @@
+{
+  "name": "auto_door",
+  "request": "자동문 개폐 제어를 래더로 작성하세요. 열기 명령(OPEN_CMD)이 들어오면 개문 모터(DOOR_OPEN)가 동작하고, 닫기 명령(CLOSE_CMD)이 들어오면 폐문 모터(DOOR_CLOSE)가 동작합니다. 개방 리밋(LIMIT_OPEN)에 도달하면 개문 모터가 정지하고, 폐쇄 리밋(LIMIT_CLOSE)에 도달하면 폐문 모터가 정지합니다. 개문과 폐문은 동시에 동작하면 안 됩니다.",
+  "spec": {
+    "title": "자동문 개폐 인터락",
+    "io_points": [
+      {"symbol": "OPEN_CMD",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "열기 명령"},
+      {"symbol": "CLOSE_CMD",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "닫기 명령"},
+      {"symbol": "LIMIT_OPEN",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "개방 리밋 스위치"},
+      {"symbol": "LIMIT_CLOSE", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "폐쇄 리밋 스위치"},
+      {"symbol": "DOOR_OPEN",   "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "개문 모터"},
+      {"symbol": "DOOR_CLOSE",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "폐문 모터"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",    "is_initial": true,  "on_entry": [],                     "description": "정지"},
+      {"name": "OPENING", "is_initial": false, "on_entry": ["DOOR_OPEN := TRUE;"],  "description": "열기 중"},
+      {"name": "CLOSING", "is_initial": false, "on_entry": ["DOOR_CLOSE := TRUE;"], "description": "닫기 중"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",    "to_state": "OPENING", "condition": "OPEN_CMD AND NOT CLOSE_CMD AND NOT LIMIT_OPEN",  "description": "개문 기동"},
+      {"from_state": "OPENING", "to_state": "IDLE",    "condition": "LIMIT_OPEN OR CLOSE_CMD",                       "description": "개문 정지"},
+      {"from_state": "IDLE",    "to_state": "CLOSING", "condition": "CLOSE_CMD AND NOT OPEN_CMD AND NOT LIMIT_CLOSE", "description": "폐문 기동"},
+      {"from_state": "CLOSING", "to_state": "IDLE",    "condition": "LIMIT_CLOSE OR OPEN_CMD",                       "description": "폐문 정지"}
+    ],
+    "interlocks": [
+      {"output_a": "DOOR_OPEN", "output_b": "DOOR_CLOSE", "reason": "개문/폐문 동시 구동 금지"}
+    ]
+  },
+  "golden_st": "DOOR_OPEN  := OPEN_CMD AND NOT CLOSE_CMD AND NOT LIMIT_OPEN;\nDOOR_CLOSE := CLOSE_CMD AND NOT OPEN_CMD AND NOT LIMIT_CLOSE;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

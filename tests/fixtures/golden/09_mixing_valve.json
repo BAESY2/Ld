@@ -1,0 +1,42 @@
+{
+  "name": "mixing_valve",
+  "request": "혼합 밸브 제어를 래더로 작성하세요. 혼합 모드(MIX_CMD)에서 공급 밸브 A(VALVE_A)와 공급 밸브 B(VALVE_B)가 동시에 열립니다. 단독 A 모드(ONLY_A_CMD)에서는 VALVE_A만 열립니다. 단독 B 모드(ONLY_B_CMD)에서는 VALVE_B만 열립니다. 배출 밸브(DRAIN_VALVE)는 혼합이나 단독 공급 중에는 닫혀 있어야 하며, 정지(STOP_CMD) 시에만 열립니다.",
+  "spec": {
+    "title": "혼합 밸브 제어",
+    "io_points": [
+      {"symbol": "MIX_CMD",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "혼합 모드 명령"},
+      {"symbol": "ONLY_A_CMD", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "A 단독 공급 명령"},
+      {"symbol": "ONLY_B_CMD", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "B 단독 공급 명령"},
+      {"symbol": "STOP_CMD",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지/배출 명령"},
+      {"symbol": "VALVE_A",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "공급 밸브 A"},
+      {"symbol": "VALVE_B",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "공급 밸브 B"},
+      {"symbol": "DRAIN_VALVE","direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "배출 밸브"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "STOP",   "is_initial": true,  "on_entry": ["DRAIN_VALVE := TRUE;"],             "description": "정지/배출"},
+      {"name": "MIX",    "is_initial": false, "on_entry": ["VALVE_A := TRUE;", "VALVE_B := TRUE;"], "description": "혼합"},
+      {"name": "ONLY_A", "is_initial": false, "on_entry": ["VALVE_A := TRUE;"],                 "description": "A 단독"},
+      {"name": "ONLY_B", "is_initial": false, "on_entry": ["VALVE_B := TRUE;"],                 "description": "B 단독"}
+    ],
+    "transitions": [
+      {"from_state": "STOP",   "to_state": "MIX",    "condition": "MIX_CMD AND NOT STOP_CMD",             "description": "혼합 기동"},
+      {"from_state": "STOP",   "to_state": "ONLY_A", "condition": "ONLY_A_CMD AND NOT MIX_CMD AND NOT STOP_CMD", "description": "A 단독 기동"},
+      {"from_state": "STOP",   "to_state": "ONLY_B", "condition": "ONLY_B_CMD AND NOT MIX_CMD AND NOT STOP_CMD", "description": "B 단독 기동"},
+      {"from_state": "MIX",    "to_state": "STOP",   "condition": "STOP_CMD",                             "description": "혼합 정지"},
+      {"from_state": "ONLY_A", "to_state": "STOP",   "condition": "STOP_CMD",                             "description": "A 단독 정지"},
+      {"from_state": "ONLY_B", "to_state": "STOP",   "condition": "STOP_CMD",                             "description": "B 단독 정지"}
+    ],
+    "interlocks": [
+      {"output_a": "VALVE_A",    "output_b": "DRAIN_VALVE", "reason": "공급 중 배출 밸브 열기 금지"},
+      {"output_a": "VALVE_B",    "output_b": "DRAIN_VALVE", "reason": "공급 중 배출 밸브 열기 금지"}
+    ]
+  },
+  "golden_st": "VALVE_A     := (MIX_CMD OR ONLY_A_CMD) AND NOT STOP_CMD;\nVALVE_B     := (MIX_CMD OR ONLY_B_CMD) AND NOT STOP_CMD;\nDRAIN_VALVE := STOP_CMD AND NOT MIX_CMD AND NOT ONLY_A_CMD AND NOT ONLY_B_CMD;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 3
+  }
+}

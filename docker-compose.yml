@@ -1,0 +1,15 @@
+services:
+  plc-ladder:
+    build: .
+    image: plc-ladder-agent:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # 결정론 경로(ST→래더)는 키 없이 동작. 자연어 생성에만 키 필요.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - USE_RAG=${USE_RAG:-false}
+      - USE_Z3=${USE_Z3:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped

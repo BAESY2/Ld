@@ -1,0 +1,36 @@
+{
+  "name": "conveyor_speed",
+  "request": "컨베이어 저속/고속 2단 속도 제어를 래더로 작성하세요. 저속 버튼(LOW_SPD_PB)을 누르면 저속 접촉기(CONT_LOW)가 동작하고, 고속 버튼(HIGH_SPD_PB)을 누르면 고속 접촉기(CONT_HIGH)가 동작합니다. 저속과 고속 접촉기는 동시에 투입되면 안 됩니다. 정지 버튼(STOP_PB)을 누르면 모든 접촉기가 차단됩니다.",
+  "spec": {
+    "title": "컨베이어 저속/고속 제어",
+    "io_points": [
+      {"symbol": "LOW_SPD_PB",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "저속 기동 버튼"},
+      {"symbol": "HIGH_SPD_PB", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고속 기동 버튼"},
+      {"symbol": "STOP_PB",     "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지 버튼"},
+      {"symbol": "CONT_LOW",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "저속 접촉기"},
+      {"symbol": "CONT_HIGH",   "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "고속 접촉기"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",      "is_initial": true,  "on_entry": [],                    "description": "정지"},
+      {"name": "LOW_SPEED", "is_initial": false, "on_entry": ["CONT_LOW := TRUE;"],  "description": "저속 운전"},
+      {"name": "HIGH_SPEED","is_initial": false, "on_entry": ["CONT_HIGH := TRUE;"], "description": "고속 운전"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",       "to_state": "LOW_SPEED",  "condition": "LOW_SPD_PB AND NOT HIGH_SPD_PB AND NOT STOP_PB",  "description": "저속 기동"},
+      {"from_state": "LOW_SPEED",  "to_state": "IDLE",       "condition": "STOP_PB OR HIGH_SPD_PB",                         "description": "저속 정지"},
+      {"from_state": "IDLE",       "to_state": "HIGH_SPEED", "condition": "HIGH_SPD_PB AND NOT LOW_SPD_PB AND NOT STOP_PB", "description": "고속 기동"},
+      {"from_state": "HIGH_SPEED", "to_state": "IDLE",       "condition": "STOP_PB OR LOW_SPD_PB",                          "description": "고속 정지"}
+    ],
+    "interlocks": [
+      {"output_a": "CONT_LOW", "output_b": "CONT_HIGH", "reason": "저속/고속 접촉기 동시 투입 금지"}
+    ]
+  },
+  "golden_st": "CONT_LOW  := LOW_SPD_PB AND NOT HIGH_SPD_PB AND NOT STOP_PB;\nCONT_HIGH := HIGH_SPD_PB AND NOT LOW_SPD_PB AND NOT STOP_PB;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "fan_cooling",
+  "request": "팬 냉각 시스템을 래더로 작성하세요. 온도 고온 센서(TEMP_HIGH)가 감지되거나 수동 기동 버튼(FAN_START)을 누르면 냉각 팬(FAN_RUN)이 동작합니다. 온도 저온 복귀 센서(TEMP_NORMAL)가 감지되고 수동 정지 버튼(FAN_STOP)을 누르면 팬이 정지합니다. 비상정지(ESTOP)가 활성화되면 즉시 팬이 정지합니다.",
+  "spec": {
+    "title": "팬 냉각 시스템",
+    "io_points": [
+      {"symbol": "TEMP_HIGH",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고온 감지 센서"},
+      {"symbol": "TEMP_NORMAL", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정상 온도 복귀 센서"},
+      {"symbol": "FAN_START",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "팬 수동 기동"},
+      {"symbol": "FAN_STOP",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "팬 수동 정지"},
+      {"symbol": "ESTOP",       "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "비상정지 (1=비상)"},
+      {"symbol": "FAN_RUN",     "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "냉각 팬 코일"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "OFF", "is_initial": true,  "on_entry": [],                  "description": "정지"},
+      {"name": "ON",  "is_initial": false, "on_entry": ["FAN_RUN := TRUE;"], "description": "운전 중"}
+    ],
+    "transitions": [
+      {"from_state": "OFF", "to_state": "ON",  "condition": "(TEMP_HIGH OR FAN_START OR FAN_RUN) AND NOT ESTOP AND NOT FAN_STOP", "description": "팬 기동"},
+      {"from_state": "ON",  "to_state": "OFF", "condition": "(TEMP_NORMAL AND FAN_STOP) OR ESTOP",                               "description": "팬 정지"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "FAN_RUN := (TEMP_HIGH OR FAN_START OR FAN_RUN) AND NOT ESTOP AND NOT (TEMP_NORMAL AND FAN_STOP);",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

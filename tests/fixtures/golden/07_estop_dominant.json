@@ -1,0 +1,42 @@
+{
+  "name": "estop_dominant",
+  "request": "비상정지가 우선하는 3축 제어 시스템을 래더로 작성하세요. 비상정지(ESTOP)가 눌리면 모든 출력(AXIS1_RUN, AXIS2_RUN, AXIS3_RUN)이 즉시 차단됩니다. 비상정지가 해제된 상태에서만 각 축을 개별 기동 버튼(RUN1, RUN2, RUN3)과 자기유지로 운전할 수 있습니다. 정지 버튼(STOP1, STOP2, STOP3)으로 개별 정지합니다.",
+  "spec": {
+    "title": "비상정지 우선 3축 제어",
+    "io_points": [
+      {"symbol": "ESTOP", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "비상정지 (1=비상정지 입력)"},
+      {"symbol": "RUN1",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "1축 기동"},
+      {"symbol": "RUN2",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "2축 기동"},
+      {"symbol": "RUN3",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "3축 기동"},
+      {"symbol": "STOP1", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "1축 정지"},
+      {"symbol": "STOP2", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "2축 정지"},
+      {"symbol": "STOP3", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "3축 정지"},
+      {"symbol": "AXIS1_RUN", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "1축 운전"},
+      {"symbol": "AXIS2_RUN", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "2축 운전"},
+      {"symbol": "AXIS3_RUN", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "3축 운전"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",     "is_initial": true,  "on_entry": [], "description": "대기"},
+      {"name": "A1_RUN",   "is_initial": false, "on_entry": ["AXIS1_RUN := TRUE;"], "description": "1축 운전"},
+      {"name": "A2_RUN",   "is_initial": false, "on_entry": ["AXIS2_RUN := TRUE;"], "description": "2축 운전"},
+      {"name": "A3_RUN",   "is_initial": false, "on_entry": ["AXIS3_RUN := TRUE;"], "description": "3축 운전"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",   "to_state": "A1_RUN", "condition": "(RUN1 OR AXIS1_RUN) AND NOT STOP1 AND NOT ESTOP", "description": "1축 기동"},
+      {"from_state": "A1_RUN","to_state": "IDLE",    "condition": "STOP1 OR ESTOP",                                  "description": "1축 정지"},
+      {"from_state": "IDLE",   "to_state": "A2_RUN", "condition": "(RUN2 OR AXIS2_RUN) AND NOT STOP2 AND NOT ESTOP", "description": "2축 기동"},
+      {"from_state": "A2_RUN","to_state": "IDLE",    "condition": "STOP2 OR ESTOP",                                  "description": "2축 정지"},
+      {"from_state": "IDLE",   "to_state": "A3_RUN", "condition": "(RUN3 OR AXIS3_RUN) AND NOT STOP3 AND NOT ESTOP", "description": "3축 기동"},
+      {"from_state": "A3_RUN","to_state": "IDLE",    "condition": "STOP3 OR ESTOP",                                  "description": "3축 정지"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "AXIS1_RUN := (RUN1 OR AXIS1_RUN) AND NOT STOP1 AND NOT ESTOP;\nAXIS2_RUN := (RUN2 OR AXIS2_RUN) AND NOT STOP2 AND NOT ESTOP;\nAXIS3_RUN := (RUN3 OR AXIS3_RUN) AND NOT STOP3 AND NOT ESTOP;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 3
+  }
+}

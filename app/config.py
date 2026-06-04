@@ -58,5 +58,14 @@ class Settings:
     use_rag: bool = field(default_factory=lambda: _env_bool("USE_RAG", False))
     use_z3: bool = field(default_factory=lambda: _env_bool("USE_Z3", True))
 
+    # 서버 하드닝
+    cors_origins: str = field(default_factory=lambda: _env("CORS_ORIGINS", "*"))
+    max_st_chars: int = field(default_factory=lambda: _env_int("MAX_ST_CHARS", 50_000))
+    max_request_chars: int = field(default_factory=lambda: _env_int("MAX_REQUEST_CHARS", 4_000))
+    log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
+
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
 
 settings = Settings()

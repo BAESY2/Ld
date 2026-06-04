@@ -1,0 +1,38 @@
+{
+  "name": "traffic_light_seq",
+  "request": "신호등 순차 제어를 래더로 작성하세요. 기동 신호(RUN)가 들어오면 적색→녹색→황색→적색 순서로 순환합니다. NEXT_PB 버튼으로 다음 단계로 넘어갑니다. 각 단계에서 해당 신호등(LIGHT_RED, LIGHT_GREEN, LIGHT_YELLOW)만 점등됩니다.",
+  "spec": {
+    "title": "신호등 순차 제어",
+    "io_points": [
+      {"symbol": "NEXT_PB",      "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "다음 스텝 버튼"},
+      {"symbol": "RUN",          "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "운전 신호"},
+      {"symbol": "LIGHT_RED",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "적색등"},
+      {"symbol": "LIGHT_GREEN",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "녹색등"},
+      {"symbol": "LIGHT_YELLOW", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "황색등"},
+      {"symbol": "STEP_RED",     "direction": "OUTPUT", "data_type": "BOOL", "device_class": "M", "description": "적색 스텝 릴레이"},
+      {"symbol": "STEP_GREEN",   "direction": "OUTPUT", "data_type": "BOOL", "device_class": "M", "description": "녹색 스텝 릴레이"},
+      {"symbol": "STEP_YELLOW",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "M", "description": "황색 스텝 릴레이"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",   "is_initial": true,  "on_entry": [],                      "description": "대기"},
+      {"name": "S_RED",  "is_initial": false, "on_entry": ["STEP_RED := TRUE;",    "LIGHT_RED := TRUE;"],    "description": "적색"},
+      {"name": "S_GREEN","is_initial": false, "on_entry": ["STEP_GREEN := TRUE;",  "LIGHT_GREEN := TRUE;"],  "description": "녹색"},
+      {"name": "S_YEL",  "is_initial": false, "on_entry": ["STEP_YELLOW := TRUE;", "LIGHT_YELLOW := TRUE;"], "description": "황색"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",    "to_state": "S_RED",   "condition": "RUN AND NEXT_PB AND NOT STEP_RED AND NOT STEP_GREEN AND NOT STEP_YELLOW",   "description": "초기→적색"},
+      {"from_state": "S_RED",   "to_state": "S_GREEN", "condition": "NEXT_PB AND STEP_RED AND NOT STEP_GREEN AND NOT STEP_YELLOW",               "description": "적색→녹색"},
+      {"from_state": "S_GREEN", "to_state": "S_YEL",   "condition": "NEXT_PB AND STEP_GREEN AND NOT STEP_RED AND NOT STEP_YELLOW",               "description": "녹색→황색"},
+      {"from_state": "S_YEL",   "to_state": "S_RED",   "condition": "NEXT_PB AND STEP_YELLOW AND NOT STEP_RED AND NOT STEP_GREEN",               "description": "황색→적색 순환"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "STEP_RED    := RUN AND NEXT_PB AND NOT STEP_GREEN AND NOT STEP_YELLOW AND NOT STEP_RED OR NEXT_PB AND STEP_YELLOW AND NOT STEP_RED AND NOT STEP_GREEN;\nSTEP_GREEN  := NEXT_PB AND STEP_RED AND NOT STEP_GREEN AND NOT STEP_YELLOW;\nSTEP_YELLOW := NEXT_PB AND STEP_GREEN AND NOT STEP_RED AND NOT STEP_YELLOW;\nLIGHT_RED    := STEP_RED AND NOT STEP_GREEN AND NOT STEP_YELLOW;\nLIGHT_GREEN  := STEP_GREEN AND NOT STEP_RED AND NOT STEP_YELLOW;\nLIGHT_YELLOW := STEP_YELLOW AND NOT STEP_RED AND NOT STEP_GREEN;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 6
+  }
+}

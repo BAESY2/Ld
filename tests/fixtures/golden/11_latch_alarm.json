@@ -1,0 +1,31 @@
+{
+  "name": "latch_alarm",
+  "request": "래치형 알람 회로를 래더로 작성하세요. 어떤 고장 조건(FAULT_A 또는 FAULT_B 또는 FAULT_C)이 발생하면 알람 코일(ALARM)이 켜지고 자기유지됩니다. 리셋 버튼(ALARM_RST)을 누르면 알람이 소거됩니다. 단, 고장 조건이 아직 활성화되어 있는 경우에는 리셋이 되지 않습니다.",
+  "spec": {
+    "title": "래치형 알람 회로",
+    "io_points": [
+      {"symbol": "FAULT_A",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 A 신호"},
+      {"symbol": "FAULT_B",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 B 신호"},
+      {"symbol": "FAULT_C",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 C 신호"},
+      {"symbol": "ALARM_RST","direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "알람 리셋 버튼"},
+      {"symbol": "ALARM",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "알람 출력 코일"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "NORMAL", "is_initial": true,  "on_entry": [],                 "description": "정상"},
+      {"name": "ALARMED","is_initial": false, "on_entry": ["ALARM := TRUE;"],  "description": "알람 발생"}
+    ],
+    "transitions": [
+      {"from_state": "NORMAL", "to_state": "ALARMED", "condition": "FAULT_A OR FAULT_B OR FAULT_C",                                          "description": "알람 발생"},
+      {"from_state": "ALARMED","to_state": "NORMAL",  "condition": "ALARM_RST AND NOT FAULT_A AND NOT FAULT_B AND NOT FAULT_C",              "description": "알람 리셋"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "ALARM := (FAULT_A OR FAULT_B OR FAULT_C OR ALARM) AND NOT (ALARM_RST AND NOT FAULT_A AND NOT FAULT_B AND NOT FAULT_C);",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

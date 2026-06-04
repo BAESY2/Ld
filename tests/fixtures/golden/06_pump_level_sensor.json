@@ -1,0 +1,32 @@
+{
+  "name": "pump_level_sensor",
+  "request": "수위 센서를 이용한 펌프 제어를 래더로 작성하세요. 수위 하한 센서(LEVEL_LOW)가 감지되거나 수동 기동 버튼(START_PB)을 누르면 급수 펌프(PUMP_RUN)가 동작합니다. 수위 상한 센서(LEVEL_HIGH)가 감지되거나 수동 정지 버튼(STOP_PB)을 누르면 펌프가 정지합니다. 고장 신호(FAULT)가 발생하면 즉시 정지합니다.",
+  "spec": {
+    "title": "수위 센서 펌프 제어",
+    "io_points": [
+      {"symbol": "LEVEL_LOW",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "수위 하한 센서 (1=저수위)"},
+      {"symbol": "LEVEL_HIGH", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "수위 상한 센서 (1=만수위)"},
+      {"symbol": "START_PB",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "수동 기동 버튼"},
+      {"symbol": "STOP_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "수동 정지 버튼"},
+      {"symbol": "FAULT",      "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고장 신호 (1=고장)"},
+      {"symbol": "PUMP_RUN",   "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "펌프 구동 코일"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "STOPPED", "is_initial": true,  "on_entry": [],                   "description": "정지"},
+      {"name": "RUNNING", "is_initial": false, "on_entry": ["PUMP_RUN := TRUE;"], "description": "운전 중"}
+    ],
+    "transitions": [
+      {"from_state": "STOPPED", "to_state": "RUNNING", "condition": "(LEVEL_LOW OR START_PB) AND NOT LEVEL_HIGH AND NOT FAULT AND NOT STOP_PB", "description": "펌프 기동"},
+      {"from_state": "RUNNING", "to_state": "STOPPED", "condition": "LEVEL_HIGH OR STOP_PB OR FAULT", "description": "펌프 정지"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "PUMP_RUN := (LEVEL_LOW OR START_PB OR PUMP_RUN) AND NOT LEVEL_HIGH AND NOT STOP_PB AND NOT FAULT;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

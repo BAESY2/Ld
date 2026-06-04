@@ -1,0 +1,38 @@
+{
+  "name": "elevator_up_down",
+  "request": "엘리베이터 승강 제어를 래더로 작성하세요. 상승 버튼(UP_CMD)을 누르면 상승 모터(MOTOR_UP)가 동작하고, 하강 버튼(DOWN_CMD)을 누르면 하강 모터(MOTOR_DOWN)가 동작합니다. 상한 리밋(LIMIT_UP)에 도달하면 상승이 자동으로 정지됩니다. 하한 리밋(LIMIT_DOWN)에 도달하면 하강이 자동으로 정지됩니다. 상승과 하강은 동시에 동작하면 안 됩니다.",
+  "spec": {
+    "title": "엘리베이터 상승/하강 인터락",
+    "io_points": [
+      {"symbol": "UP_CMD",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "상승 명령"},
+      {"symbol": "DOWN_CMD",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "하강 명령"},
+      {"symbol": "LIMIT_UP",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "상한 리밋 스위치 (1=도달)"},
+      {"symbol": "LIMIT_DOWN","direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "하한 리밋 스위치 (1=도달)"},
+      {"symbol": "ESTOP",     "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "비상정지 (1=정상)"},
+      {"symbol": "MOTOR_UP",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "상승 모터"},
+      {"symbol": "MOTOR_DOWN","direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "하강 모터"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",  "is_initial": true,  "on_entry": [],                    "description": "정지"},
+      {"name": "GOING_UP",   "is_initial": false, "on_entry": ["MOTOR_UP := TRUE;"],   "description": "상승 중"},
+      {"name": "GOING_DOWN", "is_initial": false, "on_entry": ["MOTOR_DOWN := TRUE;"], "description": "하강 중"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",       "to_state": "GOING_UP",   "condition": "UP_CMD AND NOT DOWN_CMD AND NOT LIMIT_UP AND ESTOP",    "description": "상승 기동"},
+      {"from_state": "GOING_UP",   "to_state": "IDLE",       "condition": "LIMIT_UP OR NOT ESTOP OR DOWN_CMD",                    "description": "상승 정지"},
+      {"from_state": "IDLE",       "to_state": "GOING_DOWN", "condition": "DOWN_CMD AND NOT UP_CMD AND NOT LIMIT_DOWN AND ESTOP",  "description": "하강 기동"},
+      {"from_state": "GOING_DOWN", "to_state": "IDLE",       "condition": "LIMIT_DOWN OR NOT ESTOP OR UP_CMD",                    "description": "하강 정지"}
+    ],
+    "interlocks": [
+      {"output_a": "MOTOR_UP", "output_b": "MOTOR_DOWN", "reason": "상승/하강 동시 구동 금지"}
+    ]
+  },
+  "golden_st": "MOTOR_UP   := UP_CMD AND NOT DOWN_CMD AND NOT LIMIT_UP AND ESTOP;\nMOTOR_DOWN := DOWN_CMD AND NOT UP_CMD AND NOT LIMIT_DOWN AND ESTOP;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}
