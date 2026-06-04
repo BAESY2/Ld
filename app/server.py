@@ -15,15 +15,17 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import uuid
+import zipfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -249,6 +251,28 @@ async def generate_files(req: GenerateFilesRequest) -> StreamingResponse:
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/generated/{project}.zip")
+def download_zip(project: str) -> Response:
+    """생성된 프로젝트를 ZIP 으로 내려받는다(gen_out_dir 아래로 제한)."""
+    base = Path(settings.gen_out_dir)
+    try:
+        proj_dir = _safe_join(base, project)
+    except ValueError:
+        return PlainTextResponse("경로 거부", status_code=400)
+    if not proj_dir.is_dir():
+        return PlainTextResponse("프로젝트 없음", status_code=404)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(proj_dir.rglob("*")):
+            if path.is_file():
+                zf.write(path, path.relative_to(proj_dir).as_posix())
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{project}.zip"'},
     )
 
 

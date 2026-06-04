@@ -143,3 +143,27 @@ def test_garbage_st_is_not_ok() -> None:
     assert any(i["code"] == "NO_LOGIC" for i in t["issues"])
     e = client.post("/api/emit", json={"st_code": "이건 ST 가 아님", "vendor": "LS_XGK"}).json()
     assert e["ok"] is False
+
+
+def test_download_zip(tmp_path, monkeypatch) -> None:
+    import dataclasses
+    import io
+    import zipfile
+
+    import app.server as srv
+    from app import agents
+
+    new_settings = dataclasses.replace(srv.settings, gen_out_dir=str(tmp_path))
+    monkeypatch.setattr(srv, "settings", new_settings)
+    monkeypatch.setattr(agents, "_llm", lambda m: (_ for _ in ()).throw(AssertionError("no LLM")))
+    client.post(
+        "/api/generate/files",
+        json={"st_code": "MOTOR := START AND NOT STOP;", "name": "z", "vendors": ["LS_XGK"]},
+    )
+    r = client.get("/api/generated/z.zip")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    assert "manifest.json" in names and "program.st" in names
+    # 경로 거부
+    assert client.get("/api/generated/..%2f..%2fetc.zip").status_code in (400, 404)
