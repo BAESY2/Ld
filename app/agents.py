@@ -20,6 +20,7 @@ from app.memory_map import DeviceAllocator, merge_double_coils
 from app.models import LadderProgram, StateMachineSpec, VerificationReport
 from app.prompts import REQUIREMENTS_ANALYST_SYSTEM, ST_ARCHITECT_SYSTEM
 from app.rag import get_instruction_context
+from app.synth import covers_all_outputs, synthesize_st
 from app.transpiler import transpile_st
 from app.verifier import verify
 
@@ -86,10 +87,23 @@ def run_analyst(request: str) -> StateMachineSpec:
 
 
 def run_architect(
-    spec: StateMachineSpec, feedback: str | None = None
+    spec: StateMachineSpec, feedback: str | None = None, use_synth: bool = True
 ) -> tuple[str, DeviceAllocator]:
-    """명세 → ST 코드(+디바이스 맵). 이중코일은 후처리로 기계적으로 제거한다."""
+    """명세 → ST 코드(+디바이스 맵).
+
+    **결정론 합성 우선**(래더 생성 난제의 핵심): 모든 출력이 상태구동이면 LLM 없이
+    명세에서 직접 자기유지 ST 를 합성한다(환각 차단, API 키 불필요). 합성 불가
+    (조합 출력 등)하거나 재시도(feedback) 시에는 LLM 으로 폴백하고, 이중코일은
+    후처리로 기계적으로 제거한다.
+    """
     allocator = DeviceAllocator().build_from_spec(spec)
+
+    # 1) 결정론 합성 경로 — 첫 시도이고 모든 출력이 상태구동일 때
+    if use_synth and feedback is None and covers_all_outputs(spec):
+        merged = merge_double_coils(synthesize_st(spec), allocator)
+        return f"{allocator.as_comment_block()}\n\n{merged.code}", allocator
+
+    # 2) LLM 폴백 — 조합 출력/재시도. 이중코일은 후처리로 제거.
     instruction_context = get_instruction_context(spec.title or "ladder")
     system = ST_ARCHITECT_SYSTEM.format(
         instruction_context=instruction_context,

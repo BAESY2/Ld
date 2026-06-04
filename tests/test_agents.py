@@ -48,16 +48,38 @@ def test_run_analyst_returns_spec(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_architect_strips_double_coil(
     monkeypatch: pytest.MonkeyPatch, conveyor_spec_safe: StateMachineSpec
 ) -> None:
-    # LLM 이 일부러 이중코일 ST 를 뱉는다
+    # LLM 이 일부러 이중코일 ST 를 뱉는다 (use_synth=False 로 LLM 경로 강제)
     bad_st = "MOTOR_FWD := FWD_PB;\nMOTOR_FWD := AUTO_CMD;\n"
     monkeypatch.setattr(agents, "_llm", lambda model: FakeLLM(content=bad_st))
 
-    st_code, allocator = agents.run_architect(conveyor_spec_safe)
+    st_code, allocator = agents.run_architect(conveyor_spec_safe, use_synth=False)
 
     # 후처리로 이중코일이 제거되어야 한다
     assert detect_double_coils(st_code) == {}
     # 디바이스 맵 주석이 포함된다
     assert "디바이스 맵" in st_code
+
+
+def test_run_architect_deterministic_synth_no_llm(
+    monkeypatch: pytest.MonkeyPatch, conveyor_spec_safe: StateMachineSpec
+) -> None:
+    """상태구동 명세는 LLM 없이 결정론 합성으로 ST 를 만든다(난제 해법)."""
+
+    def _boom(model: str) -> Any:  # _llm 이 호출되면 실패시켜 '미호출'을 보장
+        raise AssertionError("결정론 합성 경로에서는 LLM 을 호출하면 안 된다")
+
+    monkeypatch.setattr(agents, "_llm", _boom)
+
+    st_code, _ = agents.run_architect(conveyor_spec_safe)
+
+    assert detect_double_coils(st_code) == {}
+    assert "MOTOR_FWD :=" in st_code
+    assert "MOTOR_REV :=" in st_code
+    # 인터락이 상대 출력 NOT 으로 반영된다
+    assert "NOT MOTOR_REV" in st_code
+    # 합성 결과가 검증을 통과한다
+    report = agents.run_verifier(conveyor_spec_safe, st_code)
+    assert report.passed
 
 
 def test_run_renderer_is_deterministic(conveyor_spec_safe: StateMachineSpec) -> None:
