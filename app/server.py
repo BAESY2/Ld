@@ -174,6 +174,13 @@ def emit(req: EmitRequest) -> EmitResponse:
             ok=False,
             error=f"알 수 없는 벤더: {req.vendor} (가능: {', '.join(available_profiles())})",
         )
+    # 출하 게이트: 이중코일 결함은 미리보기뿐 아니라 *내보내기*에서도 막는다(CLAUDE #3).
+    dbl = [i for i in check_double_coils(req.st_code) if i.severity == "error"]
+    if dbl:
+        return EmitResponse(
+            vendor=req.vendor, text="", ok=False,
+            error="이중 코일 검출 — 출하 차단: " + "; ".join(i.message for i in dbl),
+        )
     try:
         program = transpile_st(req.st_code)
         text = emit_ladder(program, profile)
@@ -202,6 +209,12 @@ class ExportResponse(BaseModel):
 @app.post("/api/export/plcopen", response_model=ExportResponse)
 def export_plcopen(req: ExportRequest) -> ExportResponse:
     """ST → PLCopen XML(OpenPLC/CODESYS 임포트 가능, Phase N)."""
+    dbl = [i for i in check_double_coils(req.st_code) if i.severity == "error"]
+    if dbl:
+        return ExportResponse(
+            format="plcopen-xml", content="", ok=False,
+            error="이중 코일 검출 — 내보내기 차단: " + "; ".join(i.message for i in dbl),
+        )
     try:
         spec = infer_io_spec(req.st_code, title=req.title)
         xml = to_plcopen_xml(spec, req.st_code)
@@ -356,6 +369,7 @@ class NLDesignResponse(BaseModel):
     missing: list[str] = Field(default_factory=list)
     questions: list[str] = Field(default_factory=list)
     confident: bool = False
+    provisional: bool = False  # 확신 못 해 설계를 보류함 → 후보 중 선택 필요
     suggestion: str = ""
     design: WizardResponse | None = None
     safety_warning: str = ""
@@ -376,14 +390,19 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
     else:
         cands = ", ".join(RECIPES[rid].title for rid, _ in res.scores[:3])
         suggestion = f"정확히 못 찾았어요. 후보 중 골라주세요: {cands}"
+    safety_warning = res.extras.get("safety_warning", "")
+    # 확신할 때(그리고 안전필수어가 없을 때)만 설계를 만든다 — 확신 없으면 후보를
+    # 고르게 하고, 자신있게 *틀린* 래더(또는 비상정지를 소프트정지로)를 렌더하지 않는다(P0).
     design = None
-    if req.autobuild:
+    if req.autobuild and res.confident and not safety_warning:
         design = wizard(WizardRequest(recipe=res.recipe_id, answers=res.answers))
     return NLDesignResponse(
         ok=True, recipe=res.recipe_id, recipe_title=recipe_obj.title, ranked=ranked,
         filled_answers=res.answers, missing=res.missing, questions=res.questions,
-        confident=res.confident, suggestion=suggestion, design=design,
-        safety_warning=res.extras.get("safety_warning", ""),
+        confident=res.confident,
+        provisional=(design is None and req.autobuild),
+        suggestion=suggestion, design=design,
+        safety_warning=safety_warning,
     )
 
 
@@ -435,6 +454,9 @@ def wizard(req: WizardRequest) -> WizardResponse:
     )
 
 
+_MAX_SIM_CELLS = 200_000  # 응답 셀(샘플×신호) 상한 — 다신호 ST 폭증 차단
+
+
 class SimulateRequest(BaseModel):
     st_code: str = Field(..., max_length=settings.max_st_chars)
     inputs_timeline: list[tuple[int, dict[str, bool]]] = Field(
@@ -479,6 +501,15 @@ def simulate_endpoint(req: SimulateRequest) -> SimulateResponse:
         return SimulateResponse(
             ok=False, inputs=res.inputs, outputs=res.outputs,
             error="NO_LOGIC: 시뮬레이션할 출력(코일 대입)이 없습니다.",
+        )
+    # 셀 예산(샘플×신호) 상한 — 응답 폭증(메모리·대역폭) 차단(샘플수 캡만으로는
+    # 다신호 ST 가 수십 MB 를 만들 수 있음).
+    cells = len(res.samples) * max(1, len(res.outputs) + len(res.inputs))
+    if cells > _MAX_SIM_CELLS:
+        return SimulateResponse(
+            ok=False, inputs=res.inputs, outputs=res.outputs,
+            error=(f"결과 셀 {cells}개가 상한({_MAX_SIM_CELLS})을 초과합니다 — "
+                   "duration_ms 를 줄이거나 step_ms 를 키우세요."),
         )
     return SimulateResponse(
         ok=True, inputs=res.inputs, outputs=res.outputs,

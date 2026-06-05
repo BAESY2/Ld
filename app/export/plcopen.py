@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 
 from app.models import DataType, IODirection, IOPoint, StateMachineSpec
+from app.safety import SAFETY_NOTICE
 
 _ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _FB_CALL_RE = re.compile(r"^\s*[A-Za-z_]\w*\s*\(.*\)\s*;\s*$")
@@ -140,4 +141,10 @@ def to_plcopen_xml(
 
     ET.indent(project, space="  ")
     xml_bytes: bytes = ET.tostring(project, encoding="utf-8", xml_declaration=True)
-    return xml_bytes.decode("utf-8")
+    xml_str = xml_bytes.decode("utf-8")
+    # 안전 경계 고지를 XML 주석으로 파일에 *내장*한다 — JSON 봉투는 PLC 툴체인으로
+    # 들어가는 순간 사라지므로, 경계가 파일과 함께 컨트롤러까지 따라가게 한다(P0).
+    notice = SAFETY_NOTICE.replace("--", "—")  # XML 주석엔 '--' 금지
+    comment = f"<!-- ⚠ 안전 경계 / SAFETY BOUNDARY (ISO 13849/IEC 62061): {notice} -->\n"
+    decl, sep, rest = xml_str.partition("\n")
+    return f"{decl}{sep}{comment}{rest}" if sep else f"{comment}{xml_str}"

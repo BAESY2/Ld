@@ -149,8 +149,10 @@ def test_wizard_response_carries_recipe_safety_note() -> None:
     c = TestClient(app)
     d = c.post("/api/wizard", json={"recipe": "two_hand_safety", "answers": {}}).json()
     assert "⛔" in d["safety_note"]  # 강한 안전 경고가 응답에 직접 노출
-    # nl-design autobuild 도 design 안에 safety_note 를 담는다
-    nd = c.post("/api/nl-design", json={"text": "양손으로 눌러야 프레스"}).json()
+    # nl-design autobuild 는 *확신할 때만* design 을 만들고 safety_note 를 담는다
+    # (확신 못 하면 design=None — 자신있게 틀린 래더를 렌더하지 않는다, P0-1).
+    nd = c.post("/api/nl-design", json={"text": "양수조작 허가"}).json()
+    assert nd["confident"] is True
     assert nd["design"]["safety_note"]
 
 

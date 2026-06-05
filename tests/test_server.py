@@ -361,3 +361,56 @@ def test_download_zip(tmp_path, monkeypatch) -> None:
     assert "manifest.json" in names and "program.st" in names
     # 경로 거부
     assert client.get("/api/generated/..%2f..%2fetc.zip").status_code in (400, 404)
+
+
+# ---------------------------------------------------------------------------
+# 실사용 감사(R8) P0/P1 회귀 가드
+# ---------------------------------------------------------------------------
+_DBL = "L := A;\nL := B;\n"  # 이중 코일
+
+
+def test_emit_blocks_double_coil() -> None:
+    """이중코일 결함은 /api/emit 출하에서 차단된다(P0-2)."""
+    r = client.post("/api/emit", json={"st_code": _DBL, "vendor": "LS_XGK"}).json()
+    assert r["ok"] is False
+    assert "이중 코일" in (r["error"] or "")
+
+
+def test_export_blocks_double_coil() -> None:
+    """이중코일 결함은 /api/export/plcopen 내보내기에서 차단된다(P0-2)."""
+    r = client.post("/api/export/plcopen", json={"st_code": _DBL}).json()
+    assert r["ok"] is False
+    assert "이중 코일" in (r["error"] or "")
+
+
+def test_plcopen_xml_embeds_safety_notice() -> None:
+    """내보낸 PLCopen XML *파일 안*에 안전 경계가 내장된다(P0-3)."""
+    r = client.post(
+        "/api/export/plcopen",
+        json={"st_code": "MOTOR := (START OR MOTOR) AND NOT STOP;"},
+    ).json()
+    assert r["ok"] is True
+    assert "안전 경계" in r["content"] and "하드와이어" in r["content"]
+
+
+def test_nl_design_estop_no_design_rendered() -> None:
+    """'비상정지'는 confident=False + 설계 보류(소프트정지를 안전기능처럼 렌더 금지, P0-1/P1-4)."""
+    r = client.post("/api/nl-design", json={"text": "비상정지 누르면 전부 멈추게"}).json()
+    assert r["confident"] is False
+    assert r["design"] is None
+    assert r["provisional"] is True
+    assert "하드와이어" in r["safety_warning"]
+
+
+def test_simulate_cell_budget_caps_multisignal() -> None:
+    """샘플×신호 셀 예산 초과는 ok=False(다신호 폭증 차단, P1-1)."""
+    st = ("X := A OR B OR C OR D OR E;\nY := A;\nZ := B;\nW := C;\n"
+          "V := D;\nU := E;\nT := A AND B;\n")
+    r = client.post(
+        "/api/simulate",
+        json={"st_code": st, "duration_ms": 199990, "step_ms": 10},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is False
+    assert "셀" in (data["error"] or "")
