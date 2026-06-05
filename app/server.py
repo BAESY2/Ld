@@ -357,6 +357,7 @@ class WizardResponse(BaseModel):
     ladder: LadderProgram | None = None
     verification: VerificationReport | None = None
     explanation: str = ""
+    safety_note: str = ""  # 이 레시피 특유의 안전 주의(응답에 직접 노출)
     error: str | None = None
     safety_notice: str = SAFETY_NOTICE
 
@@ -388,6 +389,7 @@ def wizard(req: WizardRequest) -> WizardResponse:
         ladder=ladder,
         verification=report,
         explanation=explain_all(spec, ladder, report),
+        safety_note=RECIPES[req.recipe].safety_note,
     )
 
 

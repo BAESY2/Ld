@@ -120,3 +120,35 @@ def test_wizard_endpoint_rejects_bad_input_gracefully() -> None:
     assert r.status_code == 200
     d = r.json()
     assert d["ok"] is False and "신호 이름" in d["error"]
+
+
+# --- 협의회 라운드2 QA 회귀 ---
+def test_two_hand_rejects_same_button() -> None:
+    with pytest.raises(WizardError):
+        build_spec("two_hand_safety", {"lh": "B", "rh": "B"})
+
+
+def test_two_hand_guard_in_off_condition() -> None:
+    """가드가 열리면 허가가 해제되어야 한다(off 조건에 NOT guard 포함)."""
+    spec = build_spec("two_hand_safety")
+    leave = [t for t in spec.transitions if t.from_state == "ENABLED"][0]
+    assert "GUARD_CLOSED" in leave.condition
+
+
+def test_decimal_seconds_floored() -> None:
+    spec = build_spec("on_delay", {"delay_sec": "3.5"})
+    assert spec.timers[0].preset_ms == 3000
+
+
+def test_wizard_response_carries_recipe_safety_note() -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    d = c.post("/api/wizard", json={"recipe": "two_hand_safety", "answers": {}}).json()
+    assert "⛔" in d["safety_note"]  # 강한 안전 경고가 응답에 직접 노출
+    # nl-design autobuild 도 design 안에 safety_note 를 담는다
+    nd = c.post("/api/nl-design", json={"text": "양손으로 눌러야 프레스"}).json()
+    assert nd["design"]["safety_note"]

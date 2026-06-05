@@ -81,7 +81,7 @@ def _val(a: Answers, key: str, default: str) -> str:
 
 def _pint(a: Answers, key: str, default: int, lo: int = 0) -> int:
     try:
-        return max(lo, int(a.get(key) or default))
+        return max(lo, int(float(a.get(key) or default)))  # '3.5' → 3 (NL 경로와 일치)
     except (ValueError, TypeError):
         return default
 
@@ -411,6 +411,8 @@ def _two_hand(a: Answers) -> StateMachineSpec:
     guard = _val(a, "guard", "GUARD_CLOSED")
     estop = _val(a, "estop_ok", "ESTOP_OK")
     enable = _val(a, "enable", "PRESS_ENABLE")
+    if lh == rh:
+        raise WizardError("좌/우 버튼은 서로 다른 신호여야 합니다(양수 조작의 핵심).")
     return StateMachineSpec(
         title="양수 조작 허가(보조)",
         io_points=[
@@ -423,7 +425,8 @@ def _two_hand(a: Answers) -> StateMachineSpec:
         ],
         transitions=[
             _tr("SAFE", "ENABLED", f"{lh} AND {rh} AND {guard} AND {estop}"),
-            _tr("ENABLED", "SAFE", f"NOT {lh} OR NOT {rh} OR NOT {estop}"),
+            # 가드가 열리면 즉시 허가 해제(QA P1)
+            _tr("ENABLED", "SAFE", f"NOT {lh} OR NOT {rh} OR NOT {guard} OR NOT {estop}"),
         ],
     )
 
