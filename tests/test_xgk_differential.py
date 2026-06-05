@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from app.emit import emit
-from app.simulator import SimResult, _node_vars, _Program, simulate
+from app.simulator import SimResult, simulate
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors import LS_XGK
@@ -49,21 +49,6 @@ def _input_symbols(st: str) -> list[str]:
     return simulate(st, [], duration_ms=0, step_ms=STEP_MS).inputs
 
 
-def _counter_reset_symbols(st: str) -> set[str]:
-    """카운터 RESET 식에 등장하는 입력 심볼.
-
-    LS_XGK 에미터는 CTU 의 RESET 피연산자를 텍스트로 내보내지 않는다(에미터 결함,
-    아래 ``test_emitter_drops_ctu_reset_is_known_divergence`` 참조). 그래서 차분
-    대조의 일반 자극에서는 이 입력들을 건드리지 않아, 에미트된 XGK 가 충실히
-    실행되는 영역에서만 일치를 단언한다.
-    """
-    prog = _Program(st)
-    resets: set[str] = set()
-    for c in prog.counters.values():
-        resets |= _node_vars(c.reset_expr)
-    return resets
-
-
 def _all_on_timeline(st: str) -> list[tuple[int, dict[str, bool]]]:
     return [(0, {s: True for s in _input_symbols(st)})]
 
@@ -78,14 +63,13 @@ def _staggered_timeline(st: str) -> list[tuple[int, dict[str, bool]]]:
 
 
 def _pulse_all_timeline(st: str) -> list[tuple[int, dict[str, bool]]]:
-    """모든 입력을 주기적으로 펄스(카운터 엣지 누적용).
+    """모든 입력을 주기적으로 펄스(카운터 엣지 누적용·리셋 포함).
 
-    단, 카운터 RESET 입력은 제외한다 — 에미터가 CTU RESET 을 텍스트로 내지 않아
-    (알려진 에미터 결함) RESET 을 펄스하면 ST/XGK 가 충실히 비교되지 않는다.
+    에미터가 이제 CTU RESET 을 ``RST C`` 별도 렁으로 내보내므로 리셋 입력도 펄스해
+    충실히 비교한다(과거엔 RESET 누락으로 제외했었다).
     """
     tl: list[tuple[int, dict[str, bool]]] = []
-    resets = _counter_reset_symbols(st)
-    syms = [s for s in _input_symbols(st) if s not in resets]
+    syms = _input_symbols(st)
     for k in range(20):
         tl.append((200 * k + 100, {s: True for s in syms}))
         tl.append((200 * k + 200, {s: False for s in syms}))
@@ -173,36 +157,28 @@ def test_negative_dropped_orb_detected() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 알려진 에미터 결함 — 차분이 잡아낸 REAL 발견(리드 보고용, 회귀 핀)
+# 회귀 가드 — 차분이 잡아냈던 REAL 에미터 결함(CTU RESET 누락)이 고쳐졌다
 # ---------------------------------------------------------------------------
-def test_emitter_drops_ctu_reset_is_known_divergence() -> None:
-    """LS_XGK 에미터가 CTU RESET 피연산자를 누락한다(에미터 결함, 인터프리터 무관).
+def test_ctu_reset_emitted_as_rst_rung_and_agrees() -> None:
+    """CTU RESET 이 ``RST C`` 별도 렁으로 에미트되고 ST 와 일치한다.
 
-    ST: ``C1(CU:=PART_SENSOR, RESET:=RESET_PB, PV:=10)`` 는 RESET_PB 가 True 인
-    스캔마다 카운트를 0으로 리셋한다. 그러나 에미트된 텍스트는 ``CTU C1 10`` 한 줄과
-    ``LOAD PART_SENSOR`` 파워뿐 — RESET 정보가 텍스트에 **존재하지 않는다**. 따라서
-    XGK 를 충실히 실행하면(=에미트된 그대로) 카운터가 리셋되지 않아, PART_SENSOR 와
-    RESET_PB 가 동시에 펄스될 때 ST 와 발산한다.
-
-    인터프리터는 에미트된 XGK 텍스트만 실행하는 것이 옳다(ST 를 재해석하지 않는다).
-    이 테스트는 그 발산을 회귀 핀으로 고정하고, 차분이 에미터 결함을 잡아냄을 증명한다.
-    수정은 에미터(CTU RESET 라인 또는 reset-게이팅 에미트) 쪽이며 리드 소관이다.
+    과거 결함: LS_XGK 에미터가 ``C1(CU:=PART_SENSOR, RESET:=RESET_PB, PV:=10)`` 의
+    RESET 을 텍스트로 내지 않아(``CTU C1 10`` 만), 실기 카운터가 리셋되지 않았다 —
+    XGK↔ST 차분이 이 발산을 잡아냈다. 이제 transpiler 가 ``LOAD RESET_PB / RST C1``
+    렁을 내고 인터프리터가 RST→카운터 리셋을 처리하므로, PART_SENSOR/RESET_PB 가
+    동시에 펄스돼도 XGK 와 ST 가 샘플 단위로 일치한다(리셋 우선 → 누적 안 됨).
     """
     st, xgk = _emit_xgk("count_eject")
-    assert "RESET_PB" not in xgk.replace("AND NOT RESET_PB", ""), (
-        "에미터가 CTU RESET 을 텍스트로 냈다면 이 핀과 _pulse_all_timeline 가드를 "
-        "제거해야 한다(에미터 결함이 고쳐졌다는 신호)."
-    )
-    # PART_SENSOR 와 RESET_PB 동시 펄스 → ST 는 cnt 정체, XGK 는 누적.
+    assert "RST C1" in xgk, "리셋 렁(RST C1)이 텍스트로 존재해야 한다"
     tl: list[tuple[int, dict[str, bool]]] = []
     for k in range(20):
         tl.append((200 * k + 100, {"PART_SENSOR": True, "RESET_PB": True}))
         tl.append((200 * k + 200, {"PART_SENSOR": False, "RESET_PB": False}))
     sres = simulate(st, tl, duration_ms=DURATION_MS, step_ms=STEP_MS)
     xres = simulate_xgk(xgk, tl, duration_ms=DURATION_MS, step_ms=STEP_MS)
-    assert True not in sres.output_trace("EJECT"), "ST 는 동시 리셋으로 EJECT OFF 유지"
-    assert True in xres.output_trace("EJECT"), "에미터가 RESET 을 누락 → XGK 는 발화"
-    assert _first_divergence(sres, xres) is not None
+    assert xres.output_trace("EJECT") == sres.output_trace("EJECT")
+    assert _first_divergence(sres, xres) is None  # 이제 발산 없음
+    assert True not in xres.output_trace("EJECT")  # 동시 리셋 → 누적 못 함
 
 
 # ---------------------------------------------------------------------------

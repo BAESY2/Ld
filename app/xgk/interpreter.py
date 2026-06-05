@@ -219,6 +219,11 @@ def _power_var(operand: str) -> str:
     return f"__pwr__{operand}"
 
 
+def _reset_var(operand: str) -> str:
+    """카운터 리셋 렁(``RST C``)의 파워를 담을 합성 변수명."""
+    return f"__rst__{operand}"
+
+
 def _build_fb(
     prog: XgkProgram,
 ) -> tuple[dict[str, _Timer], dict[str, _Counter], list[tuple[_Output, str]]]:
@@ -226,8 +231,8 @@ def _build_fb(
 
     인에이블/카운트 식은 합성 파워 변수(``Var``)로 두고, 스캔마다 해당 렁의 파워를
     그 변수에 써 넣어 ST 시뮬레이터와 동일한 ``_eval`` 경로로 구동한다.
-    카운터의 RESET 은 에미터가 별도 렁으로 내지 않으므로(검증 게이트가 reset 을 IN
-    식에 합성) FALSE 로 둔다.
+    카운터 리셋은 별도 ``RST C`` 렁의 파워를 또 다른 합성 변수로 연결한다(에미터가
+    이제 리셋을 별도 렁으로 내보냄).
     """
     timers: dict[str, _Timer] = {}
     counters: dict[str, _Counter] = {}
@@ -252,6 +257,20 @@ def _build_fb(
                     preset_ms=_parse_time_ms(out.preset),
                     enable_expr=Var(pv),
                 )
+    # 2차: 카운터를 리셋하는 RST 렁의 파워를 카운터 reset_expr 로 연결(리셋 우선).
+    for rung in prog.rungs:
+        for out in rung.outputs:
+            if out.kind != "RST" or out.operand not in counters:
+                continue
+            rpv = _reset_var(out.operand)
+            drives.append((out, rpv))
+            cnt = counters[out.operand]
+            counters[out.operand] = _Counter(
+                kind=cnt.kind,
+                preset=cnt.preset,
+                count_expr=cnt.count_expr,
+                reset_expr=Var(rpv),
+            )
     return timers, counters, drives
 
 
@@ -278,7 +297,9 @@ def simulate_xgk(
     prog = XgkProgram(xgk_text)
     timers, counters, fb_drives = _build_fb(prog)
 
-    coils = prog.coil_operands()
+    # RST 가 카운터를 가리키면 그 카운터는 코일이 아니라 FB(.Q 로 읽음) → 코일에서 제외.
+    fb_names = set(timers) | set(counters)
+    coils = [c for c in prog.coil_operands() if c not in fb_names]
     fb_q = {f"{name}.Q" for name in timers} | {f"{name}.Q" for name in counters}
     # 입력 = 어떤 출력/FB.Q 도 아니고 멤버접근(.)도 아닌 피연산자.
     inputs = sorted(
@@ -330,9 +351,10 @@ def simulate_xgk(
                 elif o.kind == "SET":
                     if power:
                         table[o.operand] = True
-                else:  # RST
-                    if power:
-                        table[o.operand] = False
+                elif o.operand in counters:
+                    continue  # 카운터 RST 는 FB reset_expr 로 처리됨(코일 쓰기 아님)
+                elif power:  # RST (일반 코일)
+                    table[o.operand] = False
         samples.append(
             XgkSample(
                 t_ms=t,
