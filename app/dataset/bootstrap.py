@@ -5,12 +5,13 @@
 LLM·API 키 불필요·완전 결정론(같은 입력 → 같은 코퍼스)으로 CI 에서 그대로 돈다.
 
 파이프라인(레시피 × 결정론적 파라미터 변형 → 후보):
-  build_spec → synthesize_st → 5개 결정론 게이트
-    G1 synth      : 합성이 예외 없이 성공
-    G2 no_dbl_coil: 이중코일 0(출력당 1대입)
-    G3 verified   : 정형검증 통과(인터락/이중코일/도달성 에러 0)
-    G4 determinism: synth 2회·sim 2회 결과가 바이트 동일(결정론 증명)
-    G5 mutex      : 시뮬레이션 어떤 샘플에서도 인터락 쌍 동시 ON 없음
+  build_spec → synthesize_st → 6개 결정론·안전 게이트
+    G1 synth       : 합성이 예외 없이 성공
+    G2 no_dbl_coil : 이중코일 0(출력당 1대입)
+    G3 verified    : 정형검증 통과(인터락/이중코일/도달성 에러 0)
+    G4 non_vacuous : 입력에 무감한 자명/죽은 코일 배제(공허 통과 차단, AlphaVerus)
+    G5 determinism : synth 2회·sim 2회 결과가 **바이트 동일**(결정론 증명)
+    G6 mutex       : 다단계 자극으로 실제 구동 시 인터락 쌍 동시 ON 없음
 모든 게이트를 통과한 후보만 Sample 로 누적하고, ST 지문으로 중복을 제거한다.
 """
 
@@ -26,7 +27,7 @@ from pathlib import Path
 from app.boolexpr import And, Node, Not, Or, Var, parse
 from app.memory_map import detect_double_coils
 from app.models import IODirection, StateMachineSpec
-from app.simulator import simulate
+from app.simulator import SimResult, simulate
 from app.synth import synthesize_st
 from app.verifier import verify
 from app.wizard import RECIPES, Field, Recipe, build_spec
@@ -108,10 +109,25 @@ def _perturbations(recipe: Recipe) -> Iterator[dict[str, str]]:
 _COMMENT_RE = re.compile(r"//.*$")
 
 
+# 합성기가 출력 동작에 영향을 주는 의미를 주석으로만 인코딩하는 경우(예: 타이머
+# 타입 `// 타이머 T1 (TOF, ...)` → 시뮬레이터가 TON/TOF/TP 를 이 주석으로 결정)
+# 가 있다. 이런 '의미 있는 주석'은 정규화에서 보존해야 지문 충돌을 막는다.
+_SEMANTIC_COMMENT_RE = re.compile(
+    r"//\s*타이머\s+[A-Za-z_]\w*\s*\(\s*(?:TON|TOF|TP)\b", re.IGNORECASE
+)
+
+
 def _canonical_st(st: str) -> str:
-    """주석·잉여공백 제거 후 줄 단위로 정규화(코드 의미는 보존, 순서 유지)."""
+    """주석·잉여공백 제거 후 줄 단위로 정규화(코드 의미는 보존, 순서 유지).
+
+    단, 시뮬레이션 의미를 담은 주석(타이머 타입 등)은 보존한다 — 그렇지 않으면
+    TON/TOF 처럼 트레이스가 전혀 다른 두 ST 가 같은 지문으로 충돌(중복 오제거)한다.
+    """
     lines = []
     for raw in st.splitlines():
+        if _SEMANTIC_COMMENT_RE.search(raw):
+            lines.append(re.sub(r"\s+", " ", raw.strip()))
+            continue
         code = _COMMENT_RE.sub("", raw).strip()
         if code:
             lines.append(re.sub(r"\s+", " ", code))
@@ -141,11 +157,53 @@ def _expr_vars(node: Node) -> set[str]:
             return set()
 
 
+_MAX_VACUITY_VARS = 12  # 진리표 완전탐색 상한(2^12=4096). 초과 시 비공허로 간주.
+
+
+def _is_constant_expr(node: Node, variables: list[str]) -> bool:
+    """식이 모든 변수 대입에서 동일한 값(항상 TRUE 또는 항상 FALSE)이면 True.
+
+    퇴화(공허) 판정의 의미론적 핵심: 어떤 입력을 뒤집어도 출력이 바뀌지 않으면
+    (tautology `A OR NOT A`, contradiction `A AND NOT A`) 그 출력은 실제로
+    구동되지 않는 죽은/자명한 코일이다. 변수 수가 많으면(>상한) 보수적으로
+    '비상수'(=비공허)로 처리해 게이트가 과하게 막지 않게 한다.
+    """
+    if len(variables) > _MAX_VACUITY_VARS:
+        return False
+    first: bool | None = None
+    for mask in range(1 << len(variables)):
+        table = {v: bool(mask & (1 << i)) for i, v in enumerate(variables)}
+        val = _eval_const(node, table)
+        if first is None:
+            first = val
+        elif val != first:
+            return False
+    return True
+
+
+def _eval_const(node: Node, table: dict[str, bool]) -> bool:
+    match node:
+        case Var(name):
+            return table.get(name, False)
+        case Not(operand):
+            return not _eval_const(operand, table)
+        case And(operands):
+            return all(_eval_const(o, table) for o in operands)
+        case Or(operands):
+            return any(_eval_const(o, table) for o in operands)
+        case _:  # Const
+            return bool(getattr(node, "value", False))
+
+
 def _vacuous_output(st: str, spec: StateMachineSpec) -> str | None:
     """공허한 출력 코일을 찾는다(있으면 심볼명, 없으면 None).
 
-    퇴화 신호: 출력이 상수(`OUT := FALSE/TRUE;`)이거나 자기참조뿐이라
-    실제 입력이 출력을 구동하지 못하면(=검증이 공허하게 통과) 코퍼스에서 제외.
+    퇴화 신호:
+      (1) 출력이 상수/자기참조뿐이라 구동원이 없거나,
+      (2) 식이 모든 입력 대입에서 상수(tautology/contradiction)라 입력에
+          무감(無感)한 죽은/자명한 코일 → 검증이 공허하게 통과.
+    seal-in 식 `(... ) OR OUT ...` 는 자기참조 변수(OUT)를 자유변수로 포함해
+    상수 여부를 판정하므로 정상 seal-in 은 비상수로 통과한다.
     """
     output_syms = {
         p.symbol for p in spec.io_points if p.direction == IODirection.OUTPUT
@@ -155,16 +213,57 @@ def _vacuous_output(st: str, spec: StateMachineSpec) -> str | None:
         m = _ASSIGN_RE.match(code)
         if not m or m.group(1) not in output_syms:
             continue
-        drivers = _expr_vars(parse(m.group(2))) - {m.group(1)}
+        node = parse(m.group(2))
+        all_vars = _expr_vars(node)
+        drivers = all_vars - {m.group(1)}
         if not drivers:  # 상수거나 자기참조뿐 → 구동원 없음
+            return m.group(1)
+        if _is_constant_expr(node, sorted(all_vars)):  # 입력 무감(자명/죽은 코일)
             return m.group(1)
     return None
 
 
+def _max_preset_ms(spec: StateMachineSpec) -> int:
+    """명세 내 최대 타이머 프리셋(ms). 시뮬 구간을 타이머가 발화하도록 보장하는 데 쓴다."""
+    return max((t.preset_ms for t in spec.timers), default=0)
+
+
+def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str, bool]]], int]:
+    """기계를 실제로 '구동'하는 결정론적 다단계 입력 자극과 그에 맞는 sim 길이를 만든다.
+
+    문제: 모든 입력을 동시에 ON 으로 두면 STOP/REV/HI 같은 차단 입력까지 켜져
+    대부분의 기계가 IDLE 에 갇혀 어떤 출력도 안 켜진다 → mutex/트레이스가 공허.
+    해법: 각 입력을 한 번에 하나씩(+ 인접 쌍) 단계적으로 ON 하며, 각 단계가 타이머
+    프리셋을 넘기도록 충분히 길게 잡아 상태머신을 실제로 통과시킨다(결정론 유지).
+    """
+    inputs = _input_symbols(spec)
+    # 각 단계는 타이머가 발화할 만큼 길어야 한다(+여유 1스캔).
+    phase_ms = max(_SIM_DURATION_MS, _max_preset_ms(spec) + 3 * _SIM_STEP_MS)
+    phases: list[dict[str, bool]] = [{}]  # P0: 전부 OFF(초기화)
+    for sym in inputs:  # 각 입력 단독 ON
+        phases.append({s: (s == sym) for s in inputs})
+    for i in range(len(inputs) - 1):  # 인접 입력 쌍 ON(전이 트리거 다양화)
+        pair = {inputs[i], inputs[i + 1]}
+        phases.append({s: (s in pair) for s in inputs})
+    phases.append({s: True for s in inputs})  # 마지막: 전부 ON(차단/정지 경계)
+    stim: list[tuple[int, dict[str, bool]]] = []
+    for k, ph in enumerate(phases):
+        stim.append((k * phase_ms, {s: ph.get(s, False) for s in inputs}))
+    total = len(phases) * phase_ms
+    return stim, total
+
+
+def _exercise(st: str, spec: StateMachineSpec) -> SimResult:
+    stim, total = _exercise_stimulus(spec)
+    return simulate(st, stim, duration_ms=total, step_ms=_SIM_STEP_MS)
+
+
 def _trace_repr(st: str, spec: StateMachineSpec) -> str:
-    """모든 입력을 t=0 에 ON 으로 두고 가동한 출력 트레이스의 결정론적 직렬화."""
-    stim = [(0, {sym: True for sym in _input_symbols(spec)})]
-    res = simulate(st, stim, duration_ms=_SIM_DURATION_MS, step_ms=_SIM_STEP_MS)
+    """기계를 단계적으로 구동(_exercise_stimulus)해 얻은 출력 트레이스의 결정론적 직렬화.
+
+    (이전: 모든 입력 동시 ON → 대부분 IDLE 갇힘으로 트레이스가 공허했음)
+    """
+    res = _exercise(st, spec)
     return "|".join(
         f"{s.t_ms}:{','.join(sorted(k for k, v in s.outputs.items() if v))}"
         for s in res.samples
@@ -174,7 +273,7 @@ def _trace_repr(st: str, spec: StateMachineSpec) -> str:
 # ── 게이트 ────────────────────────────────────────────────────────────────
 
 def _run_gates(spec: StateMachineSpec) -> tuple[dict[str, bool], str, str, str]:
-    """5개 결정론 게이트 실행. (gates, st, fingerprint, reason) 반환.
+    """6개 결정론·안전 게이트 실행. (gates, st, fingerprint, reason) 반환.
 
     어느 게이트라도 실패하면 그 지점에서 중단(이후 게이트는 False)하고 reason 을 남긴다.
     """
@@ -205,20 +304,25 @@ def _run_gates(spec: StateMachineSpec) -> tuple[dict[str, bool], str, str, str]:
         return gates, st, "", f"non_vacuous: {vac} 가 상수/자기참조뿐(구동원 없음)"
     gates["non_vacuous"] = True
 
-    # G4 determinism: synth 2회 + sim 2회 가 바이트 동일
+    # G4 determinism: synth 2회 + sim 2회 가 **바이트 동일**(주석 포함).
+    # 주석까지 동일해야 한다 — _canonical_st 비교만 하면 주석에 심어진 비결정성
+    # (난수 nonce·타임스탬프 등)이 그대로 지속 산출물(Sample.st)에 새어 들어가
+    # 게이트가 'determinism=True' 라고 거짓 보증한다.
     try:
         st2 = synthesize_st(spec)
         t1 = _trace_repr(st, spec)
         t2 = _trace_repr(st2, spec)
     except Exception as exc:  # noqa: BLE001
         return gates, st, "", f"determinism-sim: {exc}"
-    if _canonical_st(st) != _canonical_st(st2) or t1 != t2:
+    if st != st2 or t1 != t2:
         return gates, st, "", "determinism: 재실행 결과 불일치"
     gates["determinism"] = True
 
-    # G5 mutex: 인터락 쌍이 어떤 샘플에서도 동시 ON 이 아님
-    stim = [(0, {sym: True for sym in _input_symbols(spec)})]
-    res = simulate(st, stim, duration_ms=_SIM_DURATION_MS, step_ms=_SIM_STEP_MS)
+    # G5 mutex: 인터락 쌍이 어떤 샘플에서도 동시 ON 이 아님.
+    # 기계를 실제로 구동하는 다단계 자극(_exercise_stimulus)으로 검사한다 —
+    # 모든 입력 동시 ON 한 스냅샷으로는 대부분 기계가 IDLE 에 갇혀 인터락 상태에
+    # 도달조차 못 해 mutex 가 '공허하게' 통과하던 결함을 차단한다.
+    res = _exercise(st, spec)
     for pair in spec.interlocks:
         for s in res.samples:
             if s.outputs.get(pair.output_a) and s.outputs.get(pair.output_b):
@@ -238,6 +342,9 @@ def generate(recipe_ids: list[str] | None = None) -> BootstrapReport:
     recipe_ids 미지정 시 전체 레시피. 같은 입력이면 항상 같은 코퍼스(결정론).
     """
     ids = recipe_ids if recipe_ids is not None else list(RECIPES.keys())
+    unknown = [r for r in ids if r not in RECIPES]
+    if unknown:
+        raise KeyError(f"알 수 없는 레시피 id: {sorted(unknown)}")
     report = BootstrapReport()
     seen: set[str] = set()
     for rid in ids:

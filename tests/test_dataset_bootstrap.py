@@ -102,3 +102,127 @@ def test_non_vacuity_gate_rejects_constant_output() -> None:
     assert gates["non_vacuous"] is False   # 비공허성 게이트가 잡아낸다
     assert fp == ""
     assert "non_vacuous" in reason
+
+
+# ── RED-TEAM 라운드4 회귀 잠금 테스트 ────────────────────────────────────────
+
+def _const_output_spec(expr: str):
+    """단일 입력 GO 로만 구동되는 파생 출력 OUT := <expr> 명세."""
+    from app.models import (
+        DerivedOutput,
+        IODirection,
+        IOPoint,
+        SfcState,
+        StateMachineSpec,
+    )
+
+    return StateMachineSpec(
+        io_points=[
+            IOPoint(symbol="GO", direction=IODirection.INPUT),
+            IOPoint(symbol="OUT", direction=IODirection.OUTPUT),
+        ],
+        states=[SfcState(name="IDLE", is_initial=True)],
+        derived_outputs=[DerivedOutput(output="OUT", expression=expr)],
+    )
+
+
+def test_non_vacuity_rejects_tautology_and_contradiction() -> None:
+    """입력에 무감(無感)한 자명/죽은 코일(항상 ON / 항상 OFF)은 제외된다.
+
+    구버그: 식이 변수를 '참조만' 하면(예: GO AND NOT GO) 비공허로 통과 → 죽은
+    출력이 '검증된 안전 샘플'로 코퍼스에 들어왔다.
+    """
+    from app.dataset.bootstrap import _run_gates
+
+    for expr in ("GO AND NOT GO", "GO OR NOT GO"):
+        gates, _st, fp, reason = _run_gates(_const_output_spec(expr))
+        assert gates["non_vacuous"] is False, f"{expr} 가 비공허로 잘못 통과"
+        assert fp == ""
+        assert "non_vacuous" in reason
+
+
+def test_determinism_gate_catches_comment_nondeterminism(monkeypatch) -> None:
+    """주석에 심긴 비결정성(난수 nonce)도 determinism 게이트가 잡아야 한다.
+
+    구버그: 게이트가 _canonical_st(주석 제거) 비교만 해서, 주석 nonce 가 매 실행
+    달라져도 통과 → 비결정 ST 가 그대로 지속 산출물에 새어 들어갔다.
+    """
+    import random
+
+    import app.dataset.bootstrap as B
+    from app.synth import synthesize_st as real_synth
+    from app.wizard import build_spec
+
+    monkeypatch.setattr(
+        B, "synthesize_st", lambda spec: real_synth(spec) + f"\n// nonce {random.random()}"
+    )
+    gates, _st, fp, reason = B._run_gates(build_spec("motor_start_stop", {}))
+    assert gates["determinism"] is False
+    assert fp == ""
+    assert "determinism" in reason
+
+
+def test_canonical_preserves_timer_type_no_fingerprint_collision() -> None:
+    """타이머 타입(TON/TOF)만 다른 두 ST 는 시뮬 의미가 달라 지문이 달라야 한다.
+
+    구버그: 정규화가 `// 타이머 T1 (TON/TOF...)` 주석을 제거 → TON·TOF 가 같은
+    지문으로 충돌해 의미가 다른 샘플이 'near-dup' 으로 잘못 제거됐다.
+    """
+    from app.dataset.bootstrap import _canonical_st, _hash
+    from app.models import (
+        IODirection,
+        IOPoint,
+        SfcState,
+        StateMachineSpec,
+        TimerSpec,
+        Transition,
+    )
+    from app.synth import synthesize_st
+
+    def mk(ttype: str) -> StateMachineSpec:
+        return StateMachineSpec(
+            io_points=[
+                IOPoint(symbol="GO", direction=IODirection.INPUT),
+                IOPoint(symbol="OUT", direction=IODirection.OUTPUT),
+            ],
+            timers=[TimerSpec(name="T1", preset_ms=1000, enable_condition="GO",
+                              timer_type=ttype)],
+            states=[SfcState(name="IDLE", is_initial=True),
+                    SfcState(name="ON", on_entry=["OUT := TRUE;"])],
+            transitions=[
+                Transition(from_state="IDLE", to_state="ON", condition="T1.Q"),
+                Transition(from_state="ON", to_state="IDLE", condition="NOT T1.Q"),
+            ],
+        )
+
+    fp_ton = _hash(_canonical_st(synthesize_st(mk("TON"))))
+    fp_tof = _hash(_canonical_st(synthesize_st(mk("TOF"))))
+    assert fp_ton != fp_tof, "TON/TOF 가 같은 지문으로 충돌(의미 손실)"
+
+
+def test_mutex_gate_actually_energizes_interlock_recipes() -> None:
+    """인터락 레시피의 출력이 실제로 켜지는 트레이스로 mutex 가 검사돼야 한다.
+
+    구버그: mutex 자극이 '모든 입력 동시 ON' 스냅샷이라 STOP/REV 까지 켜져 기계가
+    IDLE 에 갇혀 어떤 출력도 안 켜졌다 → 인터락 검사가 공허하게 통과했다.
+    """
+    from app.dataset.bootstrap import _exercise
+    from app.synth import synthesize_st
+    from app.wizard import build_spec
+
+    for rid in ("fwd_rev", "jog_run", "star_delta"):
+        spec = build_spec(rid, {})
+        res = _exercise(synthesize_st(spec), spec)
+        outs = [p.symbol for p in spec.io_points if p.direction.name == "OUTPUT"]
+        ever_on = {o for s in res.samples for o in outs if s.outputs.get(o)}
+        assert ever_on, f"{rid}: 자극으로 어떤 출력도 켜지지 않음(mutex 공허)"
+
+
+def test_generate_rejects_unknown_recipe_id_clearly() -> None:
+    """알 수 없는 레시피 id 는 명확한 KeyError 로 거른다(원시 dict KeyError 아님)."""
+    import pytest
+
+    from app.dataset import generate
+
+    with pytest.raises(KeyError, match="알 수 없는 레시피"):
+        generate(["motor_start_stop", "__does_not_exist__"])
