@@ -46,7 +46,7 @@ from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import check_double_coils, verify
-from app.wizard import build_spec, list_recipes
+from app.wizard import WizardError, build_spec, list_recipes
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger("plc.server")
@@ -323,8 +323,18 @@ def wizard(req: WizardRequest) -> WizardResponse:
         spec = build_spec(req.recipe, req.answers)
     except KeyError:
         return WizardResponse(ok=False, error=f"알 수 없는 레시피: {req.recipe}")
-    st = synthesize_st(spec)
-    ladder = transpile_st(st, title=spec.title)
+    except WizardError as exc:
+        return WizardResponse(ok=False, error=str(exc))
+    try:
+        st = synthesize_st(spec)
+        ladder = transpile_st(st, title=spec.title)
+    except ValueError as exc:
+        return WizardResponse(ok=False, error=f"설계 생성 실패: {exc}")
+    if not ladder.rungs:
+        return WizardResponse(
+            ok=False, title=spec.title,
+            error="유효한 래더 로직이 만들어지지 않았어요. 신호 이름을 확인해 주세요.",
+        )
     report = verify(spec, st)
     return WizardResponse(
         ok=report.passed,

@@ -7,11 +7,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.models import (
     CounterSpec,
+    DerivedOutput,
     Interlock,
     IODirection,
     IOPoint,
@@ -52,8 +54,28 @@ def _tr(frm: str, to: str, cond: str) -> Transition:
     return Transition(from_state=frm, to_state=to, condition=cond)
 
 
+class WizardError(ValueError):
+    """비전문가에게 보여줄 친절한 입력 오류."""
+
+
+_SYM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_RESERVED = {"AND", "OR", "NOT", "TRUE", "FALSE", "XOR"}
+
+
 def _val(a: Answers, key: str, default: str) -> str:
-    return (a.get(key) or "").strip() or default
+    """심볼 답변을 검증해 반환한다(빈 값이면 기본값). 잘못되면 WizardError."""
+    raw = (a.get(key) or "").strip()
+    sym = raw or default
+    if not _SYM_RE.match(sym):
+        raise WizardError(
+            f"신호 이름 '{sym}' 은(는) 쓸 수 없어요. 영문으로 시작하고 "
+            "영문·숫자·밑줄(_)만 사용하세요(공백·한글·기호 불가). 예: START, MOTOR_1"
+        )
+    if sym.upper() in _RESERVED:
+        raise WizardError(
+            f"'{sym}' 은(는) 예약어라 신호 이름으로 쓸 수 없어요. 다른 이름을 쓰세요."
+        )
+    return sym
 
 
 def _pint(a: Answers, key: str, default: int, lo: int = 0) -> int:
@@ -61,6 +83,28 @@ def _pint(a: Answers, key: str, default: int, lo: int = 0) -> int:
         return max(lo, int(a.get(key) or default))
     except (ValueError, TypeError):
         return default
+
+
+def _validate_spec(spec: StateMachineSpec) -> None:
+    """빌드된 명세의 비전문가 안전성 검사(충돌·자기인터락)."""
+    inputs = {p.symbol for p in spec.io_points if p.direction == IODirection.INPUT}
+    outputs = [p.symbol for p in spec.io_points if p.direction == IODirection.OUTPUT]
+    dup = {s for s in outputs if outputs.count(s) > 1}
+    if dup:
+        raise WizardError(
+            f"출력 이름이 중복됩니다: {', '.join(sorted(dup))}. 서로 다른 이름을 쓰세요."
+        )
+    clash = inputs & set(outputs)
+    if clash:
+        raise WizardError(
+            f"입력과 출력에 같은 이름({', '.join(sorted(clash))})을 쓸 수 없어요. "
+            "버튼/센서(입력)와 모터/램프(출력)는 다른 이름이어야 합니다."
+        )
+    for il in spec.interlocks:
+        if il.output_a == il.output_b:
+            raise WizardError(
+                f"인터락 두 출력이 같은 이름({il.output_a})입니다. 서로 달라야 합니다."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +244,8 @@ def _auto_manual(a: Answers) -> StateMachineSpec:
     mc = _val(a, "man_cmd", "MAN_CMD")
     stop = _val(a, "stop", "SYS_STOP")
     valve = _val(a, "valve", "VALVE")
+    # 자동/수동은 조합(파생) 출력으로 — 두 상태가 한 출력을 몰면 seal-in 합성이
+    # 서로의 turn-off 가 되어 오작동한다(협의회 QA P1#3). 단일 식으로 합성한다.
     return StateMachineSpec(
         title="자동/수동 모드 제어",
         io_points=[
@@ -209,16 +255,12 @@ def _auto_manual(a: Answers) -> StateMachineSpec:
             _io(stop, _IN, "정지"),
             _io(valve, _OUT, "밸브"),
         ],
-        states=[
-            SfcState(name="CLOSED", is_initial=True),
-            SfcState(name="OPEN_A", on_entry=[f"{valve} := TRUE;"]),
-            SfcState(name="OPEN_M", on_entry=[f"{valve} := TRUE;"]),
-        ],
-        transitions=[
-            _tr("CLOSED", "OPEN_A", f"{mode} AND {ac} AND NOT {stop}"),
-            _tr("CLOSED", "OPEN_M", f"NOT {mode} AND {mc} AND NOT {stop}"),
-            _tr("OPEN_A", "CLOSED", f"{stop} OR NOT {ac}"),
-            _tr("OPEN_M", "CLOSED", f"{stop} OR NOT {mc}"),
+        derived_outputs=[
+            DerivedOutput(
+                output=valve,
+                expression=f"(({mode} AND {ac}) OR (NOT {mode} AND {mc})) AND NOT {stop}",
+                description="자동이면 자동명령, 수동이면 수동명령으로 개방",
+            ),
         ],
     )
 
@@ -287,5 +329,10 @@ def list_recipes() -> list[dict[str, object]]:
 
 
 def build_spec(recipe_id: str, answers: Answers | None = None) -> StateMachineSpec:
-    """레시피 + 답변으로 결정론적 명세를 만든다(없는 레시피면 KeyError)."""
-    return RECIPES[recipe_id].build(answers or {})
+    """레시피 + 답변으로 결정론적 명세를 만든다(없는 레시피면 KeyError).
+
+    잘못된 입력(공백·한글·예약어·충돌)은 WizardError(친절 메시지)로 거른다.
+    """
+    spec = RECIPES[recipe_id].build(answers or {})
+    _validate_spec(spec)
+    return spec

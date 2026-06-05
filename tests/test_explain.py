@@ -66,3 +66,15 @@ def test_explain_all_for_all_golden() -> None:
         text = explain_all(spec, ladder, verify(spec, st))
         assert "이 장치는 무엇을 하나요" in text
         assert "동작 설명" in text
+
+
+def test_branch_phrase_handles_contradiction() -> None:
+    """모순(빈 입력 브랜치) 렁도 크래시 없이 설명된다(QA P0 #4/#5)."""
+    from app.models import ElementType, LadderElement, LadderProgram, LadderRung
+
+    rung = LadderRung(
+        input_branches=[],
+        outputs=[LadderElement(element_type=ElementType.COIL, symbol="OUT")],
+    )
+    out = explain_ladder(LadderProgram(rungs=[rung]))
+    assert out and "OUT" in out[0]

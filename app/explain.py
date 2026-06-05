@@ -75,6 +75,8 @@ def _branch_phrase(rung: LadderRung) -> str:
             state = "꺼져 있음" if el.element_type == ElementType.CONTACT_NC else "켜져 있음"
             parts.append(f"{el.symbol}가 {state}")
         branch_strs.append(", ".join(parts))
+    if not branch_strs:
+        return "(켜질 수 있는 조건이 없음 — 모순된 로직)"
     if len(branch_strs) > 1:
         return " 또는 ".join(f"({b})" for b in branch_strs)
     return branch_strs[0]

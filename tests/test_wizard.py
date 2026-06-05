@@ -7,7 +7,7 @@ import pytest
 from app.memory_map import detect_double_coils
 from app.synth import covers_all_outputs, synthesize_st
 from app.verifier import verify
-from app.wizard import RECIPES, build_spec, list_recipes
+from app.wizard import RECIPES, WizardError, build_spec, list_recipes
 
 
 def test_list_recipes_shape() -> None:
@@ -75,3 +75,48 @@ def test_wizard_endpoint() -> None:
     assert "하드와이어" in data["safety_notice"]
     bad = client.post("/api/wizard", json={"recipe": "nope", "answers": {}}).json()
     assert bad["ok"] is False
+
+
+# --- 협의회 QA 회귀 (크래시·틀린통과 방지) ---
+@pytest.mark.parametrize("bad", [
+    {"start": "A B"}, {"start": "123"}, {"start": "AND"}, {"start": "TRUE"},
+    {"start": "A AND B"}, {"motor": "모터"}, {"start": "X;Y"},
+])
+def test_invalid_symbol_rejected(bad: dict) -> None:
+    with pytest.raises(WizardError):
+        build_spec("motor_start_stop", bad)
+
+
+def test_output_input_collision_rejected() -> None:
+    with pytest.raises(WizardError, match="같은 이름"):
+        build_spec("motor_start_stop", {"start": "X", "motor": "X"})
+
+
+def test_fwd_rev_duplicate_output_rejected() -> None:
+    with pytest.raises(WizardError):
+        build_spec("fwd_rev", {"motor_fwd": "OUT", "motor_rev": "OUT"})
+
+
+def test_auto_manual_is_correct_not_just_passing() -> None:
+    """auto_manual: 자동모드+자동명령(수동명령 없이)에도 밸브가 열려야 한다(QA P1#3)."""
+    spec = build_spec("auto_manual")
+    st = synthesize_st(spec)
+    expected = (
+        "VALVE := ((MODE_AUTO AND AUTO_CMD) OR (NOT MODE_AUTO AND MAN_CMD)) "
+        "AND NOT SYS_STOP;"
+    )
+    assert expected in st
+    assert verify(spec, st).passed
+
+
+def test_wizard_endpoint_rejects_bad_input_gracefully() -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    r = c.post("/api/wizard", json={"recipe": "motor_start_stop", "answers": {"start": "모터"}})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok"] is False and "신호 이름" in d["error"]

@@ -44,8 +44,22 @@ def run_pipeline(request: str, max_revisions: int | None = None) -> PipelineStat
 
     try:
         state.spec = agents.run_analyst(request)
+    except ImportError:
+        state.error = (
+            "AI 자동 생성(자연어)은 현재 사용할 수 없습니다 — LLM 모듈이 설치되지 않았어요"
+            '(pip install -e ".[llm]"). 키 없이 바로 설계하려면 가이드 마법사'
+            "(/wizard.html)를 사용하세요."
+        )
+        return state
     except Exception as exc:  # noqa: BLE001
-        state.error = f"분석가(analyst) 실패: {exc}"
+        msg = str(exc)
+        if "api" in msg.lower() and "key" in msg.lower():
+            state.error = (
+                "AI 자동 생성에는 API 키가 필요합니다(ANTHROPIC_API_KEY). "
+                "키 없이 설계하려면 가이드 마법사(/wizard.html)를 사용하세요."
+            )
+        else:
+            state.error = f"분석가(analyst) 실패: {exc}"
         return state
 
     feedback: str | None = None
