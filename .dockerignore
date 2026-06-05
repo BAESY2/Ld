@@ -1,22 +1,52 @@
+# 가상환경 / 캐시
 .venv/
 venv/
+env/
 __pycache__/
 *.py[cod]
 *.egg-info/
+.eggs/
+build/
+dist/
+
+# VCS / CI
 .git/
 .github/
+.gitignore
+
+# 테스트 / 타입 / 린트 캐시
+tests/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
-desktop/
-training/
-tests/
+.hypothesis/
+
+# 문서(README 만 빌드에 포함)
 *.md
 !README.md
+docs/
+
+# 시크릿 / 런타임 생성물
 .env
+*.env
+!.env.example
+out/
+
+# 런타임에 불필요한 자산(이미지 슬림)
+data/
+scripts/
+desktop/
+training/
+openplc_driver/
+models/
 *.faiss
 *.index
-models/
-out/
+*.gguf
+*.safetensors
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

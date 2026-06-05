@@ -1,15 +1,60 @@
+# 한 줄 배포:  docker compose up --build
+#   → http://localhost:8000 에서 마법사(웹 UI) 사용. 키 없이 결정론 경로 전부 동작.
+#   (자연어 생성만 LLM 키 필요 — 아래 environment 참고.)
 services:
+  # ── 엔진(우리 이미지): FastAPI + 정적 프론트 + 결정론 코어 ──────────────
   plc-ladder:
-    build: .
+    build:
+      context: .
+      # 사내 TLS 가로채기 프록시에서만 필요(일반 네트워크는 무시됨, required=false):
+      #   COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build
+      # secrets 미사용 시 그대로 빌드된다.
     image: plc-ladder-agent:latest
     ports:
       - "8000:8000"
     environment:
-      # 결정론 경로(ST→래더)는 키 없이 동작. 자연어 생성에만 키 필요.
+      # 결정론 경로(ST→래더·마법사·검증·시뮬)는 키 없이 동작.
+      # 자연어 생성(/api/generate)에만 키 필요 — 비우면 해당 경로만 비활성.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - USE_RAG=${USE_RAG:-false}
       - USE_Z3=${USE_Z3:-true}
+      # 운영 노출 시 CORS_ORIGINS 를 신뢰 도메인으로 좁힐 것(기본 * = 데모용).
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # 가상 PLC 어댑터가 붙을 OpenPLC 호스트(아래 openplc 서비스 활성화 시).
+      - OPENPLC_HOST=${OPENPLC_HOST:-}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  # ── OpenPLC v3 런타임(가상 PLC 샌드박스, :502 Modbus 슬레이브) ──────────
+  #
+  # Docker Hub 에 유지보수되는 공식 OpenPLC 이미지가 없어(소스 전용 프로젝트)
+  # 빌드 컨텍스트로 제공한다. 기본은 비활성(profiles: ["sandbox"]).
+  #
+  # 활성화:   docker compose --profile sandbox up --build
+  #   - GitHub 의 OpenPLC_v3 를 빌드(첫 빌드 수 분 소요, 인터넷 필요).
+  #   - Modbus 슬레이브 :502, 웹 UI :8080(기본 로그인 openplc/openplc).
+  #   - 그 뒤 엔진을 가리키게:  OPENPLC_HOST=openplc docker compose --profile sandbox up
+  #
+  # 이미지를 직접 보유했다면 build 대신 image: <your-openplc-image> 로 교체.
+  openplc:
+    profiles: ["sandbox"]
+    build:
+      # 공식 v3(GPL-3.0, Modbus :502 슬레이브 내장). 우리 엔진과는 Modbus/REST
+      # 프로세스 경계로만 통신 → 라이선스 격리(docs/OPENPLC_STRATEGY.md 참고).
+      context: https://github.com/thiagoralves/OpenPLC_v3.git
+    image: openplc-runtime:v3
+    ports:
+      - "502:502"     # Modbus TCP 슬레이브(가상 PLC I/O)
+      - "8080:8080"   # OpenPLC 웹 UI(프로그램 업로드/실행 제어)
     restart: unless-stopped
