@@ -57,6 +57,9 @@
     <button class="go" style="margin-top:0;padding:10px 16px" id="nlgo">이해하기 ▶</button>
   </div>
   <div id="nlmsg" style="font-size:12px;color:var(--muted);min-height:16px"></div>
+  <div id="nlsafety" style="display:none;margin-top:8px;padding:10px 12px;
+    border:1px solid var(--amber);border-radius:8px;background:rgba(245,158,11,.08);
+    color:var(--amber);font-size:13px;font-weight:600"></div>
 
   <div class="step">② 무엇을 만들까요?</div>
   <div class="cards" id="cards"></div>
@@ -149,6 +152,9 @@ async function nlDesign() {
     let msg = d.suggestion || "";
     if (d.questions && d.questions.length) msg += "  ❓ " + d.questions.join(" / ");
     $("nlmsg").textContent = msg;
+    const sb = $("nlsafety");                // 안전필수(비상정지) 경고 배너
+    if (d.safety_warning) { sb.textContent = d.safety_warning; sb.style.display = "block"; }
+    else { sb.style.display = "none"; }
     if (d.design) renderDesign(d.design);   // 곧장 결과 표시
   } catch (e) { $("nlmsg").textContent = "오류: " + e.message; }
   finally { $("nlgo").disabled = false; }
