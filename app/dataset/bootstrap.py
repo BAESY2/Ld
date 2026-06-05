@@ -27,7 +27,7 @@ from pathlib import Path
 from app.boolexpr import And, Node, Not, Or, Var, parse
 from app.memory_map import detect_double_coils
 from app.models import IODirection, StateMachineSpec
-from app.simulator import SimResult, simulate
+from app.simulator import MAX_SIM_SAMPLES, SimResult, simulate
 from app.synth import synthesize_st
 from app.verifier import verify
 from app.wizard import RECIPES, Field, Recipe, build_spec
@@ -229,6 +229,17 @@ def _max_preset_ms(spec: StateMachineSpec) -> int:
     return max((t.preset_ms for t in spec.timers), default=0)
 
 
+def _sum_preset_ms(spec: StateMachineSpec) -> int:
+    """명세 내 모든 타이머 프리셋의 합(ms).
+
+    N단계 타임드 시퀀서(세차·신호등·배치)는 각 단계 타이머가 **직렬로 핸드오프**되므로
+    한 입력(START)을 *모든 단계 프리셋의 합* 만큼 유지해야 마지막 단계까지 도달한다.
+    최댓값(_max_preset_ms)만으로는 1~2단계만 켜지고 마지막 단계 출력이 코퍼스에서
+    영원히 죽은 채로 남아 커버리지(energized)가 거짓으로 불완전해진다.
+    """
+    return sum(t.preset_ms for t in spec.timers)
+
+
 def _max_counter_preset(spec: StateMachineSpec) -> int:
     """명세 내 최대 카운터 프리셋(PV). 엣지 펄스를 PV 만큼 줘야 카운터가 발화한다."""
     return max((c.preset for c in spec.counters), default=0)
@@ -244,8 +255,10 @@ def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str
     카운터(CTU/CTD)와 엣지 구동 로직까지 실제로 발화시킨다(전부 결정론 유지).
     """
     inputs = _input_symbols(spec)
-    # 각 단계는 타이머가 발화할 만큼 길어야 한다(+여유 1스캔).
-    phase_ms = max(_SIM_DURATION_MS, _max_preset_ms(spec) + 3 * _SIM_STEP_MS)
+    # 각 단계는 타이머가 발화할 만큼 길어야 한다(+여유 1스캔). 단, N단계 시퀀서는
+    # 타이머가 직렬 핸드오프되므로 한 입력을 '모든 프리셋의 합' 만큼 유지해야 마지막
+    # 단계까지 구동된다 → 합(sum)을 써야 마지막 단계 출력의 죽음(거짓 커버리지)을 막는다.
+    phase_ms = max(_SIM_DURATION_MS, _sum_preset_ms(spec) + 3 * _SIM_STEP_MS)
     phases: list[dict[str, bool]] = [{}]  # P0: 전부 OFF(초기화)
     for sym in inputs:  # 각 입력 단독 ON
         phases.append({s: (s == sym) for s in inputs})
@@ -270,8 +283,22 @@ def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str
     return stim, t
 
 
+class StimulusTooLarge(ValueError):
+    """자극 길이가 시뮬 샘플 상한을 넘어 기계를 안전하게 구동할 수 없음.
+
+    (예: 카운터 PV 가 매우 커 엣지 펄스 열이 MAX_SIM_SAMPLES 를 초과.)
+    determinism 실패로 오인되지 않도록 별도 예외로 분리해 게이트가 정직한 사유를 남긴다.
+    """
+
+
 def _exercise(st: str, spec: StateMachineSpec) -> SimResult:
     stim, total = _exercise_stimulus(spec)
+    # 자극이 시뮬 상한을 넘기면 'determinism-sim' 으로 오기록되지 않도록 먼저 막는다.
+    if total // _SIM_STEP_MS + 1 > MAX_SIM_SAMPLES:
+        raise StimulusTooLarge(
+            f"자극 샘플 {total // _SIM_STEP_MS + 1}개가 상한({MAX_SIM_SAMPLES})을 초과 "
+            f"(타이머 프리셋/카운터 PV 가 너무 큼)."
+        )
     return simulate(st, stim, duration_ms=total, step_ms=_SIM_STEP_MS)
 
 
@@ -329,6 +356,9 @@ def _run_gates(spec: StateMachineSpec) -> tuple[dict[str, bool], str, str, str]:
         st2 = synthesize_st(spec)
         t1 = _trace_repr(st, spec)
         t2 = _trace_repr(st2, spec)
+    except StimulusTooLarge as exc:
+        # 결정론 실패가 아니라 자극이 시뮬 상한을 넘긴 것 — 정직한 별도 사유로 기록.
+        return gates, st, "", f"stimulus_too_large: {exc}"
     except Exception as exc:  # noqa: BLE001
         return gates, st, "", f"determinism-sim: {exc}"
     if st != st2 or t1 != t2:

@@ -245,3 +245,95 @@ def test_every_sample_energizes_some_output() -> None:
     rep = generate()
     for s in rep.samples:
         assert s.energized, f"{s.sample_id}: 어떤 출력도 안 켜짐(커버리지 0)"
+
+
+# ── RED-TEAM 라운드5 회귀 잠금 테스트 ────────────────────────────────────────
+
+
+# 알려진 커버리지 공백(R5 문서화): first-out 알람의 LATCH_B 는 결정론 자극으로
+# 도달 불가 — FAULT_B 가 LATCH_A 가 잡히기 전에 단독 상승해야 하는데, 자극이 입력을
+# 정렬 순서(FAULT_A 먼저)로 구동하고 그 사이 리셋이 없어 LATCH_A 가 계속 래치된다.
+# 합성/검증의 결함이 아니라 자극의 한계이며, 의미를 모르는 일반 자극으로 안전하게
+# 깰 수 없어 명시적으로 허용한다. 다른 모든 출력의 죽음은 새 결함으로 간주해 막는다.
+_KNOWN_DEAD_IN_CORPUS: dict[str, set[str]] = {"first_out_alarm": {"LATCH_B"}}
+
+
+def test_every_declared_output_is_covered_per_recipe() -> None:
+    """레시피별로 선언된 **모든** 출력이 코퍼스 전체에서 최소 1번은 켜져야 한다.
+
+    구버그(R5): 자극 phase 가 '최대' 타이머 프리셋만큼만 길어, N단계 시퀀서의
+    마지막 단계(car_wash DRY·batch DRAIN_VALVE·traffic LIGHT_YELLOW)가 코퍼스에서
+    영원히 죽은 채로 남아 energized 커버리지가 거짓으로 불완전했다. 합(sum) 프리셋
+    자극으로 고친다. 알려진 공백(first_out LATCH_B)만 명시 허용한다.
+    """
+    from app.models import IODirection
+    from app.wizard import build_spec
+
+    for rid in RECIPES:
+        rep = generate([rid])
+        declared = {
+            p.symbol
+            for p in build_spec(rid, {}).io_points
+            if p.direction == IODirection.OUTPUT
+        }
+        covered: set[str] = set()
+        for s in rep.samples:
+            covered |= set(s.energized)
+        dead = declared - covered - _KNOWN_DEAD_IN_CORPUS.get(rid, set())
+        assert not dead, f"{rid}: 코퍼스에서 죽은 출력(거짓 커버리지) {sorted(dead)}"
+
+
+def test_sum_preset_drives_full_sequencer_chain() -> None:
+    """시퀀서 자극 길이는 '최대'가 아니라 '합'이어야 마지막 단계까지 구동된다."""
+    from app.dataset.bootstrap import _exercise
+    from app.synth import synthesize_st
+    from app.wizard import build_spec
+
+    for rid, last in (
+        ("timed_traffic", "LIGHT_YELLOW"),
+        ("car_wash", "DRY"),
+        ("batch_fill_mix_drain", "DRAIN_VALVE"),
+    ):
+        spec = build_spec(rid, {})
+        res = _exercise(synthesize_st(spec), spec)
+        ever_on = {o for s in res.samples for o in [last] if s.outputs.get(o)}
+        assert last in ever_on, f"{rid}: 마지막 단계 {last} 가 자극으로 한 번도 안 켜짐"
+
+
+def test_huge_counter_pv_reports_honest_stimulus_too_large() -> None:
+    """카운터 PV 가 시뮬 상한을 넘기면 'determinism' 실패로 오기록하지 않는다.
+
+    구버그(R5): _exercise 가 MAX_SIM_SAMPLES 를 넘기는 ValueError 를 던지면
+    determinism 게이트 try/except 가 이를 'determinism-sim' 으로 둔갑시켜, 결정론과
+    무관한 실패가 결정론 실패처럼 보였다.
+    """
+    from app.dataset.bootstrap import _run_gates
+    from app.wizard import build_spec
+
+    spec = build_spec("count_eject", {"count": "100000"})
+    gates, _st, fp, reason = _run_gates(spec)
+    assert gates["non_vacuous"] is True       # 여기까지는 정상 통과
+    assert gates["determinism"] is False      # 그러나 자극이 너무 커서 중단
+    assert fp == ""
+    assert "stimulus_too_large" in reason, reason
+    assert "determinism" not in reason
+
+
+def test_corpus_deterministic_across_hash_seeds(tmp_path) -> None:
+    """PYTHONHASHSEED 변동에도 직렬화된 데이터셋이 바이트 동일해야 한다."""
+    import subprocess
+    import sys
+
+    script = (
+        "from app.dataset import generate, write_dataset;"
+        "import sys;"
+        "write_dataset(generate(), sys.argv[1])"
+    )
+    out_a = tmp_path / "a.json"
+    out_b = tmp_path / "b.json"
+    for out, seed in ((out_a, "0"), (out_b, "424242")):
+        env = {"PYTHONHASHSEED": seed, "PATH": __import__("os").environ["PATH"]}
+        subprocess.run(
+            [sys.executable, "-c", script, str(out)], check=True, env=env
+        )
+    assert out_a.read_bytes() == out_b.read_bytes()
