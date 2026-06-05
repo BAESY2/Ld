@@ -202,22 +202,24 @@ def check_interlocks_st(spec: StateMachineSpec, st_code: str) -> list[Verificati
     if not spec.interlocks or not _HAS_Z3:
         return []
     eqs = _coil_equations(st_code)
+    outputs = list(eqs.keys())
+    out_set = set(outputs)
+    cur = _frame(outputs, 0)
+    nxt = _frame(outputs, 1)
+    try:
+        # 순차 스캔 의미론으로 cur→nxt 전이를 만든다(시뮬레이터와 동일).
+        trans = _trans_at(eqs, outputs, out_set, cur, nxt, 0)
+    except ValueError:
+        return []  # 비불리언 토큰 등은 ST 검사 건너뜀(명세 검사로 충분)
     issues: list[VerificationIssue] = []
     for lock in spec.interlocks:
         a, b = lock.output_a, lock.output_b
         if a not in eqs or b not in eqs:
             continue
-        shared: dict[str, z3.BoolRef] = {}
-        try:
-            a_next = _to_z3(eqs[a], shared)
-            b_next = _to_z3(eqs[b], shared)
-        except ValueError:
-            continue  # 비불리언 토큰 등은 ST 검사 건너뜀(명세 검사로 충분)
-        a_cur = shared.setdefault(a, z3.Bool(a))
-        b_cur = shared.setdefault(b, z3.Bool(b))
         solver = z3.Solver()
-        solver.add(z3.Not(z3.And(a_cur, b_cur)))  # 귀납 가정: 현재 동시 ON 아님
-        solver.add(z3.And(a_next, b_next))  # 다음 스캔 동시 ON 가능?
+        solver.add(*trans)
+        solver.add(z3.Not(z3.And(cur[a], cur[b])))  # 귀납 가정: 현재 동시 ON 아님
+        solver.add(z3.And(nxt[a], nxt[b]))  # 다음 스캔 동시 ON 가능?
         if solver.check() == z3.sat:
             model = solver.model()
             ce = _model_str(model)
@@ -329,20 +331,26 @@ def _trans_at(
     nxt: dict[str, z3.BoolRef],
     step: int,
 ) -> list[z3.BoolRef]:
-    """한 스캔의 전이 제약: 모든 출력 o 에 대해 nxt[o] == f(inputs_step, cur)."""
-    inputs_at_step: dict[str, z3.BoolRef] = {}
+    """한 스캔의 전이 제약: 출력을 **ST 소스 순서**로 평가한다(시뮬레이터와 동일).
+
+    시뮬레이터는 코일을 위→아래 순차 평가하므로, 어떤 코일이 다른 출력을 참조하면
+    *먼저 대입된* 출력은 갱신값(nxt)을, *자기 자신·이후* 출력은 직전값(cur)을 읽는다.
+    (구버그: 모든 참조를 cur 로 본 동시-갱신 추상화 → 거짓 증명·거짓 양성 발생.)
+    """
     cons: list[z3.BoolRef] = []
-    for o in outputs:
-        # 입력 자유변수는 스텝마다 고유해야 한다(같은 입력이 매 스캔 바뀔 수 있음).
+    for i, o in enumerate(outputs):
+        # 이 코일이 보는 상태 프레임: 앞서 대입된 출력은 nxt, 자기·이후는 cur.
+        frame_o: dict[str, z3.BoolRef] = {
+            p: (nxt[p] if j < i else cur[p]) for j, p in enumerate(outputs)
+        }
         local_inputs: dict[str, z3.BoolRef] = {}
-        node = _instantiate(eqs[o], out_set, cur, local_inputs)
-        # 스텝 고유 입력으로 재명명(서로 다른 스텝 간 입력 공유 방지).
+        node = _instantiate(eqs[o], out_set, frame_o, local_inputs)
+        # 입력 자유변수는 스텝마다 고유해야 한다(같은 입력이 매 스캔 바뀔 수 있음).
         rename = {
             v: z3.Bool(f"{s}__i{step}") for s, v in local_inputs.items()
         }
         if rename:
             node = z3.substitute(node, *list(rename.items()))
-        inputs_at_step.update({s: z3.Bool(f"{s}__i{step}") for s in local_inputs})
         cons.append(nxt[o] == node)
     return cons
 
@@ -403,7 +411,9 @@ def _kinduction_pair(
         severity="warning",
         message=(
             f"인터락 k-귀납 미증명(k={k}): '{a}'/'{b}' 의 상호배제를 k={k} 로 "
-            f"증명하지 못했습니다(base 안전, k 상향 또는 보강 가설 필요). ({reason})"
+            f"증명하지 못했습니다. ⚠ 안전을 보장하지 않습니다 — k 를 높이거나 "
+            f"가상 PLC 시뮬레이션으로 반드시 확인하세요(초기 {k}스캔 내 위반은 없음). "
+            f"({reason})"
         ),
     )
 
