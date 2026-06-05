@@ -71,6 +71,11 @@
     <div class="step">④ 결과 <span id="verdict" class="verdict"></span></div>
     <div class="box"><h3>래더 다이어그램</h3><div id="ladder"></div></div>
     <div class="box"><h3>이렇게 동작합니다 (평문 설명)</h3><pre id="explain"></pre></div>
+    <div class="box">
+      <h3>가상 PLC 테스트 (디지털 트윈) <button id="simgo" style="font-size:12px;padding:3px 10px;margin-left:8px">▶ 가상 가동</button></h3>
+      <div id="simmsg" style="font-size:12px;color:var(--muted);margin-bottom:8px">버튼을 누르면 입력을 차례로 눌러보며 가상 PLC를 돌려 출력 변화를 보여줍니다.</div>
+      <div id="simgrid" style="overflow:auto"></div>
+    </div>
     <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
     <div class="safety" id="safety"></div>
     <div class="dlrow">
@@ -148,6 +153,45 @@ async function nlDesign() {
   } catch (e) { $("nlmsg").textContent = "오류: " + e.message; }
   finally { $("nlgo").disabled = false; }
 }
+// 가상 PLC 테스트 — 입력을 차례로 펄스/유지하며 스캔 가동, 타이밍 그리드 표시
+async function runSim() {
+  if (!lastST) return;
+  $("simgo").disabled = true; $("simmsg").textContent = "가상 가동 중…";
+  try {
+    // 1차: 입력 목록 파악
+    const probe = await (await fetch("/api/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ st_code: lastST, inputs_timeline: [], duration_ms: 100, step_ms: 100 }),
+    })).json();
+    const ins = probe.inputs || [];
+    // 입력을 250ms 간격으로 차례차례 ON(유지) → 로직 자극
+    const timeline = [];
+    ins.forEach((s, i) => { timeline.push([300 + i * 600, { [s]: true }]); });
+    const dur = Math.max(3000, 600 * ins.length + 2000);
+    const r = await (await fetch("/api/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ st_code: lastST, inputs_timeline: timeline, duration_ms: dur, step_ms: 200 }),
+    })).json();
+    renderSim(r);
+    $("simmsg").textContent = "입력(파랑)을 차례로 눌렀을 때 출력(초록)이 어떻게 변하는지 — 시간 →";
+  } catch (e) { $("simmsg").textContent = "오류: " + e.message; }
+  finally { $("simgo").disabled = false; }
+}
+
+function renderSim(r) {
+  if (!r.ok) { $("simgrid").textContent = r.error || "실패"; return; }
+  const cols = r.samples.length;
+  const cell = (on, blue) => `<td style="width:8px;height:16px;padding:0;background:${on ? (blue ? "#58a6ff" : "#3fb950") : "#161b22"};border:1px solid #0d1117"></td>`;
+  const row = (sym, blue) => `<tr><td style="padding:2px 8px;color:${blue ? "#58a6ff" : "#3fb950"};white-space:nowrap;font-size:12px">${sym}</td>` +
+    r.samples.map(s => cell((blue ? s.inputs : s.outputs)[sym], blue)).join("") + "</tr>";
+  const html = `<table style="border-collapse:collapse">` +
+    r.inputs.map(s => row(s, true)).join("") +
+    r.outputs.map(s => row(s, false)).join("") +
+    `</table>`;
+  $("simgrid").innerHTML = html;
+}
+$("simgo").onclick = runSim;
+
 $("nlgo").onclick = nlDesign;
 $("nl").addEventListener("keydown", (e) => { if (e.key === "Enter") nlDesign(); });
 
