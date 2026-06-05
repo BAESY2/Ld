@@ -52,6 +52,7 @@ class Sample:
     fingerprint: str        # 정규화 ST 의 해시(중복제거·결정론 앵커)
     trace_fingerprint: str  # 시뮬레이션 트레이스 해시
     gates: dict[str, bool]
+    energized: list[str]     # 자극으로 실제 켜진 출력(커버리지 — 누적 데이터 강화)
 
 
 @dataclass
@@ -228,13 +229,19 @@ def _max_preset_ms(spec: StateMachineSpec) -> int:
     return max((t.preset_ms for t in spec.timers), default=0)
 
 
+def _max_counter_preset(spec: StateMachineSpec) -> int:
+    """명세 내 최대 카운터 프리셋(PV). 엣지 펄스를 PV 만큼 줘야 카운터가 발화한다."""
+    return max((c.preset for c in spec.counters), default=0)
+
+
 def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str, bool]]], int]:
     """기계를 실제로 '구동'하는 결정론적 다단계 입력 자극과 그에 맞는 sim 길이를 만든다.
 
     문제: 모든 입력을 동시에 ON 으로 두면 STOP/REV/HI 같은 차단 입력까지 켜져
     대부분의 기계가 IDLE 에 갇혀 어떤 출력도 안 켜진다 → mutex/트레이스가 공허.
     해법: 각 입력을 한 번에 하나씩(+ 인접 쌍) 단계적으로 ON 하며, 각 단계가 타이머
-    프리셋을 넘기도록 충분히 길게 잡아 상태머신을 실제로 통과시킨다(결정론 유지).
+    프리셋을 넘기도록 충분히 길게 잡고, 마지막에 입력별 **엣지 펄스 열**을 추가해
+    카운터(CTU/CTD)와 엣지 구동 로직까지 실제로 발화시킨다(전부 결정론 유지).
     """
     inputs = _input_symbols(spec)
     # 각 단계는 타이머가 발화할 만큼 길어야 한다(+여유 1스캔).
@@ -250,7 +257,17 @@ def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str
     for k, ph in enumerate(phases):
         stim.append((k * phase_ms, {s: ph.get(s, False) for s in inputs}))
     total = len(phases) * phase_ms
-    return stim, total
+    # 엣지 펄스 열: 입력을 하나씩 ON→OFF 로 PV+여유 회 토글해 상승엣지를 만든다.
+    # (카운터는 상승엣지마다 +1 이므로 '유지 ON' 만으로는 1회만 세고 발화 못 함)
+    pulses = max(4, _max_counter_preset(spec) + 2)
+    t = total
+    for sym in inputs:
+        for _ in range(pulses):
+            stim.append((t, {s: (s == sym) for s in inputs}))
+            t += _SIM_STEP_MS
+            stim.append((t, {s: False for s in inputs}))
+            t += _SIM_STEP_MS
+    return stim, t
 
 
 def _exercise(st: str, spec: StateMachineSpec) -> SimResult:
@@ -368,6 +385,14 @@ def generate(recipe_ids: list[str] | None = None) -> BootstrapReport:
                 continue
             seen.add(fp)
             report.passed += 1
+            outs = [
+                p.symbol for p in spec.io_points
+                if p.direction == IODirection.OUTPUT
+            ]
+            res = _exercise(st, spec)
+            energized = sorted({
+                o for s in res.samples for o in outs if s.outputs.get(o)
+            })
             report.samples.append(Sample(
                 sample_id=f"{rid}#{fp}",
                 recipe_id=rid,
@@ -376,6 +401,7 @@ def generate(recipe_ids: list[str] | None = None) -> BootstrapReport:
                 fingerprint=fp,
                 trace_fingerprint=_hash(_trace_repr(st, spec)),
                 gates=gates,
+                energized=energized,
             ))
     return report
 

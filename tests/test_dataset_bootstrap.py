@@ -226,3 +226,22 @@ def test_generate_rejects_unknown_recipe_id_clearly() -> None:
 
     with pytest.raises(KeyError, match="알 수 없는 레시피"):
         generate(["motor_start_stop", "__does_not_exist__"])
+
+
+def test_edge_pulse_energizes_counter_recipe() -> None:
+    """엣지 펄스 자극으로 카운터 구동 출력(count_eject EJECT)이 실제로 켜진다.
+
+    구버그: 자극이 입력 '유지 ON' 뿐이라 상승엣지가 1회뿐 → 카운터가 PV 에 못 닿아
+    EJECT 가 한 번도 안 켜졌고 mutex/커버리지가 공허했다.
+    """
+    rep = generate(["count_eject"])
+    assert rep.samples
+    for s in rep.samples:
+        assert "EJECT" in s.energized, f"{s.answers}: EJECT 미발화"
+
+
+def test_every_sample_energizes_some_output() -> None:
+    """모든 누적 샘플은 자극으로 최소 1개 출력을 켠다(죽은/공허 샘플 없음)."""
+    rep = generate()
+    for s in rep.samples:
+        assert s.energized, f"{s.sample_id}: 어떤 출력도 안 켜짐(커버리지 0)"
