@@ -127,3 +127,30 @@ def test_nl_design_endpoint() -> None:
     assert d["design"]["ok"] is True
     assert d["design"]["ladder"]["rungs"]
     assert "하드와이어" in d["safety_notice"]
+
+
+def test_estop_lowers_confidence_and_warns() -> None:
+    """'비상정지' 표현은 자신만만 매칭을 막고 하드와이어 경고를 띄운다(P3 가드)."""
+    res = analyze("비상정지 누르면 모터 정지")
+    assert res.confident is False
+    assert "하드와이어" in res.extras.get("safety_warning", "")
+
+
+def test_normal_stop_has_no_safety_warning() -> None:
+    """일반 정지 표현은 안전경고를 띄우지 않는다(오탐 방지)."""
+    res = analyze("정지 버튼 누르면 모터 정지")
+    assert "safety_warning" not in res.extras
+
+
+def test_nl_design_surfaces_safety_warning() -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    r = c.post("/api/nl-design", json={"text": "emergency stop 시 정지"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["confident"] is False
+    assert "하드와이어" in d["safety_warning"]

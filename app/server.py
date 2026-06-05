@@ -320,6 +320,7 @@ class NLDesignResponse(BaseModel):
     confident: bool = False
     suggestion: str = ""
     design: WizardResponse | None = None
+    safety_warning: str = ""
     safety_notice: str = SAFETY_NOTICE
 
 
@@ -344,6 +345,7 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         ok=True, recipe=res.recipe_id, recipe_title=recipe_obj.title, ranked=ranked,
         filled_answers=res.answers, missing=res.missing, questions=res.questions,
         confident=res.confident, suggestion=suggestion, design=design,
+        safety_warning=res.extras.get("safety_warning", ""),
     )
 
 

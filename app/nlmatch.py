@@ -68,6 +68,23 @@ class NLResult:
 
 _SUB_W = 0.7  # 부분포함(파티클/활용형 흡수) 가중 — 정확매치(BM25)보다 낮게
 
+# 안전필수(비상정지 등) 표현: 소프트 정지로 절대 대체 불가 → 신뢰도 강등 + 경고.
+_SAFETY_TERMS = (
+    "비상정지", "비상 정지", "비상스위치", "비상 스위치", "이머전시", "이머젼시",
+    "긴급정지", "긴급 정지", "안전문", "라이트커튼", "안전커튼", "안전스캐너",
+    "e-stop", "estop", "emergency", "safety relay", "안전릴레이",
+)
+_SAFETY_WARNING = (
+    "⚠ '비상정지'·안전기능은 PLC 소프트 로직으로 구현하면 안 됩니다. "
+    "반드시 안전릴레이/안전PLC 등 하드와이어 회로로 구성하세요. "
+    "아래 생성물은 일반(소프트) 정지일 뿐 안전기능이 아닙니다."
+)
+
+
+def _has_safety_term(text: str) -> bool:
+    low = text.lower()
+    return any(term in low for term in _SAFETY_TERMS)
+
 
 def _recipe_doc_tokens(recipe: Recipe) -> list[str]:
     toks = _tokenize(f"{recipe.title} {recipe.description} {recipe.category}")
@@ -163,7 +180,13 @@ def analyze(text: str, allow_llm: bool = True) -> NLResult:
     kinds = {f.key: f.kind for f in recipe.fields}
     value_missing = [k for k in miss if kinds.get(k) in ("time_sec", "int")]
     qs = clarifying_questions(value_missing, recipe)
+    extras: dict[str, str] = {}
+    # 안전필수 표현이 보이면 자신만만한 매칭을 막고 하드와이어 경고를 띄운다.
+    if _has_safety_term(text):
+        confident = False
+        extras["safety_warning"] = _SAFETY_WARNING
     return NLResult(
         recipe_id=recipe.id, scores=scores, answers=answers,
         missing=miss, questions=qs, confident=confident, used_llm=False,
+        extras=extras,
     )
