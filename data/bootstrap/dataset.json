@@ -1,0 +1,918 @@
+{
+  "summary": {
+    "total_candidates": 38,
+    "passed": 38,
+    "rejected": 0,
+    "unique": 38,
+    "recipes": [
+      "auto_manual",
+      "batch_fill_mix_drain",
+      "car_wash",
+      "count_eject",
+      "duty_standby",
+      "first_out_alarm",
+      "fwd_rev",
+      "hi_lo_level",
+      "jog_run",
+      "latch_alarm",
+      "motor_start_stop",
+      "on_delay",
+      "star_delta",
+      "timed_traffic",
+      "two_hand_safety"
+    ]
+  },
+  "samples": [
+    {
+      "sample_id": "motor_start_stop#b245affb059f6361",
+      "recipe_id": "motor_start_stop",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "motor": "MOTOR"
+      },
+      "st": "MOTOR := ((START AND NOT STOP) OR MOTOR) AND NOT ((STOP));",
+      "fingerprint": "b245affb059f6361",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "fwd_rev#8d0a95da6ee507c8",
+      "recipe_id": "fwd_rev",
+      "answers": {
+        "fwd": "FWD_PB",
+        "rev": "REV_PB",
+        "stop": "STOP",
+        "motor_fwd": "MOTOR_FWD",
+        "motor_rev": "MOTOR_REV"
+      },
+      "st": "MOTOR_FWD := ((FWD_PB AND NOT REV_PB AND NOT STOP) OR MOTOR_FWD) AND NOT ((STOP OR REV_PB)) AND NOT MOTOR_REV;\nMOTOR_REV := ((REV_PB AND NOT FWD_PB AND NOT STOP) OR MOTOR_REV) AND NOT ((STOP OR FWD_PB)) AND NOT MOTOR_FWD;",
+      "fingerprint": "8d0a95da6ee507c8",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "on_delay#9107193d6dae21e3",
+      "recipe_id": "on_delay",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "output": "OUTPUT",
+        "delay_sec": "5"
+      },
+      "st": "// 타이머 T1 (TON, 5000ms)\nT1(IN := START, PT := T#5s);\n\nOUTPUT := ((T1.Q AND NOT STOP) OR OUTPUT) AND NOT ((STOP));",
+      "fingerprint": "9107193d6dae21e3",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "on_delay#638b48a6f8d61a5d",
+      "recipe_id": "on_delay",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "output": "OUTPUT",
+        "delay_sec": "1"
+      },
+      "st": "// 타이머 T1 (TON, 1000ms)\nT1(IN := START, PT := T#1s);\n\nOUTPUT := ((T1.Q AND NOT STOP) OR OUTPUT) AND NOT ((STOP));",
+      "fingerprint": "638b48a6f8d61a5d",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "on_delay#52cc1be0f6bb725b",
+      "recipe_id": "on_delay",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "output": "OUTPUT",
+        "delay_sec": "2"
+      },
+      "st": "// 타이머 T1 (TON, 2000ms)\nT1(IN := START, PT := T#2s);\n\nOUTPUT := ((T1.Q AND NOT STOP) OR OUTPUT) AND NOT ((STOP));",
+      "fingerprint": "52cc1be0f6bb725b",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "hi_lo_level#bb33004483c1d01b",
+      "recipe_id": "hi_lo_level",
+      "answers": {
+        "lo": "LO_LS",
+        "hi": "HI_LS",
+        "pump": "PUMP"
+      },
+      "st": "PUMP := ((LO_LS AND NOT HI_LS) OR PUMP) AND NOT ((HI_LS));",
+      "fingerprint": "bb33004483c1d01b",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "count_eject#f4a2a5e08241f8c3",
+      "recipe_id": "count_eject",
+      "answers": {
+        "sensor": "PART_SENSOR",
+        "reset": "RESET_PB",
+        "eject": "EJECT",
+        "count": "10"
+      },
+      "st": "// 카운터 C1 (CTU, PV=10)\nC1(CU := PART_SENSOR, RESET := RESET_PB, PV := 10);\n\nEJECT := ((C1.Q AND NOT RESET_PB) OR EJECT) AND NOT ((RESET_PB));",
+      "fingerprint": "f4a2a5e08241f8c3",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "count_eject#6ecc42e9380a649d",
+      "recipe_id": "count_eject",
+      "answers": {
+        "sensor": "PART_SENSOR",
+        "reset": "RESET_PB",
+        "eject": "EJECT",
+        "count": "1"
+      },
+      "st": "// 카운터 C1 (CTU, PV=1)\nC1(CU := PART_SENSOR, RESET := RESET_PB, PV := 1);\n\nEJECT := ((C1.Q AND NOT RESET_PB) OR EJECT) AND NOT ((RESET_PB));",
+      "fingerprint": "6ecc42e9380a649d",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "count_eject#e1e51e74b9177823",
+      "recipe_id": "count_eject",
+      "answers": {
+        "sensor": "PART_SENSOR",
+        "reset": "RESET_PB",
+        "eject": "EJECT",
+        "count": "2"
+      },
+      "st": "// 카운터 C1 (CTU, PV=2)\nC1(CU := PART_SENSOR, RESET := RESET_PB, PV := 2);\n\nEJECT := ((C1.Q AND NOT RESET_PB) OR EJECT) AND NOT ((RESET_PB));",
+      "fingerprint": "e1e51e74b9177823",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "auto_manual#190137cc04f0230e",
+      "recipe_id": "auto_manual",
+      "answers": {
+        "mode": "MODE_AUTO",
+        "auto_cmd": "AUTO_CMD",
+        "man_cmd": "MAN_CMD",
+        "stop": "SYS_STOP",
+        "valve": "VALVE"
+      },
+      "st": "VALVE := ((MODE_AUTO AND AUTO_CMD) OR (NOT MODE_AUTO AND MAN_CMD)) AND NOT SYS_STOP;",
+      "fingerprint": "190137cc04f0230e",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "jog_run#265a41dca8ee07b8",
+      "recipe_id": "jog_run",
+      "answers": {
+        "start": "START_PB",
+        "stop": "STOP_PB",
+        "jog": "JOG_PB",
+        "motor_run": "MOTOR_RUN",
+        "motor_jog": "MOTOR_JOG"
+      },
+      "st": "MOTOR_RUN := ((START_PB AND NOT JOG_PB AND NOT STOP_PB) OR MOTOR_RUN) AND NOT ((STOP_PB)) AND NOT MOTOR_JOG;\nMOTOR_JOG := ((JOG_PB AND NOT START_PB) OR MOTOR_JOG) AND NOT ((NOT JOG_PB)) AND NOT MOTOR_RUN;",
+      "fingerprint": "265a41dca8ee07b8",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "star_delta#e524ab9d7db35fa7",
+      "recipe_id": "star_delta",
+      "answers": {
+        "start": "START_PB",
+        "stop": "STOP_PB",
+        "main": "MAIN_CON",
+        "star": "STAR_CON",
+        "delta": "DELTA_CON",
+        "delay_sec": "5"
+      },
+      "st": "// 타이머 T1 (TON, 5000ms)\nT1(IN := STAR_CON, PT := T#5s);\n\nMAIN_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR (T1.Q AND NOT STOP_PB AND MAIN_CON) OR MAIN_CON) AND NOT ((STOP_PB) OR (STOP_PB));\nSTAR_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR STAR_CON) AND NOT ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR (STOP_PB)) AND NOT DELTA_CON;\nDELTA_CON := ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR DELTA_CON) AND NOT ((STOP_PB)) AND NOT STAR_CON;",
+      "fingerprint": "e524ab9d7db35fa7",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "star_delta#e9cb5eb160d532b4",
+      "recipe_id": "star_delta",
+      "answers": {
+        "start": "START_PB",
+        "stop": "STOP_PB",
+        "main": "MAIN_CON",
+        "star": "STAR_CON",
+        "delta": "DELTA_CON",
+        "delay_sec": "1"
+      },
+      "st": "// 타이머 T1 (TON, 1000ms)\nT1(IN := STAR_CON, PT := T#1s);\n\nMAIN_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR (T1.Q AND NOT STOP_PB AND MAIN_CON) OR MAIN_CON) AND NOT ((STOP_PB) OR (STOP_PB));\nSTAR_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR STAR_CON) AND NOT ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR (STOP_PB)) AND NOT DELTA_CON;\nDELTA_CON := ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR DELTA_CON) AND NOT ((STOP_PB)) AND NOT STAR_CON;",
+      "fingerprint": "e9cb5eb160d532b4",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "star_delta#7a921acd444ab3fc",
+      "recipe_id": "star_delta",
+      "answers": {
+        "start": "START_PB",
+        "stop": "STOP_PB",
+        "main": "MAIN_CON",
+        "star": "STAR_CON",
+        "delta": "DELTA_CON",
+        "delay_sec": "2"
+      },
+      "st": "// 타이머 T1 (TON, 2000ms)\nT1(IN := STAR_CON, PT := T#2s);\n\nMAIN_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR (T1.Q AND NOT STOP_PB AND MAIN_CON) OR MAIN_CON) AND NOT ((STOP_PB) OR (STOP_PB));\nSTAR_CON := (((START_PB OR MAIN_CON) AND NOT STOP_PB AND NOT T1.Q) OR STAR_CON) AND NOT ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR (STOP_PB)) AND NOT DELTA_CON;\nDELTA_CON := ((T1.Q AND NOT STOP_PB AND MAIN_CON) OR DELTA_CON) AND NOT ((STOP_PB)) AND NOT STAR_CON;",
+      "fingerprint": "7a921acd444ab3fc",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "latch_alarm#cdf4de80cea6d3e5",
+      "recipe_id": "latch_alarm",
+      "answers": {
+        "fault_a": "FAULT_A",
+        "fault_b": "FAULT_B",
+        "fault_c": "FAULT_C",
+        "reset": "ALARM_RST",
+        "alarm": "ALARM"
+      },
+      "st": "ALARM := ((FAULT_A OR FAULT_B OR FAULT_C) OR ALARM) AND NOT ((ALARM_RST AND NOT FAULT_A AND NOT FAULT_B AND NOT FAULT_C));",
+      "fingerprint": "cdf4de80cea6d3e5",
+      "trace_fingerprint": "231b0a262610bb76",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "first_out_alarm#874cb681bfda3e0d",
+      "recipe_id": "first_out_alarm",
+      "answers": {
+        "fault_a": "FAULT_A",
+        "fault_b": "FAULT_B",
+        "ack": "ALM_ACK",
+        "reset": "ALM_RST",
+        "latch_a": "LATCH_A",
+        "latch_b": "LATCH_B",
+        "horn": "HORN"
+      },
+      "st": "LATCH_A := ((FAULT_A AND NOT LATCH_B) OR LATCH_A) AND NOT ((ALM_RST AND NOT FAULT_A));\nLATCH_B := ((FAULT_B AND NOT LATCH_A) OR LATCH_B) AND NOT ((ALM_RST AND NOT FAULT_B));\nHORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK;",
+      "fingerprint": "874cb681bfda3e0d",
+      "trace_fingerprint": "7ee941ac9a6b8d1c",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "duty_standby#d7faceb68061a553",
+      "recipe_id": "duty_standby",
+      "answers": {
+        "demand": "DEMAND",
+        "high_demand": "HIGH_DEMAND",
+        "stop": "SYS_STOP",
+        "lead": "PUMP_LEAD",
+        "lag": "PUMP_LAG"
+      },
+      "st": "PUMP_LEAD := ((DEMAND AND NOT SYS_STOP) OR (NOT HIGH_DEMAND) OR PUMP_LEAD) AND NOT ((SYS_STOP) OR (HIGH_DEMAND AND NOT SYS_STOP));\nPUMP_LAG := ((HIGH_DEMAND AND NOT SYS_STOP) OR PUMP_LAG) AND NOT ((NOT HIGH_DEMAND));",
+      "fingerprint": "d7faceb68061a553",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "two_hand_safety#4bc69b83bc14ea2b",
+      "recipe_id": "two_hand_safety",
+      "answers": {
+        "lh": "LH_BTN",
+        "rh": "RH_BTN",
+        "guard": "GUARD_CLOSED",
+        "estop_ok": "ESTOP_OK",
+        "enable": "PRESS_ENABLE"
+      },
+      "st": "PRESS_ENABLE := ((LH_BTN AND RH_BTN AND GUARD_CLOSED AND ESTOP_OK) OR PRESS_ENABLE) AND NOT ((NOT LH_BTN OR NOT RH_BTN OR NOT GUARD_CLOSED OR NOT ESTOP_OK));",
+      "fingerprint": "4bc69b83bc14ea2b",
+      "trace_fingerprint": "4d38932cb12a3bac",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#1150c2ec9e386c2d",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "5",
+        "out2": "RINSE",
+        "t2": "5",
+        "out3": "DRY",
+        "t3": "5"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := SOAP, PT := T#5s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := RINSE, PT := T#5s);\n// 타이머 T2 (TON, 5000ms)\nT2(IN := DRY, PT := T#5s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "1150c2ec9e386c2d",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#9f93e79d05e96d78",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "1",
+        "out2": "RINSE",
+        "t2": "5",
+        "out3": "DRY",
+        "t3": "5"
+      },
+      "st": "// 타이머 T0 (TON, 1000ms)\nT0(IN := SOAP, PT := T#1s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := RINSE, PT := T#5s);\n// 타이머 T2 (TON, 5000ms)\nT2(IN := DRY, PT := T#5s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "9f93e79d05e96d78",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#526a23c0f9d54396",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "2",
+        "out2": "RINSE",
+        "t2": "5",
+        "out3": "DRY",
+        "t3": "5"
+      },
+      "st": "// 타이머 T0 (TON, 2000ms)\nT0(IN := SOAP, PT := T#2s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := RINSE, PT := T#5s);\n// 타이머 T2 (TON, 5000ms)\nT2(IN := DRY, PT := T#5s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "526a23c0f9d54396",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#f56bead104e9d46a",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "5",
+        "out2": "RINSE",
+        "t2": "1",
+        "out3": "DRY",
+        "t3": "5"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := SOAP, PT := T#5s);\n// 타이머 T1 (TON, 1000ms)\nT1(IN := RINSE, PT := T#1s);\n// 타이머 T2 (TON, 5000ms)\nT2(IN := DRY, PT := T#5s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "f56bead104e9d46a",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#5fdb06327bb3137f",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "5",
+        "out2": "RINSE",
+        "t2": "2",
+        "out3": "DRY",
+        "t3": "5"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := SOAP, PT := T#5s);\n// 타이머 T1 (TON, 2000ms)\nT1(IN := RINSE, PT := T#2s);\n// 타이머 T2 (TON, 5000ms)\nT2(IN := DRY, PT := T#5s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "5fdb06327bb3137f",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#3fd82bed3d3f3cad",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "5",
+        "out2": "RINSE",
+        "t2": "5",
+        "out3": "DRY",
+        "t3": "1"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := SOAP, PT := T#5s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := RINSE, PT := T#5s);\n// 타이머 T2 (TON, 1000ms)\nT2(IN := DRY, PT := T#1s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "3fd82bed3d3f3cad",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "car_wash#6cd79c15a3ef3056",
+      "recipe_id": "car_wash",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "out1": "SOAP",
+        "t1": "5",
+        "out2": "RINSE",
+        "t2": "5",
+        "out3": "DRY",
+        "t3": "2"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := SOAP, PT := T#5s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := RINSE, PT := T#5s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := DRY, PT := T#2s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "6cd79c15a3ef3056",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#54da6f6636c0caba",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "5",
+        "green": "LIGHT_GREEN",
+        "t_green": "4",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "2"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := LIGHT_RED, PT := T#5s);\n// 타이머 T1 (TON, 4000ms)\nT1(IN := LIGHT_GREEN, PT := T#4s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := LIGHT_YELLOW, PT := T#2s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "54da6f6636c0caba",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#004ca799c1304931",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "1",
+        "green": "LIGHT_GREEN",
+        "t_green": "4",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "2"
+      },
+      "st": "// 타이머 T0 (TON, 1000ms)\nT0(IN := LIGHT_RED, PT := T#1s);\n// 타이머 T1 (TON, 4000ms)\nT1(IN := LIGHT_GREEN, PT := T#4s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := LIGHT_YELLOW, PT := T#2s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "004ca799c1304931",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#b836d2b66360bae3",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "2",
+        "green": "LIGHT_GREEN",
+        "t_green": "4",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "2"
+      },
+      "st": "// 타이머 T0 (TON, 2000ms)\nT0(IN := LIGHT_RED, PT := T#2s);\n// 타이머 T1 (TON, 4000ms)\nT1(IN := LIGHT_GREEN, PT := T#4s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := LIGHT_YELLOW, PT := T#2s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "b836d2b66360bae3",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#8d81dfa674d34c50",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "5",
+        "green": "LIGHT_GREEN",
+        "t_green": "1",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "2"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := LIGHT_RED, PT := T#5s);\n// 타이머 T1 (TON, 1000ms)\nT1(IN := LIGHT_GREEN, PT := T#1s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := LIGHT_YELLOW, PT := T#2s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "8d81dfa674d34c50",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#8c5499dceaabce3b",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "5",
+        "green": "LIGHT_GREEN",
+        "t_green": "2",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "2"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := LIGHT_RED, PT := T#5s);\n// 타이머 T1 (TON, 2000ms)\nT1(IN := LIGHT_GREEN, PT := T#2s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := LIGHT_YELLOW, PT := T#2s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "8c5499dceaabce3b",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "timed_traffic#54eef420ef292afa",
+      "recipe_id": "timed_traffic",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "red": "LIGHT_RED",
+        "t_red": "5",
+        "green": "LIGHT_GREEN",
+        "t_green": "4",
+        "yellow": "LIGHT_YELLOW",
+        "t_yellow": "1"
+      },
+      "st": "// 타이머 T0 (TON, 5000ms)\nT0(IN := LIGHT_RED, PT := T#5s);\n// 타이머 T1 (TON, 4000ms)\nT1(IN := LIGHT_GREEN, PT := T#4s);\n// 타이머 T2 (TON, 1000ms)\nT2(IN := LIGHT_YELLOW, PT := T#1s);\n\nLIGHT_RED := ((START AND NOT STOP AND NOT LIGHT_RED AND NOT LIGHT_GREEN AND NOT LIGHT_YELLOW) OR (T2.Q AND NOT STOP) OR LIGHT_RED) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nLIGHT_GREEN := ((T0.Q AND NOT STOP) OR LIGHT_GREEN) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nLIGHT_YELLOW := ((T1.Q AND NOT STOP) OR LIGHT_YELLOW) AND NOT ((STOP) OR (T2.Q AND NOT STOP));",
+      "fingerprint": "54eef420ef292afa",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#f6cb4b9e0814f2ca",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "8",
+        "mixer": "MIXER",
+        "t_mix": "10",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "6"
+      },
+      "st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "f6cb4b9e0814f2ca",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#32946b77d8d43943",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "1",
+        "mixer": "MIXER",
+        "t_mix": "10",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "6"
+      },
+      "st": "// 타이머 T0 (TON, 1000ms)\nT0(IN := FILL_VALVE, PT := T#1s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "32946b77d8d43943",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#0273a0cf5036fddb",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "2",
+        "mixer": "MIXER",
+        "t_mix": "10",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "6"
+      },
+      "st": "// 타이머 T0 (TON, 2000ms)\nT0(IN := FILL_VALVE, PT := T#2s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "0273a0cf5036fddb",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#cd839e429e804094",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "8",
+        "mixer": "MIXER",
+        "t_mix": "1",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "6"
+      },
+      "st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 1000ms)\nT1(IN := MIXER, PT := T#1s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "cd839e429e804094",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#2d7ae0868f8abbb0",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "8",
+        "mixer": "MIXER",
+        "t_mix": "2",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "6"
+      },
+      "st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 2000ms)\nT1(IN := MIXER, PT := T#2s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "2d7ae0868f8abbb0",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#874ba1d14b2b7ca6",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "8",
+        "mixer": "MIXER",
+        "t_mix": "10",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "1"
+      },
+      "st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 1000ms)\nT2(IN := DRAIN_VALVE, PT := T#1s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "874ba1d14b2b7ca6",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    },
+    {
+      "sample_id": "batch_fill_mix_drain#29b1ebd3dbc42195",
+      "recipe_id": "batch_fill_mix_drain",
+      "answers": {
+        "start": "START",
+        "stop": "STOP",
+        "fill": "FILL_VALVE",
+        "t_fill": "8",
+        "mixer": "MIXER",
+        "t_mix": "10",
+        "drain": "DRAIN_VALVE",
+        "t_drain": "2"
+      },
+      "st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := DRAIN_VALVE, PT := T#2s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));",
+      "fingerprint": "29b1ebd3dbc42195",
+      "trace_fingerprint": "180c77ad01432456",
+      "gates": {
+        "synth": true,
+        "no_double_coil": true,
+        "verified": true,
+        "non_vacuous": true,
+        "determinism": true,
+        "mutex": true
+      }
+    }
+  ]
+}
