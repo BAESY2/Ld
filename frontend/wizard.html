@@ -38,6 +38,16 @@
   .safety { color:var(--amber); font-size:12px; border:1px solid var(--amber); border-radius:8px; padding:8px 10px; margin-top:12px; }
   .dlrow { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .dlrow button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:7px 12px; cursor:pointer; }
+  .catgroup { margin-top:6px; }
+  .cathdr { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin:14px 0 8px; text-transform:uppercase; letter-spacing:.04em; }
+  .cathdr .badge { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1px 8px; font-size:11px; color:var(--accent); }
+  .badge-ok { background:#10311c; color:var(--ok); border-radius:12px; padding:2px 10px; font-size:12px; font-weight:700; }
+  .badge-fail { background:#3a1416; color:var(--err); border-radius:12px; padding:2px 10px; font-size:12px; font-weight:700; }
+  .cmdrow { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; align-items:center; }
+  .cmdrow button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:12px; }
+  .pill-allow { color:var(--ok); font-weight:700; }
+  .pill-deny { color:var(--err); font-weight:700; }
+  .muted { color:var(--muted); font-size:12px; }
 </style>
 </head>
 <body>
@@ -61,8 +71,8 @@
     border:1px solid var(--amber);border-radius:8px;background:rgba(245,158,11,.08);
     color:var(--amber);font-size:13px;font-weight:600"></div>
 
-  <div class="step">② 무엇을 만들까요?</div>
-  <div class="cards" id="cards"></div>
+  <div class="step">② 무엇을 만들까요? <span class="muted">(카테고리별 21개 템플릿)</span></div>
+  <div id="cards"></div>
 
   <div id="form" style="display:none">
     <div class="step">③ 신호 이름·값을 정하세요 (그대로 둬도 동작합니다)</div>
@@ -79,6 +89,19 @@
       <div id="simmsg" style="font-size:12px;color:var(--muted);margin-bottom:8px">버튼을 누르면 입력을 차례로 눌러보며 가상 PLC를 돌려 출력 변화를 보여줍니다.</div>
       <div id="simgrid" style="overflow:auto"></div>
     </div>
+    <div class="box">
+      <h3>XGK 니모닉 + 자체검증
+        <button id="xgkgo" style="font-size:12px;padding:3px 10px;margin-left:8px">▶ 자체검증</button>
+        <span id="xgkbadge" style="margin-left:8px"></span>
+      </h3>
+      <div id="xgkmsg" class="muted" style="margin-bottom:8px">검증된 ST 를 LS XGK 니모닉으로 내보내고, 같은 입력 타임라인으로 둘을 함께 돌려 <b>출력이 샘플 단위로 일치(✓)</b>하는지 증명합니다.</div>
+      <pre id="xgktext"></pre>
+    </div>
+    <div class="box">
+      <h3>안전커널 미리보기 <span class="muted">(하드웨어 없이 deny-by-default 게이팅 시연)</span></h3>
+      <div id="safetymsg" class="muted" style="margin-bottom:8px">아래 예시 명령을 안전커널이 통과/차단하는지 보여줍니다 — 실기로 나가기 전 검증 게이트입니다.</div>
+      <div id="safetycmds"></div>
+    </div>
     <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
     <div class="safety" id="safety"></div>
     <div class="dlrow">
@@ -92,13 +115,23 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let recipes = [], current = null, lastST = "", lastProject = null;
+let lastRecipe = null, lastAnswers = {};
+
+function cardHtml(r) {
+  return `<div class="card" data-id="${r.id}"><div class="cat">${r.category}</div>
+     <h3>${r.title}</h3><p>${r.description}</p>
+     ${r.safety_note ? `<p style="color:var(--amber);margin-top:6px">⚠️ ${r.safety_note}</p>` : ""}</div>`;
+}
 
 async function load() {
-  recipes = await (await fetch("/api/recipes")).json();
-  $("cards").innerHTML = recipes.map(r =>
-    `<div class="card" data-id="${r.id}"><div class="cat">${r.category}</div>
-     <h3>${r.title}</h3><p>${r.description}</p>
-     ${r.safety_note ? `<p style="color:var(--amber);margin-top:6px">⚠️ ${r.safety_note}</p>` : ""}</div>`).join("");
+  // 카테고리(뿌리산업/안전/순차/모션 …) 그룹으로 21개를 탐색할 수 있게 표시
+  const grouped = await (await fetch("/api/recipes/grouped")).json();
+  recipes = grouped.recipes;
+  $("cards").innerHTML = grouped.groups.map(g =>
+    `<div class="catgroup">
+       <div class="cathdr">${g.category} <span class="badge">${g.count}</span></div>
+       <div class="cards">${g.recipes.map(cardHtml).join("")}</div>
+     </div>`).join("");
   document.querySelectorAll(".card").forEach(c => c.onclick = () => selectRecipe(c.dataset.id));
 }
 
@@ -129,9 +162,80 @@ function renderDesign(d) {
   v.className = "verdict " + (d.ok ? "ok" : "fail");
   v.textContent = d.ok ? "로직 검사 통과 (안전인증 아님)" : "로직 경고 있음";
   $("safety").textContent = (d.safety_note ? "⚠️ " + d.safety_note + "\n\n" : "") + "⚠️ " + d.safety_notice;
+  // 새 패널 초기화 — 이번 설계의 레시피/답변을 기억해 자체검증·안전미리보기에 쓴다.
+  lastRecipe = current ? current.id : null;
+  lastAnswers = answers();
+  $("xgkbadge").innerHTML = "";
+  $("xgktext").textContent = "";
+  $("safetycmds").innerHTML = "";
   $("result").style.display = "block";
   $("dlmsg").textContent = "";
   $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (lastRecipe) { runVerifyXgk(); buildSafetyPreview(); }
+}
+
+// XGK 자체검증 — 에미트된 LS_XGK 가 검증된 ST 와 샘플 단위로 일치(✓)함을 증명
+async function runVerifyXgk() {
+  $("xgkgo").disabled = true; $("xgkbadge").innerHTML = ""; $("xgkmsg").textContent = "에미트 후 ST 와 대조 중…";
+  try {
+    const body = lastRecipe
+      ? { recipe: lastRecipe, answers: lastAnswers }
+      : { st_code: lastST };
+    const r = await (await fetch("/api/verify-xgk", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })).json();
+    if (!r.ok) { $("xgkmsg").textContent = "오류: " + (r.error || "실패"); return; }
+    $("xgkbadge").innerHTML = r.agree
+      ? `<span class="badge-ok">✓ 일치 (에미트 == 검증된 ST)</span>`
+      : `<span class="badge-fail">✗ ${r.mismatches.length}개 불일치</span>`;
+    $("xgktext").textContent = r.xgk_text || "(니모닉 없음)";
+    $("xgkmsg").textContent = r.agree
+      ? "이 LS XGK 니모닉은 검증된 ST 와 동일하게 동작합니다(출력 트레이스 샘플 단위 일치)."
+      : ("불일치 출력: " + r.mismatches.map(m => m.output).join(", "));
+  } catch (e) { $("xgkmsg").textContent = "오류: " + e.message; }
+  finally { $("xgkgo").disabled = false; }
+}
+$("xgkgo").onclick = runVerifyXgk;
+
+// 안전커널 미리보기 — 예시 명령 몇 개를 통과/차단으로 시연(하드웨어 불요)
+async function previewCmd(cmd, label, el) {
+  el.textContent = "검사 중…";
+  try {
+    const r = await (await fetch("/api/safety-preview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipe: lastRecipe, answers: lastAnswers, command: cmd }),
+    })).json();
+    if (!r.ok) { el.innerHTML = `<span class="pill-deny">오류</span> ${r.error || ""}`; return; }
+    el.innerHTML = r.allowed
+      ? `<span class="pill-allow">✓ 허용</span> <span class="muted">${r.reason}</span>`
+      : `<span class="pill-deny">⛔ 차단</span> <span class="muted">${r.reason}</span>`;
+  } catch (e) { el.innerHTML = `<span class="pill-deny">오류</span> ${e.message}`; }
+}
+
+async function buildSafetyPreview() {
+  $("safetycmds").innerHTML = "<span class='muted'>입력 심볼 확인 중…</span>";
+  // 명세의 입력 심볼을 안전커널에서 받아온다(빈 명령은 항상 통과 → 심볼 조회용).
+  const probe = await (await fetch("/api/safety-preview", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipe: lastRecipe, answers: lastAnswers, command: {} }),
+  })).json();
+  if (!probe.ok) { $("safetycmds").textContent = probe.error || "실패"; return; }
+  const ins = probe.input_symbols || [];
+  // 예시 ①: 명세의 첫 입력을 켜는 안전 명령(통과 기대)
+  // 예시 ②: 명세에 없는 심볼을 켜는 명령(deny-by-default 차단 기대)
+  const examples = [];
+  if (ins[0]) examples.push({ label: `${ins[0]} 켜기 (정상 입력)`, cmd: { [ins[0]]: true } });
+  examples.push({ label: "GHOST_CMD 켜기 (명세 밖 심볼)", cmd: { GHOST_CMD: true } });
+  $("safetycmds").innerHTML = examples.map((ex, i) =>
+    `<div class="cmdrow">
+       <button data-i="${i}">${ex.label} ▶</button>
+       <span id="sp-${i}" class="muted">대기</span>
+     </div>`).join("");
+  document.querySelectorAll("#safetycmds button").forEach(b => {
+    const i = +b.dataset.i;
+    b.onclick = () => previewCmd(examples[i].cmd, examples[i].label, $("sp-" + i));
+  });
 }
 
 async function nlDesign() {

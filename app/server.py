@@ -34,6 +34,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from app import __version__
+from app.comms.protocols import WriteRejected
+from app.comms.safety_kernel import SafetyKernel
 from app.config import settings
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
@@ -42,15 +44,23 @@ from app.explain import explain_all
 from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
-from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
+from app.models import (
+    IODirection,
+    LadderProgram,
+    StateMachineSpec,
+    VerificationIssue,
+    VerificationReport,
+)
 from app.nlmatch import analyze as nl_analyze
 from app.safety import SAFETY_NOTICE, safety_payload
 from app.simulator import MAX_SIM_SAMPLES, simulate
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
+from app.vendors import LS_XGK
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import check_double_coils, verify
 from app.wizard import RECIPES, WizardError, build_spec, list_recipes
+from app.xgk import simulate_xgk
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger("plc.server")
@@ -298,10 +308,38 @@ def read_generated(project: str, path: str) -> PlainTextResponse:
     return PlainTextResponse(target.read_text(encoding="utf-8"))
 
 
+# 카테고리 표시 순서/그룹 라벨 — 21개 레시피를 UI 에서 의미 그룹으로 묶는다.
+# (뿌리산업/안전/순차/모션 등). 미지정 카테고리는 뒤에 사전순으로 붙는다.
+_CATEGORY_ORDER: tuple[str, ...] = (
+    "기본", "타이머", "카운터", "공정", "모드",
+    "순차", "뿌리산업", "안전", "모션", "알람",
+)
+
+
 @app.get("/api/recipes")
 def recipes() -> list[dict[str, object]]:
-    """가이드 마법사 레시피 목록(비전문가용 템플릿)."""
+    """가이드 마법사 레시피 목록(비전문가용 템플릿, 21개·평면 목록)."""
     return list_recipes()
+
+
+@app.get("/api/recipes/grouped")
+def recipes_grouped() -> dict[str, object]:
+    """레시피를 카테고리(뿌리산업/안전/순차/모션 …)별로 묶어 반환한다.
+
+    UI 가 그룹 헤더로 21개를 탐색할 수 있게 한다. 평면 ``recipes`` 도 함께 실어
+    기존 클라이언트 호환을 유지한다(결정론·키 불필요).
+    """
+    flat = list_recipes()
+    by_cat: dict[str, list[dict[str, object]]] = {}
+    for r in flat:
+        by_cat.setdefault(str(r["category"]), []).append(r)
+    ordered_cats = [c for c in _CATEGORY_ORDER if c in by_cat]
+    ordered_cats += sorted(c for c in by_cat if c not in _CATEGORY_ORDER)
+    groups = [
+        {"category": c, "recipes": by_cat[c], "count": len(by_cat[c])}
+        for c in ordered_cats
+    ]
+    return {"total": len(flat), "groups": groups, "recipes": flat}
 
 
 class NLDesignRequest(BaseModel):
@@ -446,6 +484,195 @@ def simulate_endpoint(req: SimulateRequest) -> SimulateResponse:
         ok=True, inputs=res.inputs, outputs=res.outputs,
         samples=[{"t_ms": s.t_ms, "inputs": s.inputs, "outputs": s.outputs}
                  for s in res.samples],
+    )
+
+
+# ---------------------------------------------------------------------------
+# XGK 자체검증 — 에미트된 LS_XGK 니모닉을 검증된 ST 와 차분 대조(결정론·키 불필요)
+# ---------------------------------------------------------------------------
+class VerifyXgkRequest(BaseModel):
+    """ST 를 직접 주거나(st_code), 레시피+답변으로 합성한다(recipe)."""
+
+    st_code: str = Field(default="", max_length=settings.max_st_chars)
+    recipe: str = Field(default="", max_length=200)
+    answers: dict[str, str] = Field(default_factory=dict)
+    duration_ms: int = Field(default=12_000, ge=0, le=600_000)
+    step_ms: int = Field(default=100, ge=1, le=10_000)
+
+    @model_validator(mode="after")
+    def _cap_sample_count(self) -> VerifyXgkRequest:
+        n = self.duration_ms // self.step_ms + 1
+        if n > MAX_SIM_SAMPLES:
+            raise ValueError(
+                f"스캔 샘플 {n}개가 상한({MAX_SIM_SAMPLES})을 초과합니다."
+            )
+        return self
+
+
+class XgkMismatch(BaseModel):
+    output: str
+    sample: int
+    t_ms: int
+    st_value: bool
+    xgk_value: bool
+
+
+class VerifyXgkResponse(BaseModel):
+    ok: bool
+    agree: bool = False
+    mismatches: list[XgkMismatch] = Field(default_factory=list)
+    xgk_text: str = ""
+    st: str = ""
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+def _exercise_timeline(inputs: list[str], duration_ms: int, step_ms: int) -> list[
+    tuple[int, dict[str, bool]]
+]:
+    """기본 운동 타임라인 — 입력을 시차로 켜고 끄며 seal-in/엣지 경로를 친다.
+
+    차분 검사(test_xgk_differential 의 staggered)와 같은 패턴으로, 키 없이도
+    유의미한 자극을 준다. duration 을 넘지 않게 안전하게 묶는다.
+    """
+    tl: list[tuple[int, dict[str, bool]]] = []
+    span = max(step_ms, 1)
+    for i, s in enumerate(inputs):
+        on = span * (3 * i + 1)
+        off = span * (3 * i + 1) + span * 6
+        if on <= duration_ms:
+            tl.append((on, {s: True}))
+        if off <= duration_ms:
+            tl.append((off, {s: False}))
+    return tl
+
+
+@app.post("/api/verify-xgk", response_model=VerifyXgkResponse)
+def verify_xgk(req: VerifyXgkRequest) -> VerifyXgkResponse:
+    """LS_XGK 니모닉을 에미트하고 검증된 ST 시뮬레이터와 샘플 단위로 대조한다.
+
+    '에미트 == 검증된 ST' 증명을 사용자에게 노출한다(결정론·키 불필요).
+    st_code 가 비어 있으면 recipe+answers 로 결정론 합성한다.
+    """
+    st = req.st_code.strip()
+    if not st:
+        if not req.recipe:
+            return VerifyXgkResponse(ok=False, error="st_code 또는 recipe 가 필요합니다.")
+        try:
+            spec = build_spec(req.recipe, req.answers)
+            st = synthesize_st(spec)
+        except KeyError:
+            return VerifyXgkResponse(ok=False, error=f"알 수 없는 레시피: {req.recipe}")
+        except (WizardError, ValueError) as exc:
+            return VerifyXgkResponse(ok=False, error=str(exc))
+    if not st.strip():
+        return VerifyXgkResponse(ok=False, error="합성된 ST 가 비어 있습니다.")
+    try:
+        xgk_text = emit_ladder(transpile_st(st), LS_XGK)
+        sres = simulate(st, [], duration_ms=0, step_ms=req.step_ms)
+        timeline = _exercise_timeline(sres.inputs, req.duration_ms, req.step_ms)
+        full = simulate(st, timeline, duration_ms=req.duration_ms, step_ms=req.step_ms)
+        xres = simulate_xgk(
+            xgk_text, timeline, duration_ms=req.duration_ms, step_ms=req.step_ms
+        )
+    except ValueError as exc:
+        return VerifyXgkResponse(ok=False, st=st, error=str(exc))
+
+    mismatches: list[XgkMismatch] = []
+    if sorted(full.outputs) != sorted(xres.outputs):
+        # 출력 심볼 집합 자체가 다르면 전체 불일치로 간주(코일 누락 등).
+        only = set(full.outputs) ^ set(xres.outputs)
+        for o in sorted(only):
+            mismatches.append(
+                XgkMismatch(output=o, sample=-1, t_ms=-1, st_value=False, xgk_value=False)
+            )
+    for o in full.outputs:
+        a = full.output_trace(o)
+        b = xres.output_trace(o)
+        for k, (x, y) in enumerate(zip(a, b, strict=False)):
+            if x != y:
+                mismatches.append(
+                    XgkMismatch(
+                        output=o, sample=k, t_ms=k * req.step_ms,
+                        st_value=x, xgk_value=y,
+                    )
+                )
+                break  # 출력당 최초 발산만 보고(간결)
+    agree = not mismatches
+    return VerifyXgkResponse(
+        ok=True, agree=agree, mismatches=mismatches[:50], xgk_text=xgk_text, st=st,
+        inputs=full.inputs, outputs=full.outputs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 안전커널 미리보기 — 가짜 인메모리 링크 위에서 쓰기 게이팅을 시연(하드웨어 불요)
+# ---------------------------------------------------------------------------
+class _FakeLink:
+    """인메모리 PlcLink — 실기 없이 SafetyKernel 의 deny-by-default 를 시연한다.
+
+    write_inputs 는 마지막 통과 명령만 보관하고 read_outputs 로 되읽는다.
+    """
+
+    def __init__(self) -> None:
+        self.last_write: dict[str, bool] = {}
+
+    def write_inputs(self, values: dict[str, bool]) -> None:
+        self.last_write.update(values)
+
+    def read_outputs(self) -> dict[str, bool]:
+        return dict(self.last_write)
+
+    def close(self) -> None:  # pragma: no cover - 트리비얼
+        return None
+
+
+class SafetyPreviewRequest(BaseModel):
+    recipe: str = Field(..., max_length=200)
+    answers: dict[str, str] = Field(default_factory=dict)
+    command: dict[str, bool] = Field(default_factory=dict, max_length=64)
+
+
+class SafetyPreviewResponse(BaseModel):
+    ok: bool
+    allowed: bool = False
+    reason: str = ""
+    command: dict[str, bool] = Field(default_factory=dict)
+    audit: list[dict[str, str]] = Field(default_factory=list)
+    input_symbols: list[str] = Field(default_factory=list)
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/safety-preview", response_model=SafetyPreviewResponse)
+def safety_preview(req: SafetyPreviewRequest) -> SafetyPreviewResponse:
+    """레시피 명세로 SafetyKernel 을 세워 명령 쓰기를 가상 게이팅한다(하드웨어 불요).
+
+    deny-by-default 안전 게이팅을 실기 없이 노출한다(결정론·키 불필요).
+    """
+    try:
+        spec = build_spec(req.recipe, req.answers)
+    except KeyError:
+        return SafetyPreviewResponse(ok=False, error=f"알 수 없는 레시피: {req.recipe}")
+    except (WizardError, ValueError) as exc:
+        return SafetyPreviewResponse(ok=False, error=str(exc))
+    input_symbols = sorted(
+        p.symbol for p in spec.io_points if p.direction == IODirection.INPUT
+    )
+    kernel = SafetyKernel(_FakeLink(), spec)
+    allowed = False
+    reason = "안전검증 통과"
+    try:
+        kernel.write_inputs(req.command)
+        allowed = True
+    except WriteRejected as exc:
+        reason = str(exc)
+    audit = [{"decision": d, "reason": r} for d, r in kernel.audit_log()]
+    return SafetyPreviewResponse(
+        ok=True, allowed=allowed, reason=reason, command=req.command,
+        audit=audit, input_symbols=input_symbols,
     )
 
 
