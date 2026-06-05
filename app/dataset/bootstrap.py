@@ -27,7 +27,14 @@ from pathlib import Path
 from app.boolexpr import And, Node, Not, Or, Var, parse
 from app.memory_map import detect_double_coils
 from app.models import IODirection, StateMachineSpec
-from app.simulator import MAX_SIM_SAMPLES, SimResult, simulate
+from app.simulator import (
+    MAX_SIM_SAMPLES,
+    SimResult,
+    _Program,
+    coil_block_is_idempotent,
+    permutation_invariant_outputs,
+    simulate,
+)
 from app.synth import synthesize_st
 from app.verifier import verify
 from app.wizard import RECIPES, Field, Recipe, build_spec
@@ -35,7 +42,7 @@ from app.wizard import RECIPES, Field, Recipe, build_spec
 # 게이트 순서(통과 판정 순). non_vacuous 는 '항상 OFF/무조건 TRUE' 같은
 # 공허하게 검증을 통과하는 퇴화 샘플로 코퍼스가 오염되는 것을 막는다(AlphaVerus 통찰).
 _GATE_NAMES = ("synth", "no_double_coil", "verified", "non_vacuous",
-               "determinism", "mutex")
+               "determinism", "mutex", "metamorphic")
 _SIM_DURATION_MS = 2000
 _SIM_STEP_MS = 100
 _ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
@@ -314,6 +321,67 @@ def _trace_repr(st: str, spec: StateMachineSpec) -> str:
     )
 
 
+# ── 변형관계(metamorphic) 게이트 ────────────────────────────────────────────
+
+# 변형관계 검사용 진리표 완전탐색 상한(2^MAX). 입력+FB(.Q) 변수가 많으면 보수적으로
+# 대각선(전부 OFF/전부 ON + 단독 ON) 표본만 써서 게이트가 과하게 무거워지지 않게 한다.
+_MAX_METAMORPHIC_VARS = 10
+
+
+def _metamorphic_probe_vars(st: str, spec: StateMachineSpec) -> tuple[list[str], list[str]]:
+    """(입력 심볼, FB .Q 심볼) — 코일 블록이 의존하는 비코일 자유변수 목록.
+
+    입력 + 타이머/카운터 .Q 를 *독립 상태* 로 고정한 채 코일 블록만 재평가하기 위함.
+    """
+    prog = _Program(st)
+    inputs = _input_symbols(spec)
+    fb_q = [f"{n}.Q" for n in prog.timers] + [f"{n}.Q" for n in prog.counters]
+    return inputs, sorted(fb_q)
+
+
+def _metamorphic_tables(probe: list[str]) -> Iterator[dict[str, bool]]:
+    """probe 변수에 대한 결정론적 입력/FB-상태 표본을 만든다.
+
+    변수 수가 작으면 진리표를 완전탐색(2^n), 크면 대각선 표본(전부 OFF/전부 ON +
+    각 변수 단독 ON)으로 축약해 폭증을 막되 결정론을 유지한다.
+    """
+    n = len(probe)
+    if n <= _MAX_METAMORPHIC_VARS:
+        for mask in range(1 << n):
+            yield {v: bool(mask & (1 << i)) for i, v in enumerate(probe)}
+        return
+    yield dict.fromkeys(probe, False)
+    yield dict.fromkeys(probe, True)
+    for i in range(n):
+        yield {v: (j == i) for j, v in enumerate(probe)}
+
+
+def _check_metamorphic(st: str, spec: StateMachineSpec) -> str:
+    """변형관계#1(멈춤불변 고정점) + #2(입력순열 불변)를 검사. 위반 시 사유, 통과 시 ""."""
+    inputs, fb_q = _metamorphic_probe_vars(st, spec)
+    probe = inputs + fb_q
+    # 입력 순열: 입력 수가 적으면 전순열, 많으면 정방향/역방향만(결정론·보수적).
+    if len(inputs) <= 4:
+        orders = [list(p) for p in _permutations(inputs)]
+    else:
+        orders = [list(inputs), list(reversed(inputs))]
+    for table in _metamorphic_tables(probe):
+        if not coil_block_is_idempotent(st, table):
+            return f"metamorphic: 코일 블록이 1패스에 고정점에 닿지 못함 @ {table}"
+        snapshot = {s: table[s] for s in inputs}
+        base = {s: table[s] for s in fb_q}
+        if not permutation_invariant_outputs(st, base, snapshot, orders):
+            return f"metamorphic: 입력순열에 따라 출력이 달라짐 @ {table}"
+    return ""
+
+
+def _permutations(seq: list[str]) -> Iterator[tuple[str, ...]]:
+    """결정론적 전순열(itertools.permutations 래퍼 — 입력 순서 그대로 lexicographic)."""
+    from itertools import permutations
+
+    return permutations(seq)
+
+
 # ── 게이트 ────────────────────────────────────────────────────────────────
 
 def _run_gates(spec: StateMachineSpec) -> tuple[dict[str, bool], str, str, str]:
@@ -377,6 +445,15 @@ def _run_gates(spec: StateMachineSpec) -> tuple[dict[str, bool], str, str, str]:
                     f"mutex: {pair.output_a}+{pair.output_b} @ {s.t_ms}ms"
                 )
     gates["mutex"] = True
+
+    # G7 metamorphic(오라클 없는 변형관계): 입력·FB(.Q) 상태를 고정한 채
+    #   #1 멈춤불변 고정점 — 코일 블록 재평가가 1패스에 수렴(스캔 1회 결정성),
+    #   #2 입력순열 불변 — 한 스캔 안 입력 읽기 순서가 출력을 바꾸지 않음.
+    # 둘 다 합성된 top-to-bottom seal-in 의 결정성을 *명세 정답 없이* 강화한다.
+    mm = _check_metamorphic(st, spec)
+    if mm:
+        return gates, st, "", mm
+    gates["metamorphic"] = True
 
     return gates, st, _hash(_canonical_st(st)), ""
 

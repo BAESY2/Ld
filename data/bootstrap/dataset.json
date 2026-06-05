@@ -40,7 +40,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "MOTOR"
@@ -65,7 +66,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "MOTOR_FWD",
@@ -90,7 +92,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "OUTPUT"
@@ -114,7 +117,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "OUTPUT"
@@ -138,7 +142,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "OUTPUT"
@@ -161,7 +166,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "PUMP"
@@ -185,7 +191,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "EJECT"
@@ -209,7 +216,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "EJECT"
@@ -233,7 +241,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "EJECT"
@@ -258,7 +267,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "VALVE"
@@ -283,7 +293,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "MOTOR_JOG",
@@ -310,7 +321,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DELTA_CON",
@@ -338,7 +350,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DELTA_CON",
@@ -366,7 +379,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DELTA_CON",
@@ -393,7 +407,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "ALARM"
@@ -420,7 +435,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "HORN",
@@ -446,7 +462,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "PUMP_LAG",
@@ -472,7 +489,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "PRESS_ENABLE"
@@ -500,7 +518,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -530,7 +549,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -560,7 +580,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -590,7 +611,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -620,7 +642,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -650,7 +673,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -680,7 +704,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRY",
@@ -710,7 +735,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -740,7 +766,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -770,7 +797,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -800,7 +828,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -830,7 +859,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -860,7 +890,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "LIGHT_GREEN",
@@ -890,7 +921,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -920,7 +952,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -950,7 +983,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -980,7 +1014,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -1010,7 +1045,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -1040,7 +1076,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
@@ -1070,7 +1107,8 @@
         "verified": true,
         "non_vacuous": true,
         "determinism": true,
-        "mutex": true
+        "mutex": true,
+        "metamorphic": true
       },
       "energized": [
         "DRAIN_VALVE",
