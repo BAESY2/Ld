@@ -152,7 +152,7 @@ function renderTree(manifest) {
   }
   const v = $("verdict");
   v.className = "verdict " + (manifest.verification_passed ? "ok" : "fail");
-  v.textContent = manifest.verification_passed ? "검증 통과" : "검증 실패";
+  v.textContent = manifest.verification_passed ? "로직 검사 통과 (안전인증 아님)" : "로직 검사 실패";
   $("safety").hidden = false;
   $("safety").textContent = "⚠️ " + manifest.safety_notice;
   $("zip").disabled = false;

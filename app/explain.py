@@ -58,7 +58,8 @@ def explain_spec(spec: StateMachineSpec) -> str:
         for il in spec.interlocks:
             why = f" ({il.reason})" if il.reason else ""
             lines.append(
-                f"안전 잠금: {il.output_a} 와 {il.output_b} 는 동시에 켜지지 않습니다{why}."
+                f"로직 잠금(소프트웨어): {il.output_a} 와 {il.output_b} 는 동시에 켜지지 "
+                f"않습니다{why}. ※ 안전이 필요하면 기계식/하드와이어 인터록도 함께 두세요."
             )
     return "\n".join(lines)
 
@@ -113,7 +114,11 @@ def explain_ladder(ladder: LadderProgram) -> list[str]:
 def explain_issues(report: VerificationReport) -> list[str]:
     """검증 결과를 평문 경고로."""
     if report.passed and not report.issues:
-        return ["✅ 검사 통과 — 이중 코일·안전 잠금·도달성에 문제가 없습니다."]
+        return [
+            "✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.",
+            "ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. "
+            "E-stop·가드 등 안전기능은 하드와이어로 구현하세요.",
+        ]
     msgs: list[str] = []
     for issue in report.issues:
         why, fix = _ISSUE_KO.get(issue.code, (issue.message, ""))

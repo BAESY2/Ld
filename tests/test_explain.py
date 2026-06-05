@@ -21,7 +21,7 @@ def _spec(name: str) -> StateMachineSpec:
 def test_explain_spec_lists_io() -> None:
     text = explain_spec(_spec("01_conveyor_fwd_rev.json"))
     assert "입력" in text and "출력" in text
-    assert "안전 잠금" in text  # 인터락이 평문으로
+    assert "로직 잠금" in text  # 인터락이 평문으로(소프트웨어 잠금임을 명시)
     assert "MOTOR_FWD" in text
 
 

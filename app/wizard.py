@@ -44,6 +44,7 @@ class Recipe:
     category: str
     fields: tuple[Field, ...]
     build: Callable[[Answers], StateMachineSpec]
+    safety_note: str = ""  # 이 레시피 특유의 안전 주의(선택 시 노출)
 
 
 def _io(sym: str, d: IODirection, desc: str = "") -> IOPoint:
@@ -277,6 +278,8 @@ RECIPES: dict[str, Recipe] = {
             (_f("start", "기동 버튼", "START"), _f("stop", "정지 버튼", "STOP"),
              _f("motor", "모터 출력", "MOTOR")),
             _motor_start_stop,
+            safety_note="정지(STOP)는 비상정지가 아닙니다. "
+            "비상정지는 별도 하드와이어 E-stop 회로로 전원을 차단하세요.",
         ),
         Recipe(
             "fwd_rev", "정역 운전", "정방향/역방향, 동시 구동 금지(인터락).", "기본",
@@ -284,24 +287,31 @@ RECIPES: dict[str, Recipe] = {
              _f("stop", "정지", "STOP"), _f("motor_fwd", "정방향 모터", "MOTOR_FWD"),
              _f("motor_rev", "역방향 모터", "MOTOR_REV")),
             _fwd_rev,
+            safety_note="이 인터락은 소프트웨어 로직입니다. 정/역 동시투입은 "
+            "기계식 상호 잠금 접점(메인 컨택터)으로도 반드시 막으세요.",
         ),
         Recipe(
             "on_delay", "지연 기동", "기동 후 N초 뒤 출력 ON(타이머).", "타이머",
             (_f("start", "기동", "START"), _f("stop", "정지", "STOP"),
              _f("output", "출력", "OUTPUT"), _f("delay_sec", "지연(초)", "5", "time_sec")),
             _on_delay,
+            safety_note="안전 정지는 타이머 지연에 의존하지 마세요. "
+            "즉시 하드와이어로 동작해야 합니다.",
         ),
         Recipe(
             "hi_lo_level", "수위 제어", "저수위에서 펌프 ON, 고수위에서 OFF.", "공정",
             (_f("lo", "저수위 스위치", "LO_LS"), _f("hi", "고수위 스위치", "HI_LS"),
              _f("pump", "펌프", "PUMP")),
             _hi_lo_level,
+            safety_note="오버플로우/공운전이 위험하면 하드와이어 고/저 레벨 트립을 별도로 두세요.",
         ),
         Recipe(
             "count_eject", "부품 카운터", "N개 세면 배출(카운터).", "카운터",
             (_f("sensor", "감지 센서", "PART_SENSOR"), _f("reset", "리셋", "RESET_PB"),
              _f("eject", "배출 출력", "EJECT"), _f("count", "개수", "10", "int")),
             _count_eject,
+            safety_note="배출 기구에 사람이 접근 가능하면 "
+            "가드/라이트커튼을 하드와이어 안전회로로 구성하세요.",
         ),
         Recipe(
             "auto_manual", "자동/수동 모드", "모드 선택으로 자동/수동 구동.", "모드",
@@ -309,6 +319,8 @@ RECIPES: dict[str, Recipe] = {
              _f("man_cmd", "수동 명령", "MAN_CMD"), _f("stop", "정지", "SYS_STOP"),
              _f("valve", "밸브", "VALVE")),
             _auto_manual,
+            safety_note="수동(점동/조그) 모드의 위험 동작은 "
+            "홀드-투-런 + 하드와이어 E-stop으로 보호하세요.",
         ),
     ]
 }
@@ -319,6 +331,7 @@ def list_recipes() -> list[dict[str, object]]:
     return [
         {
             "id": r.id, "title": r.title, "description": r.description, "category": r.category,
+            "safety_note": r.safety_note,
             "fields": [
                 {"key": f.key, "label": f.label, "default": f.default, "kind": f.kind}
                 for f in r.fields

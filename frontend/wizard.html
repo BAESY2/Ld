@@ -49,6 +49,7 @@
 </header>
 
 <div class="wrap">
+  <div class="safety" style="margin-bottom:14px">⚠️ 이 도구는 <b>로직 보조</b> 도구입니다. 생성 코드는 안전인증이 아니며, E-stop·가드 등 안전기능은 반드시 하드와이어 안전릴레이/안전PLC로 구현하세요(ISO 13849/IEC 62061).</div>
   <div class="step">① 평문으로 적어보세요 (또는 아래에서 고르세요)</div>
   <div style="display:flex;gap:8px;margin-bottom:6px">
     <input id="nl" style="flex:1;font-size:15px;padding:10px 12px"
@@ -88,7 +89,8 @@ async function load() {
   recipes = await (await fetch("/api/recipes")).json();
   $("cards").innerHTML = recipes.map(r =>
     `<div class="card" data-id="${r.id}"><div class="cat">${r.category}</div>
-     <h3>${r.title}</h3><p>${r.description}</p></div>`).join("");
+     <h3>${r.title}</h3><p>${r.description}</p>
+     ${r.safety_note ? `<p style="color:var(--amber);margin-top:6px">⚠️ ${r.safety_note}</p>` : ""}</div>`).join("");
   document.querySelectorAll(".card").forEach(c => c.onclick = () => selectRecipe(c.dataset.id));
 }
 
