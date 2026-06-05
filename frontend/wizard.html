@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🧭 래더 설계 마법사</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#c9d1d9;
+          --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950; --err:#f85149; --amber:#d29922; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,system-ui,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--fg); min-height:100vh; }
+  header { padding:12px 18px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:16px; margin:0; }
+  header .sp { flex:1; }
+  header a { color:var(--accent); text-decoration:none; font-size:13px; }
+  .wrap { max-width:1100px; margin:0 auto; padding:18px; }
+  .step { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:18px 0 8px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; transition:.15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card .cat { font-size:11px; color:var(--accent); }
+  .card h3 { margin:4px 0 6px; font-size:15px; }
+  .card p { margin:0; font-size:12px; color:var(--muted); }
+  .fields { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:8px; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input { font:inherit; background:#0d1117; color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:7px 10px; }
+  button.go { margin-top:14px; background:var(--accent); color:#08111f; border:none; border-radius:8px;
+              padding:10px 18px; font-size:15px; font-weight:700; cursor:pointer; }
+  button.go:disabled { opacity:.5; }
+  .result { display:none; margin-top:18px; }
+  .verdict { font-size:13px; padding:3px 10px; border-radius:12px; }
+  .verdict.ok { background:#10311c; color:var(--ok); } .verdict.fail { background:#3a1416; color:var(--err); }
+  .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; margin-top:12px; overflow:auto; }
+  .box h3 { margin:0 0 8px; font-size:13px; color:var(--muted); }
+  pre { margin:0; white-space:pre-wrap; font:13px/1.6 ui-monospace,Menlo,monospace; }
+  .safety { color:var(--amber); font-size:12px; border:1px solid var(--amber); border-radius:8px; padding:8px 10px; margin-top:12px; }
+  .dlrow { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .dlrow button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:7px 12px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧭 래더 설계 마법사</h1>
+  <span style="font-size:12px;color:var(--muted)">PLC를 몰라도 — 고르고, 채우고, 설계</span>
+  <span class="sp"></span>
+  <a href="/index.html">에디터</a><a href="/generate.html">파일 생성기</a>
+</header>
+
+<div class="wrap">
+  <div class="step">① 무엇을 만들까요?</div>
+  <div class="cards" id="cards"></div>
+
+  <div id="form" style="display:none">
+    <div class="step">② 신호 이름·값을 정하세요 (그대로 둬도 동작합니다)</div>
+    <div class="fields" id="fields"></div>
+    <button class="go" id="go">설계하기 ▶</button>
+  </div>
+
+  <div class="result" id="result">
+    <div class="step">③ 결과 <span id="verdict" class="verdict"></span></div>
+    <div class="box"><h3>래더 다이어그램</h3><div id="ladder"></div></div>
+    <div class="box"><h3>이렇게 동작합니다 (평문 설명)</h3><pre id="explain"></pre></div>
+    <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
+    <div class="safety" id="safety"></div>
+    <div class="dlrow">
+      <button id="dl-files">📦 프로젝트 파일 생성(ZIP)</button>
+      <span id="dlmsg" style="color:var(--muted);font-size:12px;align-self:center"></span>
+    </div>
+  </div>
+</div>
+
+<script src="/ladder-render.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let recipes = [], current = null, lastST = "", lastProject = null;
+
+async function load() {
+  recipes = await (await fetch("/api/recipes")).json();
+  $("cards").innerHTML = recipes.map(r =>
+    `<div class="card" data-id="${r.id}"><div class="cat">${r.category}</div>
+     <h3>${r.title}</h3><p>${r.description}</p></div>`).join("");
+  document.querySelectorAll(".card").forEach(c => c.onclick = () => selectRecipe(c.dataset.id));
+}
+
+function selectRecipe(id) {
+  current = recipes.find(r => r.id === id);
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+  $("fields").innerHTML = current.fields.map(f =>
+    `<label class="f">${f.label}<input data-key="${f.key}" value="${f.default}"
+       ${f.kind === "int" || f.kind === "time_sec" ? 'type="number" min="1"' : ""}/></label>`).join("");
+  $("form").style.display = "block";
+  $("result").style.display = "none";
+  $("form").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function answers() {
+  const a = {};
+  document.querySelectorAll("#fields input").forEach(i => a[i.dataset.key] = i.value.trim());
+  return a;
+}
+
+$("go").onclick = async () => {
+  if (!current) return;
+  $("go").disabled = true;
+  try {
+    const res = await fetch("/api/wizard", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipe: current.id, answers: answers() }),
+    });
+    const d = await res.json();
+    if (!d.ok && d.error) { alert(d.error); return; }
+    lastST = d.structured_text;
+    $("ladder").innerHTML = window.LadderRender.svg(d.ladder);
+    $("explain").textContent = d.explanation;
+    $("st").textContent = d.structured_text;
+    const v = $("verdict");
+    v.className = "verdict " + (d.ok ? "ok" : "fail");
+    v.textContent = d.ok ? "검증 통과 ✓" : "검증 경고";
+    $("safety").textContent = "⚠️ " + d.safety_notice;
+    $("result").style.display = "block";
+    $("dlmsg").textContent = "";
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) { alert("오류: " + e.message); }
+  finally { $("go").disabled = false; }
+};
+
+// 파일 생성: 생성된 ST 를 결정론 파이프라인에 넣어 프로젝트 파일 생성 후 ZIP
+$("dl-files").onclick = async () => {
+  if (!lastST) return;
+  $("dlmsg").textContent = "생성 중…";
+  const res = await fetch("/api/generate/files", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ st_code: lastST, name: (current.id + "_" + Date.now()),
+                           vendors: ["LS_XGK", "MITSUBISHI_FX"] }),
+  });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true }); let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: manifest/m.test(frame)) {
+        const data = frame.split("\n").filter(l => l.startsWith("data: ")).map(l => l.slice(6)).join("\n");
+        try { lastProject = JSON.parse(data).project; } catch {}
+      }
+    }
+  }
+  if (lastProject) { $("dlmsg").textContent = "완료 — 다운로드 시작"; window.location = `/api/generated/${lastProject}.zip`; }
+  else $("dlmsg").textContent = "생성 실패";
+};
+
+load();
+</script>
+</body>
+</html>

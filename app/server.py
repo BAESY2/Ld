@@ -4,6 +4,8 @@
   POST /api/emit             : ST → 벤더별 래더 명령어 텍스트(IL/STL)
   POST /api/export/plcopen   : ST → PLCopen XML(OpenPLC/CODESYS 임포트)
   POST /api/generate         : 자연어 → ST + 래더 + 검증 (LLM)
+  GET  /api/recipes          : 가이드 마법사 레시피 목록(키 불필요)
+  POST /api/wizard           : 레시피+답변 → 설계 (결정론, 키 불필요)
   POST /api/generate/files   : 파일 생성 진행 SSE 스트림(Codex 식)
   GET  /api/generated/{p}/.. : 생성된 파일 조회
   GET  /api/errorcodes       : 에러코드 조회
@@ -40,9 +42,11 @@ from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.safety import SAFETY_NOTICE, safety_payload
+from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
-from app.verifier import check_double_coils
+from app.verifier import check_double_coils, verify
+from app.wizard import build_spec, list_recipes
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger("plc.server")
@@ -288,6 +292,48 @@ def read_generated(project: str, path: str) -> PlainTextResponse:
     if not target.is_file():
         return PlainTextResponse("파일 없음", status_code=404)
     return PlainTextResponse(target.read_text(encoding="utf-8"))
+
+
+@app.get("/api/recipes")
+def recipes() -> list[dict[str, object]]:
+    """가이드 마법사 레시피 목록(비전문가용 템플릿)."""
+    return list_recipes()
+
+
+class WizardRequest(BaseModel):
+    recipe: str
+    answers: dict[str, str] = Field(default_factory=dict)
+
+
+class WizardResponse(BaseModel):
+    ok: bool
+    title: str = ""
+    structured_text: str = ""
+    ladder: LadderProgram | None = None
+    verification: VerificationReport | None = None
+    explanation: str = ""
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/wizard", response_model=WizardResponse)
+def wizard(req: WizardRequest) -> WizardResponse:
+    """레시피+답변 → 결정론 설계(명세→ST→래더→검증→평문설명). LLM/키 불필요."""
+    try:
+        spec = build_spec(req.recipe, req.answers)
+    except KeyError:
+        return WizardResponse(ok=False, error=f"알 수 없는 레시피: {req.recipe}")
+    st = synthesize_st(spec)
+    ladder = transpile_st(st, title=spec.title)
+    report = verify(spec, st)
+    return WizardResponse(
+        ok=report.passed,
+        title=spec.title,
+        structured_text=st,
+        ladder=ladder,
+        verification=report,
+        explanation=explain_all(spec, ladder, report),
+    )
 
 
 class GenerateRequest(BaseModel):
