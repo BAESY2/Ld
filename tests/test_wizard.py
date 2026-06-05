@@ -152,3 +152,82 @@ def test_wizard_response_carries_recipe_safety_note() -> None:
     # nl-design autobuild 도 design 안에 safety_note 를 담는다
     nd = c.post("/api/nl-design", json={"text": "양손으로 눌러야 프레스"}).json()
     assert nd["design"]["safety_note"]
+
+
+# --- 뿌리산업/메카피온 신규 레시피 회귀 ---
+_ROOT_RECIPES = [
+    "heat_treat", "plating_line", "weld_cell",
+    "conveyor_divert", "motion_home_move", "press_muting",
+]
+
+
+@pytest.mark.parametrize("recipe_id", _ROOT_RECIPES)
+def test_root_recipe_zero_interlock_and_double_coil(recipe_id: str) -> None:
+    """신규 레시피: 이중코일 0, 인터락 error 0, 검증 통과(완료 기준)."""
+    spec = build_spec(recipe_id)
+    st = synthesize_st(spec)
+    assert detect_double_coils(st) == {}, f"{recipe_id}: 이중코일"
+    report = verify(spec, st)
+    il_errs = [i for i in report.issues if i.code == "INTERLOCK" and i.severity == "error"]
+    assert not il_errs, f"{recipe_id}: 인터락 error {il_errs}"
+    assert report.passed, f"{recipe_id}: 검증 실패"
+
+
+def test_heat_treat_is_timed_sequence() -> None:
+    """열처리는 승온/유지/냉각 3단계 타이머 시퀀스다."""
+    spec = build_spec("heat_treat", {"t_ramp": "30", "t_hold": "60", "t_cool": "45"})
+    assert len(spec.timers) == 3
+    assert spec.timers[0].preset_ms == 30000
+    st = synthesize_st(spec)
+    assert "HEATER :=" in st and "SOAK :=" in st and "COOL_FAN :=" in st
+
+
+def test_plating_line_has_four_immersion_stages() -> None:
+    spec = build_spec("plating_line")
+    outs = {p.symbol for p in spec.io_points if p.direction.name == "OUTPUT"}
+    assert {"DEGREASE", "RINSE", "PLATE", "DRY"} <= outs
+    assert verify(spec, synthesize_st(spec)).passed
+
+
+def test_conveyor_divert_has_gate_interlock() -> None:
+    """컨베이어 분기: 두 게이트 동시 작동 금지 인터락이 선언되고 증명된다."""
+    spec = build_spec("conveyor_divert")
+    assert spec.interlocks and {
+        spec.interlocks[0].output_a, spec.interlocks[0].output_b
+    } == {"GATE_A", "GATE_B"}
+    st = synthesize_st(spec)
+    assert "NOT GATE_B" in st and "NOT GATE_A" in st
+    assert verify(spec, st).passed
+
+
+def test_motion_one_hot_sequence_and_estop_priority() -> None:
+    """모션: 원점→이동→정위치 one-hot 시퀀스, E-stop 정상 해제 시 즉시 IDLE."""
+    spec = build_spec("motion_home_move")
+    st = synthesize_st(spec)
+    # 세 구동 출력이 한 번에 하나씩만 켜진다(이중코일 0, 합성 커버)
+    assert detect_double_coils(st) == {}
+    assert covers_all_outputs(spec)
+    # E-stop(안전 정상 해제)이 모든 단계의 정지 가드에 들어간다(E-stop 우선)
+    assert "NOT ESTOP_OK" in st
+    leaves = [t for t in spec.transitions if t.to_state == "IDLE"]
+    assert any("NOT ESTOP_OK" in t.condition for t in leaves)
+    assert verify(spec, st).passed
+
+
+def test_weld_cell_sequence_no_double_coil() -> None:
+    """용접 셀: 클램프→용접→해제 시퀀스가 이중코일 없이 합성된다."""
+    spec = build_spec("weld_cell")
+    st = synthesize_st(spec)
+    assert detect_double_coils(st) == {}
+    assert "CLAMP :=" in st and "WELD :=" in st and "UNCLAMP :=" in st
+
+
+def test_press_muting_rejects_same_button() -> None:
+    with pytest.raises(WizardError):
+        build_spec("press_muting", {"lh": "B", "rh": "B"})
+
+
+def test_press_muting_has_strong_safety_note() -> None:
+    """프레스 뮤팅은 강한(⛔) 안전 경고를 단다."""
+    from app.wizard import RECIPES
+    assert "⛔" in RECIPES["press_muting"].safety_note

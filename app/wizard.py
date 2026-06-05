@@ -498,6 +498,186 @@ def _batch(a: Answers) -> StateMachineSpec:
     return _build_sequencer(steps, start=start, stop=stop, loop=False, title="배치 충전/교반/배출")
 
 
+# ---------------------------------------------------------------------------
+# 뿌리산업/메카피온 레시피 (열처리·도금·용접·컨베이어·모션·프레스)
+# ---------------------------------------------------------------------------
+def _heat_treat(a: Answers) -> StateMachineSpec:
+    """열처리 승온→유지→냉각 타임드 시퀀스(주조/금형 후공정).
+
+    히터/유지/냉각(송풍) 출력을 단계별로 하나씩만 켜는 one-hot 시퀀스라
+    합성/검증 무변경(_build_sequencer 의 all_off 가드로 상호배타 보장).
+    """
+    start, stop = _val(a, "start", "HEAT_START"), _val(a, "stop", "HEAT_STOP")
+    steps = [
+        (_val(a, "ramp", "HEATER"), _pint(a, "t_ramp", 30, lo=1)),     # 승온
+        (_val(a, "hold", "SOAK"), _pint(a, "t_hold", 60, lo=1)),       # 유지
+        (_val(a, "cool", "COOL_FAN"), _pint(a, "t_cool", 45, lo=1)),   # 냉각
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="열처리 승온-유지-냉각")
+
+
+def _plating_line(a: Answers) -> StateMachineSpec:
+    """도금/표면처리 침지 시퀀스: 탈지→수세→도금→건조(호이스트 침지 라인).
+
+    각 침지조 출력을 시간대로 순차 ON. one-hot all_off 가드로 동시 침지를 막는다.
+    """
+    start, stop = _val(a, "start", "PLATE_START"), _val(a, "stop", "PLATE_STOP")
+    steps = [
+        (_val(a, "degrease", "DEGREASE"), _pint(a, "t_deg", 20, lo=1)),  # 탈지조
+        (_val(a, "rinse", "RINSE"), _pint(a, "t_rinse", 10, lo=1)),      # 수세조
+        (_val(a, "plate", "PLATE"), _pint(a, "t_plate", 40, lo=1)),      # 도금조
+        (_val(a, "dry", "DRY"), _pint(a, "t_dry", 15, lo=1)),            # 건조
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="도금/표면처리 침지 시퀀스")
+
+
+def _weld_cell(a: Answers) -> StateMachineSpec:
+    """용접 셀 사이클: 클램프→용접→해제(시퀀스 인터락).
+
+    클램프/용접/해제는 단계별로 하나씩만 켜지는 one-hot 시퀀스다. 상호배타는
+    _build_sequencer 의 all_off 가드 + 타이머 핸드오프로 구조적으로 보장되므로
+    명시적 Interlock 은 선언하지 않는다 — 시퀀스 진입 조건은 정적으로 상호배타가
+    아니라 명세-단순 인터락 검사(check_interlocks_z3)가 거짓양성을 내기 때문이다
+    (기존 _build_sequencer 규율과 동일; 검증기 무변경 약속 준수).
+    """
+    start, stop = _val(a, "start", "WELD_START"), _val(a, "stop", "WELD_STOP")
+    steps = [
+        (_val(a, "clamp", "CLAMP"), _pint(a, "t_clamp", 3, lo=1)),
+        (_val(a, "weld", "WELD"), _pint(a, "t_weld", 5, lo=1)),
+        (_val(a, "unclamp", "UNCLAMP"), _pint(a, "t_unclamp", 3, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="용접 셀 사이클(클램프→용접→해제)")
+
+
+def _conveyor_divert(a: Answers) -> StateMachineSpec:
+    """컨베이어 분기/병합: 한 라인을 좌/우(A/B)로 분기. 두 게이트 동시 작동 금지.
+
+    정역 운전과 동형의 상호배제 자기유지(인터락). 선택 버튼으로 게이트를 열고
+    정지/반대선택으로 닫는다.
+    """
+    sel_a = _val(a, "sel_a", "SEL_A")
+    sel_b = _val(a, "sel_b", "SEL_B")
+    stop = _val(a, "stop", "DIV_STOP")
+    gate_a = _val(a, "gate_a", "GATE_A")
+    gate_b = _val(a, "gate_b", "GATE_B")
+    return StateMachineSpec(
+        title="컨베이어 분기(A/B 게이트 인터락)",
+        io_points=[
+            _io(sel_a, _IN, "A 라인 선택"), _io(sel_b, _IN, "B 라인 선택"),
+            _io(stop, _IN, "정지"),
+            _io(gate_a, _OUT, "A 분기 게이트"), _io(gate_b, _OUT, "B 분기 게이트"),
+        ],
+        states=[
+            SfcState(name="STRAIGHT", is_initial=True),
+            SfcState(name="DIVERT_A", on_entry=[f"{gate_a} := TRUE;"]),
+            SfcState(name="DIVERT_B", on_entry=[f"{gate_b} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("STRAIGHT", "DIVERT_A", f"{sel_a} AND NOT {sel_b} AND NOT {stop}"),
+            _tr("DIVERT_A", "STRAIGHT", f"{stop} OR {sel_b}"),
+            _tr("STRAIGHT", "DIVERT_B", f"{sel_b} AND NOT {sel_a} AND NOT {stop}"),
+            _tr("DIVERT_B", "STRAIGHT", f"{stop} OR {sel_a}"),
+        ],
+        interlocks=[
+            Interlock(output_a=gate_a, output_b=gate_b, reason="A/B 분기 게이트 동시 작동 금지"),
+        ],
+    )
+
+
+def _motion_home_move(a: Answers) -> StateMachineSpec:
+    """메카피온 모션: 원점복귀→이동→정위치. 비상정지(E-stop OK) 우선.
+
+    원점복귀 명령(HOMING) 출력과 이동(MOVE) 출력은 동시에 켜지면 안 된다(인터락).
+    모든 진입은 estop_ok(안전 정상)를 요구하고, 해제되면 즉시 IDLE 로 복귀한다.
+    E-stop 자체는 하드와이어 — 여기 estop_ok 는 그 상태접점 반영일 뿐(safety_note).
+    """
+    start = _val(a, "start", "CYCLE_START")
+    estop = _val(a, "estop_ok", "ESTOP_OK")  # 안전 정상=TRUE. b접점(NC) 배선 가정.
+    homing = _val(a, "homing", "HOMING")
+    moving = _val(a, "moving", "MOVING")
+    inpos = _val(a, "in_pos", "IN_POS_LAMP")
+    # 모션 사이클: 원점복귀(시간)→이동(시간)→정위치표시(시간). one-hot 시퀀서로
+    # 단계별 한 출력만 켜져 상호배타가 구조적으로 보장된다(시퀀서/용접셀과 동일 규율).
+    # E-stop 은 시퀀서의 정지입력으로 매핑 — NOT estop(안전 해제) 시 즉시 IDLE 로
+    # 떨어지게 stop=NOT estop 형태로 진입/유지 가드에 반영한다(E-stop 우선).
+    home_t = _pint(a, "t_home", 5, lo=1)
+    move_t = _pint(a, "t_move", 8, lo=1)
+    pos_t = _pint(a, "t_pos", 2, lo=1)
+    stop = f"NOT {estop}"  # 안전 정상이 빠지면(=E-stop) 정지
+    outs = [homing, moving, inpos]
+    all_off = " AND ".join(f"NOT {o}" for o in outs)
+    return StateMachineSpec(
+        title="모션 원점복귀→이동→정위치(E-stop 우선)",
+        io_points=[
+            _io(start, _IN, "사이클 기동"), _io(estop, _IN, "E-stop 정상(안전접점, NC)"),
+            _io(homing, _OUT, "원점복귀 구동"), _io(moving, _OUT, "이동 구동"),
+            _io(inpos, _OUT, "정위치 도달 표시"),
+        ],
+        timers=[
+            TimerSpec(name="T0", preset_ms=home_t * 1000, enable_condition=homing,
+                      description=f"원점복귀 {home_t}초"),
+            TimerSpec(name="T1", preset_ms=move_t * 1000, enable_condition=moving,
+                      description=f"이동 {move_t}초"),
+            TimerSpec(name="T2", preset_ms=pos_t * 1000, enable_condition=inpos,
+                      description=f"정위치 표시 {pos_t}초"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="HOMING", on_entry=[f"{homing} := TRUE;"]),
+            SfcState(name="MOVING", on_entry=[f"{moving} := TRUE;"]),
+            SfcState(name="IN_POS", on_entry=[f"{inpos} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "HOMING", f"{start} AND {estop} AND {all_off}"),
+            _tr("HOMING", "IDLE", stop),
+            _tr("HOMING", "MOVING", f"T0.Q AND {estop}"),
+            _tr("MOVING", "IDLE", stop),
+            _tr("MOVING", "IN_POS", f"T1.Q AND {estop}"),
+            _tr("IN_POS", "IDLE", f"T2.Q OR {stop}"),
+        ],
+    )
+
+
+def _press_muting(a: Answers) -> StateMachineSpec:
+    """프레스 안전 허가: 양수조작 + 가드 닫힘 + (뮤팅 보조) + E-stop 정상.
+
+    뮤팅(muting)은 자동공급 등 정해진 구간에서 라이트커튼을 일시 무효화하는 보조 신호.
+    여기서는 '양손 동시 + 가드 + E-stop' 의 기본 허가에 더해, 뮤팅구간이면 양손
+    유지 없이도 허가가 유지되도록 하는 *보조 로직*만 만든다(인증부품 아님 — safety_note).
+    """
+    lh = _val(a, "lh", "LH_BTN")
+    rh = _val(a, "rh", "RH_BTN")
+    guard = _val(a, "guard", "GUARD_CLOSED")
+    mute = _val(a, "mute", "MUTE_ZONE")
+    estop = _val(a, "estop_ok", "ESTOP_OK")
+    enable = _val(a, "enable", "PRESS_ENABLE")
+    if lh == rh:
+        raise WizardError("좌/우 버튼은 서로 다른 신호여야 합니다(양수 조작의 핵심).")
+    both_hands = f"{lh} AND {rh}"
+    return StateMachineSpec(
+        title="프레스 안전 허가(양수+가드+뮤팅 보조)",
+        io_points=[
+            _io(lh, _IN, "좌측 버튼"), _io(rh, _IN, "우측 버튼"),
+            _io(guard, _IN, "가드 닫힘"), _io(mute, _IN, "뮤팅 구간(보조)"),
+            _io(estop, _IN, "E-stop 정상"), _io(enable, _OUT, "기동 허가"),
+        ],
+        states=[
+            SfcState(name="SAFE", is_initial=True),
+            SfcState(name="ENABLED", on_entry=[f"{enable} := TRUE;"]),
+        ],
+        transitions=[
+            # 진입: 양손 동시 + 가드 + E-stop 정상
+            _tr("SAFE", "ENABLED", f"{both_hands} AND {guard} AND {estop}"),
+            # 해제: 가드/ E-stop 이 빠지면 즉시. 손은 뮤팅구간이 아니면 유지 필요.
+            _tr("ENABLED", "SAFE",
+                f"NOT {guard} OR NOT {estop} OR (NOT ({both_hands}) AND NOT {mute})"),
+        ],
+    )
+
+
 def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
     return Field(key, label, default, kind)
 
@@ -636,6 +816,80 @@ RECIPES: dict[str, Recipe] = {
              _f("t_drain", "배출 시간(초)", "6", "time_sec")),
             _batch,
             safety_note="오버플로우/과압은 하드와이어 레벨·압력 트립으로 별도 구성하세요.",
+        ),
+        Recipe(
+            "heat_treat", "열처리 승온-유지-냉각",
+            "기동하면 승온→유지→냉각을 시간대로 진행(주조/금형 후공정).", "뿌리산업",
+            (_f("start", "기동", "HEAT_START"), _f("stop", "정지", "HEAT_STOP"),
+             _f("ramp", "히터(승온)", "HEATER"), _f("t_ramp", "승온 시간(초)", "30", "time_sec"),
+             _f("hold", "유지", "SOAK"), _f("t_hold", "유지 시간(초)", "60", "time_sec"),
+             _f("cool", "냉각(송풍)", "COOL_FAN"), _f("t_cool", "냉각 시간(초)", "45", "time_sec")),
+            _heat_treat,
+            safety_note="노 과열·CO 가스·화상 위험은 하드와이어 과온 트립(over-temp)·"
+            "가스경보·안전문 인터락으로 별도 구성하세요. 타이머는 공정 시간일 뿐 "
+            "안전 정지가 아닙니다(KOSHA 열처리 안전수칙).",
+        ),
+        Recipe(
+            "plating_line", "도금/표면처리 침지",
+            "기동하면 탈지→수세→도금→건조를 시간대로 침지(표면처리 라인).", "뿌리산업",
+            (_f("start", "기동", "PLATE_START"), _f("stop", "정지", "PLATE_STOP"),
+             _f("degrease", "탈지조", "DEGREASE"), _f("t_deg", "탈지 시간(초)", "20", "time_sec"),
+             _f("rinse", "수세조", "RINSE"), _f("t_rinse", "수세 시간(초)", "10", "time_sec"),
+             _f("plate", "도금조", "PLATE"), _f("t_plate", "도금 시간(초)", "40", "time_sec"),
+             _f("dry", "건조", "DRY"), _f("t_dry", "건조 시간(초)", "15", "time_sec")),
+            _plating_line,
+            safety_note="산·알칼리 약품조, 미스트·환기, 호이스트 협착은 하드와이어 "
+            "안전회로(레벨/누액 감지, 환기 인터락, 호이스트 리미트)로 별도 구성하세요.",
+        ),
+        Recipe(
+            "weld_cell", "용접 셀 사이클",
+            "클램프→용접→해제를 시간대로(클램프/해제 인터락).", "뿌리산업",
+            (_f("start", "기동", "WELD_START"), _f("stop", "정지", "WELD_STOP"),
+             _f("clamp", "클램프", "CLAMP"), _f("t_clamp", "클램프 시간(초)", "3", "time_sec"),
+             _f("weld", "용접", "WELD"), _f("t_weld", "용접 시간(초)", "5", "time_sec"),
+             _f("unclamp", "해제", "UNCLAMP"),
+             _f("t_unclamp", "해제 시간(초)", "3", "time_sec")),
+            _weld_cell,
+            safety_note="아크광·흄·협착·감전 위험은 하드와이어 안전회로(차광커튼, 국소배기 "
+            "인터락, 협착 방지 가드, E-stop)로 별도 구성하세요. 클램프/해제 동시투입 "
+            "금지는 솔레노이드 측 기계식 인터락으로도 이중화하세요(ISO 13849).",
+        ),
+        Recipe(
+            "conveyor_divert", "컨베이어 분기/병합",
+            "선택 버튼으로 라인을 A/B로 분기(두 게이트 동시 작동 금지).", "뿌리산업",
+            (_f("sel_a", "A 선택", "SEL_A"), _f("sel_b", "B 선택", "SEL_B"),
+             _f("stop", "정지", "DIV_STOP"), _f("gate_a", "A 게이트", "GATE_A"),
+             _f("gate_b", "B 게이트", "GATE_B")),
+            _conveyor_divert,
+            safety_note="분기/병합부 협착·끼임은 하드와이어 안전회로(끼임 방지 가드, "
+            "비상정지 풀코드)로 별도 구성하세요. 게이트 상호배제는 소프트 인터락입니다.",
+        ),
+        Recipe(
+            "motion_home_move", "메카피온 모션(원점→이동→정위치)",
+            "기동하면 원점복귀→이동→정위치를 시간대로(E-stop 우선, one-hot).", "모션",
+            (_f("start", "사이클 기동", "CYCLE_START"),
+             _f("estop_ok", "E-stop 정상(NC)", "ESTOP_OK"),
+             _f("homing", "원점복귀 구동", "HOMING"),
+             _f("t_home", "원점복귀 시간(초)", "5", "time_sec"),
+             _f("moving", "이동 구동", "MOVING"),
+             _f("t_move", "이동 시간(초)", "8", "time_sec"),
+             _f("in_pos", "정위치 표시", "IN_POS_LAMP"),
+             _f("t_pos", "정위치 표시 시간(초)", "2", "time_sec")),
+            _motion_home_move,
+            safety_note="비상정지(E-stop)는 반드시 하드와이어로 서보앰프 전원/STO 를 "
+            "차단하세요. 여기 ESTOP_OK 는 그 안전접점의 상태반영일 뿐(NC 페일세이프) "
+            "소프트 로직이 안전기능을 대체하지 않습니다(ISO 13849, 서보 STO).",
+        ),
+        Recipe(
+            "press_muting", "프레스 안전(양수+가드+뮤팅)",
+            "양손+가드+E-stop 정상 시 허가, 뮤팅 구간에선 양손 유지 면제(보조).", "안전",
+            (_f("lh", "좌측 버튼", "LH_BTN"), _f("rh", "우측 버튼", "RH_BTN"),
+             _f("guard", "가드 닫힘", "GUARD_CLOSED"), _f("mute", "뮤팅 구간", "MUTE_ZONE"),
+             _f("estop_ok", "E-stop 정상", "ESTOP_OK"), _f("enable", "기동 허가", "PRESS_ENABLE")),
+            _press_muting,
+            safety_note="⛔ 이것은 보조 로직일 뿐입니다. 양수조작·가드·뮤팅·E-stop 은 반드시 "
+            "안전인증 부품(안전릴레이/안전PLC, 뮤팅은 인증 뮤팅모듈)으로 하드와이어 "
+            "구현하세요. 뮤팅 오용은 중대재해로 직결됩니다(KOSHA 프레스 방호, ISO 13849).",
         ),
     ]
 }

@@ -7,6 +7,7 @@ import pytest
 from app.nlmatch import (
     RECIPE_KEYWORDS,
     analyze,
+    disambiguation_question,
     extract_slots,
     is_confident,
     match_recipe,
@@ -103,6 +104,19 @@ _ROBUST_CASES = [
     ("먼저 난 고장만 표시하기", "first_out_alarm"),
     ("주펌프랑 예비펌프 교번운전", "duty_standby"),
     ("양손으로 눌러야 프레스 동작", "two_hand_safety"),
+    # 신규 뿌리산업/메카피온 레시피의 한국어 표현
+    ("열처리 승온하고 유지했다가 냉각하기", "heat_treat"),
+    ("히터로 가열하고 식히는 열처리로", "heat_treat"),
+    ("도금 라인에서 탈지하고 수세하고 도금", "plating_line"),
+    ("표면처리 침지 시퀀스", "plating_line"),
+    ("용접 셀에서 클램프하고 용접하고 해제", "weld_cell"),
+    ("스폿용접 지그 클램프 사이클", "weld_cell"),
+    ("컨베이어를 A B로 분기시키기", "conveyor_divert"),
+    ("벨트 라인 선별 분기 게이트", "conveyor_divert"),
+    ("서보 원점복귀하고 이동해서 정위치", "motion_home_move"),
+    ("메카피온 모션 원점 잡고 위치결정", "motion_home_move"),
+    ("프레스에 뮤팅 적용해서 양손 허가", "press_muting"),
+    ("뮤팅 구간 자동공급", "press_muting"),
 ]
 
 
@@ -154,3 +168,71 @@ def test_nl_design_surfaces_safety_warning() -> None:
     d = r.json()
     assert d["confident"] is False
     assert "하드와이어" in d["safety_warning"]
+
+
+# --- Part 2: 동의어/활용형 확장 (안 헷갈리게) ---
+@pytest.mark.parametrize("text", [
+    "전동기 켜고 끄기",          # 전동기=모터
+    "모타 시동 걸고 멈춤",        # 모타=모터, 시동=기동, 멈춤=정지
+    "스타트 누르면 가동 정지하면 멈춤",  # 스타트=기동, 가동=운전, 멈춤=정지
+])
+def test_motor_synonyms_match(text: str) -> None:
+    """기동=시동=스타트=가동, 모터=전동기=모타, 정지=멈춤 동의어가 모터 기동/정지로 간다."""
+    assert match_recipe(text)[0][0] == "motor_start_stop"
+
+
+def test_synonyms_dont_break_distinct_recipes() -> None:
+    """동의어 확장이 분명한 다른 레시피 매칭을 망가뜨리지 않는다(회귀)."""
+    assert match_recipe("스타델타로 전동기 감압기동")[0][0] == "star_delta"
+    assert match_recipe("정방향 역방향 전환")[0][0] == "fwd_rev"
+
+
+# --- Part 2: 헷갈림(confusable) 디스앰비규에이션 ---
+def test_jog_vs_run_ambiguous_asks_distinguishing_question() -> None:
+    """조그/연속이 근소차로 다투면 confident=False + 구분 질문(누르는 동안/계속)."""
+    res = analyze("모터 운전하기", allow_llm=False)
+    assert {res.scores[0][0], res.scores[1][0]} == {"motor_start_stop", "jog_run"}
+    assert res.confident is False
+    q = res.extras.get("disambiguation", "")
+    assert "조그" in q and "연속" in q
+    assert res.questions and res.questions[0] == q  # 구분 질문이 맨 앞
+
+
+def test_disambiguation_question_helper_is_deterministic() -> None:
+    """disambiguation_question 은 동일 입력에 동일 출력(결정론)."""
+    s = match_recipe("모터 운전하기")
+    assert disambiguation_question(s) == disambiguation_question(s)
+
+
+def test_clear_request_not_flagged_ambiguous() -> None:
+    """충분히 분명한 요청은 디스앰비규에이션을 띄우지 않는다(오탐 방지)."""
+    res = analyze("정방향 역방향 버튼으로 모터 돌리고 동시에 못 돌게", allow_llm=False)
+    assert "disambiguation" not in res.extras
+
+
+def test_confusable_pair_guard_press_vs_two_hand() -> None:
+    """양수조작 vs 프레스 뮤팅이 가까우면 둘을 가르는 질문이 나온다."""
+    res = analyze("프레스에 뮤팅 적용해서 양손 허가", allow_llm=False)
+    pair = {res.scores[0][0], res.scores[1][0]}
+    assert pair == {"press_muting", "two_hand_safety"}
+    assert res.confident is False
+    assert "뮤팅" in res.extras.get("disambiguation", "")
+
+
+def test_analyze_is_fully_deterministic() -> None:
+    """analyze 를 두 번 호출하면 동일 결과(레시피·점수·질문·extras)."""
+    a = analyze("모터 운전하기", allow_llm=False)
+    b = analyze("모터 운전하기", allow_llm=False)
+    assert a == b
+
+
+def test_new_root_industry_recipes_build_valid_design() -> None:
+    """신규 뿌리산업/모션 레시피의 NL 매칭 결과가 build→synth→verify 통과."""
+    for text in (
+        "열처리 승온 유지 냉각", "도금 침지 시퀀스", "용접 셀 클램프 사이클",
+        "컨베이어 분기", "서보 원점복귀 이동 정위치", "프레스 뮤팅 양손",
+    ):
+        res = analyze(text, allow_llm=False)
+        spec = build_spec(res.recipe_id, res.answers)
+        report = verify(spec, synthesize_st(spec))
+        assert report.passed, f"{text} -> {res.recipe_id}: {report.issues}"
