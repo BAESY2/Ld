@@ -7,6 +7,7 @@
   GET  /api/recipes          : 가이드 마법사 레시피 목록(키 불필요)
   POST /api/nl-design        : 자연어 → 레시피 매칭+슬롯+설계 (결정론, 키 불필요)
   POST /api/wizard           : 레시피+답변 → 설계 (결정론, 키 불필요)
+  POST /api/simulate         : ST → 가상 PLC 스캔 가동(디지털 트윈, 키 불필요)
   POST /api/generate/files   : 파일 생성 진행 SSE 스트림(Codex 식)
   GET  /api/generated/{p}/.. : 생성된 파일 조회
   GET  /api/errorcodes       : 에러코드 조회
@@ -44,6 +45,7 @@ from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.nlmatch import analyze as nl_analyze
 from app.safety import SAFETY_NOTICE, safety_payload
+from app.simulator import simulate
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
@@ -390,6 +392,39 @@ def wizard(req: WizardRequest) -> WizardResponse:
         verification=report,
         explanation=explain_all(spec, ladder, report),
         safety_note=RECIPES[req.recipe].safety_note,
+    )
+
+
+class SimulateRequest(BaseModel):
+    st_code: str = Field(..., max_length=settings.max_st_chars)
+    inputs_timeline: list[tuple[int, dict[str, bool]]] = Field(default_factory=list)
+    duration_ms: int = Field(default=5000, ge=0, le=600_000)
+    step_ms: int = Field(default=100, ge=1, le=10_000)
+
+
+class SimulateResponse(BaseModel):
+    ok: bool
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    samples: list[dict[str, object]] = Field(default_factory=list)
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/simulate", response_model=SimulateResponse)
+def simulate_endpoint(req: SimulateRequest) -> SimulateResponse:
+    """ST 를 가상 PLC로 스캔 가동(디지털 트윈, 결정론·키 불필요)."""
+    try:
+        res = simulate(
+            req.st_code, req.inputs_timeline,
+            duration_ms=req.duration_ms, step_ms=req.step_ms,
+        )
+    except ValueError as exc:
+        return SimulateResponse(ok=False, error=str(exc))
+    return SimulateResponse(
+        ok=True, inputs=res.inputs, outputs=res.outputs,
+        samples=[{"t_ms": s.t_ms, "inputs": s.inputs, "outputs": s.outputs}
+                 for s in res.samples],
     )
 
 
