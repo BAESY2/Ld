@@ -82,6 +82,36 @@ def test_confident_match_no_symbol_questions() -> None:
     assert res.questions == []
 
 
+_ROBUST_CASES = [
+    ("조그로 잠깐만 돌리기", "jog_run"),
+    ("점동으로 살짝 움직이기", "jog_run"),
+    ("스타델타로 모터 기동", "star_delta"),
+    ("와이델타 기동시키기", "star_delta"),
+    ("정방향으로 돌리다가 역방향으로", "fwd_rev"),
+    ("정역운전 하고싶어요", "fwd_rev"),
+    ("전진했다가 후진하기", "fwd_rev"),
+    ("모터를 버튼으로 켜고 끄기", "motor_start_stop"),
+    ("버튼 누르면 돌고 정지누르면 멈추기", "motor_start_stop"),
+    ("기동하고 5초 뒤에 켜기", "on_delay"),
+    ("잠시 기다렸다가 램프 켜기", "on_delay"),
+    ("탱크에 물이 차면 펌프 끄기", "hi_lo_level"),
+    ("저수위면 급수하고 고수위면 정지", "hi_lo_level"),
+    ("부품 10개 세면 배출하기", "count_eject"),
+    ("카운트해서 배출시키기", "count_eject"),
+    ("자동이랑 수동 모드 전환", "auto_manual"),
+    ("이상 생기면 경보 래치", "latch_alarm"),
+    ("먼저 난 고장만 표시하기", "first_out_alarm"),
+    ("주펌프랑 예비펌프 교번운전", "duty_standby"),
+    ("양손으로 눌러야 프레스 동작", "two_hand_safety"),
+]
+
+
+@pytest.mark.parametrize("text,expected", _ROBUST_CASES)
+def test_match_survives_particles(text: str, expected: str) -> None:
+    """조사·활용형이 붙어도(조그로/정방향으로/카운트해서) 매칭된다."""
+    assert match_recipe(text)[0][0] == expected
+
+
 def test_nl_design_endpoint() -> None:
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient

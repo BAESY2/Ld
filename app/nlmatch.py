@@ -19,8 +19,8 @@ from app.wizard import RECIPES, Recipe
 RECIPE_KEYWORDS: dict[str, list[str]] = {
     "motor_start_stop": ["모터", "기동", "정지", "시작", "켜", "꺼", "버튼", "자기유지",
                          "운전", "구동", "돌리", "멈추", "start", "stop"],
-    "fwd_rev": ["정역", "정방향", "역방향", "전진", "후진", "정회전", "역회전",
-                "양방향", "방향", "좌우", "인터락", "forward", "reverse"],
+    "fwd_rev": ["정역", "정방향", "역방향", "전진", "후진", "정회전", "역회전", "돌리",
+                "양방향", "방향", "좌우", "인터락", "모터", "forward", "reverse"],
     "on_delay": ["지연", "딜레이", "초", "뒤", "후", "타이머", "시간", "기다",
                  "대기", "잠시", "delay", "램프", "켜기"],
     "hi_lo_level": ["수위", "물", "탱크", "급수", "배수", "펌프", "저수위", "고수위",
@@ -29,9 +29,10 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
                     "리셋", "카운터", "수량", "토출", "count"],
     "auto_manual": ["자동", "수동", "모드", "전환", "선택", "밸브", "오토", "매뉴얼",
                     "auto", "manual", "mode"],
-    "jog_run": ["조그", "점동", "촌동", "잠깐", "누를", "연속", "운전", "jog", "inch"],
-    "star_delta": ["스타", "델타", "와이", "기동", "전동기", "감압", "star", "delta",
-                   "와이델타", "스타델타"],
+    "jog_run": ["조그", "점동", "촌동", "잠깐", "살짝", "누를", "연속", "운전", "모터",
+                "수동운전", "jog", "inch"],
+    "star_delta": ["스타", "델타", "와이", "기동", "전동기", "감압", "감압기동", "모터",
+                   "star", "delta", "와이델타", "스타델타"],
     "latch_alarm": ["알람", "경보", "고장", "래치", "경고", "이상", "alarm", "fault", "트립"],
     "first_out_alarm": ["최초", "퍼스트아웃", "first", "최초고장", "선행", "경음기", "혼",
                         "어느", "먼저", "원인"],
@@ -60,6 +61,9 @@ class NLResult:
     extras: dict[str, str] = field(default_factory=dict)
 
 
+_SUB_W = 0.7  # 부분포함(파티클/활용형 흡수) 가중 — 정확매치(BM25)보다 낮게
+
+
 def _recipe_doc_tokens(recipe: Recipe) -> list[str]:
     toks = _tokenize(f"{recipe.title} {recipe.description} {recipe.category}")
     for kw in RECIPE_KEYWORDS.get(recipe.id, []):
@@ -69,13 +73,31 @@ def _recipe_doc_tokens(recipe: Recipe) -> list[str]:
     return toks
 
 
+def _recipe_kw_tokens(recipe: Recipe) -> set[str]:
+    """부분포함 채점용 distinct 키워드 토큰(2글자 이상)."""
+    toks = set(_tokenize(f"{recipe.title} {recipe.description} {recipe.category}"))
+    for kw in RECIPE_KEYWORDS.get(recipe.id, []):
+        toks.update(_tokenize(kw))
+    return {t for t in toks if len(t) >= 2}
+
+
+def _match_score(q: list[str], recipe: Recipe) -> float:
+    """BM25(정확) + 부분포함(조사/활용형 흡수) 블렌드. 키 불필요·결정론."""
+    bm = _bm25_lite_score(q, _recipe_doc_tokens(recipe)) if q else 0.0
+    qset = set(q)
+    sub = 0.0
+    for kt in _recipe_kw_tokens(recipe):
+        if kt in qset:
+            continue  # 이미 BM25가 셈
+        if any(kt in qt for qt in qset):  # 키워드가 쿼리 토큰의 부분문자열
+            sub += _SUB_W
+    return bm + sub
+
+
 def match_recipe(text: str, k: int | None = None) -> list[tuple[str, float]]:
-    """자연어를 레시피 문서와 BM25-lite 로 비교해 (id, score) 내림차순 반환."""
+    """자연어를 레시피와 비교해 (id, score) 내림차순 반환(BM25+부분포함)."""
     q = _tokenize(text)
-    scored: list[tuple[str, float]] = []
-    for rid, recipe in RECIPES.items():
-        score = _bm25_lite_score(q, _recipe_doc_tokens(recipe)) if q else 0.0
-        scored.append((rid, score))
+    scored = [(rid, _match_score(q, r)) for rid, r in RECIPES.items()]
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:k] if k else scored
 
