@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from app.simulator import _parse_time_ms, simulate
+import pytest
+
+from app.simulator import MAX_SIM_SAMPLES, _parse_time_ms, simulate
 from app.synth import synthesize_st
-from app.wizard import build_spec
+from app.wizard import build_spec, list_recipes
 
 
 def test_parse_time() -> None:
@@ -73,3 +75,79 @@ def test_estop_drops_output() -> None:
     r = simulate(st, [(0, {"START": True}), (100, {"START": False})],
                  duration_ms=300, step_ms=100)
     assert all(s.outputs.get("MOTOR") for s in r.samples)  # STOP 없으면 계속 ON
+
+
+# ── 빨간팀(공격자) 회귀 가드 ──────────────────────────────────────────────
+
+@pytest.mark.parametrize("step_ms", [1, 100, 250])
+def test_sim_timer_timing_exact(step_ms: int) -> None:
+    """TON Q 는 정확히 PT(=1000ms) 에 상승한다 — 1스캔 조기발화(off-by-one) 회귀 가드."""
+    st = "// 타이머 T1 (TON, 1000ms)\nT1(IN := A, PT := T#1s);\nX := T1.Q;"
+    r = simulate(st, [(0, {"A": True})], duration_ms=1200, step_ms=step_ms)
+    trace = r.output_trace("X")
+    first_on = next(s.t_ms for s, v in zip(r.samples, trace, strict=True) if v)
+    assert first_on == 1000, f"step={step_ms}: {first_on}ms 에 발화(1000 기대)"
+
+
+def test_sim_tof_semantics() -> None:
+    """TOF 는 TON 으로 대체되지 않는다 — IN 동안 ON, 하강 후 PT 만큼 유지."""
+    st = "// 타이머 T1 (TOF, 2000ms)\nT1(IN := A, PT := T#2s);\nX := T1.Q;"
+    r = simulate(st, [(0, {"A": True}), (1000, {"A": False})],
+                 duration_ms=4000, step_ms=1000)
+    trace = r.output_trace("X")
+    assert trace[0] is True and trace[1] is True   # IN 동안 ON (TON 이면 F)
+    assert trace[2] is True                         # 하강 후 PT 이내 유지
+    assert trace[-1] is False                       # PT 경과 후 OFF
+
+
+def test_sim_tp_pulse_semantics() -> None:
+    """TP 는 상승 엣지에서 PT 동안만 펄스(IN 유지와 무관)."""
+    st = "// 타이머 T1 (TP, 2000ms)\nT1(IN := A, PT := T#2s);\nX := T1.Q;"
+    r = simulate(st, [(0, {"A": True}), (500, {"A": False})],
+                 duration_ms=4000, step_ms=1000)
+    trace = r.output_trace("X")
+    assert trace[0] is True              # 상승 엣지 → 펄스 시작
+    assert trace[-1] is False            # PT 경과 후 OFF
+
+
+def test_simulate_sample_count_capped() -> None:
+    """증폭형 DoS 방지: 샘플 수 상한 초과는 ValueError(<1초 내)."""
+    st = "X := A;"
+    with pytest.raises(ValueError, match="상한"):
+        simulate(st, [(0, {"A": True})], duration_ms=600_000, step_ms=1)
+    # 상한 이내는 정상 동작
+    ok = simulate(st, [(0, {"A": True})],
+                  duration_ms=(MAX_SIM_SAMPLES - 1) * 1, step_ms=1)
+    assert len(ok.samples) == MAX_SIM_SAMPLES
+
+
+def test_all_recipes_mutual_exclusion_invariant() -> None:
+    """모든 레시피: 합성→가동 시 어떤 샘플에서도 인터락 쌍이 동시에 켜지지 않는다."""
+    for rid in [r["id"] for r in list_recipes()]:
+        try:
+            spec = build_spec(rid)
+        except Exception:
+            continue  # 필수 파라미터가 있는 레시피는 건너뜀(개별 테스트가 커버)
+        st = synthesize_st(spec)
+        r = simulate(st, [(0, {p.symbol: True for p in spec.io_points
+                               if p.direction.value == "INPUT"})],
+                     duration_ms=2000, step_ms=100)
+        for pair in spec.interlocks:
+            for s in r.samples:
+                a, b = s.outputs.get(pair.output_a), s.outputs.get(pair.output_b)
+                assert not (a and b), (
+                    f"{rid} @ {s.t_ms}ms: {pair.output_a}+{pair.output_b} 동시 ON"
+                )
+
+
+def test_determinism_repeated_runs() -> None:
+    """동일 입력 5회 반복 시 트레이스가 바이트 동일(결정론 보장)."""
+    st = synthesize_st(build_spec("fwd_rev"))
+    ev = [(0, {"FWD_PB": True}), (100, {"FWD_PB": False}),
+          (300, {"REV_PB": True}), (400, {"REV_PB": False})]
+    runs = [
+        [(s.t_ms, sorted(k for k, v in s.outputs.items() if v))
+         for s in simulate(st, ev, duration_ms=600, step_ms=50).samples]
+        for _ in range(5)
+    ]
+    assert all(run == runs[0] for run in runs)

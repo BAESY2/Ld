@@ -31,7 +31,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app import __version__
 from app.config import settings
@@ -45,7 +45,7 @@ from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
 from app.nlmatch import analyze as nl_analyze
 from app.safety import SAFETY_NOTICE, safety_payload
-from app.simulator import simulate
+from app.simulator import MAX_SIM_SAMPLES, simulate
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
@@ -397,9 +397,22 @@ def wizard(req: WizardRequest) -> WizardResponse:
 
 class SimulateRequest(BaseModel):
     st_code: str = Field(..., max_length=settings.max_st_chars)
-    inputs_timeline: list[tuple[int, dict[str, bool]]] = Field(default_factory=list)
+    inputs_timeline: list[tuple[int, dict[str, bool]]] = Field(
+        default_factory=list, max_length=10_000
+    )
     duration_ms: int = Field(default=5000, ge=0, le=600_000)
     step_ms: int = Field(default=100, ge=1, le=10_000)
+
+    @model_validator(mode="after")
+    def _cap_sample_count(self) -> SimulateRequest:
+        # 증폭형 DoS 차단: duration/step 비율이 커도 스캔 샘플 수를 상한으로 제한.
+        n = self.duration_ms // self.step_ms + 1
+        if n > MAX_SIM_SAMPLES:
+            raise ValueError(
+                f"스캔 샘플 {n}개가 상한({MAX_SIM_SAMPLES})을 초과합니다. "
+                f"duration_ms 를 줄이거나 step_ms 를 키우세요."
+            )
+        return self
 
 
 class SimulateResponse(BaseModel):
@@ -421,6 +434,12 @@ def simulate_endpoint(req: SimulateRequest) -> SimulateResponse:
         )
     except ValueError as exc:
         return SimulateResponse(ok=False, error=str(exc))
+    if not res.outputs and req.st_code.strip():
+        # 대입문이 없는(=구동 출력 0) ST 는 가짜 통과를 막기 위해 NO_LOGIC 으로 처리.
+        return SimulateResponse(
+            ok=False, inputs=res.inputs, outputs=res.outputs,
+            error="NO_LOGIC: 시뮬레이션할 출력(코일 대입)이 없습니다.",
+        )
     return SimulateResponse(
         ok=True, inputs=res.inputs, outputs=res.outputs,
         samples=[{"t_ms": s.t_ms, "inputs": s.inputs, "outputs": s.outputs}

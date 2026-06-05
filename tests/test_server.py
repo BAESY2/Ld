@@ -145,6 +145,28 @@ def test_garbage_st_is_not_ok() -> None:
     assert e["ok"] is False
 
 
+def test_simulate_sample_count_bounded() -> None:
+    """증폭형 DoS 차단: duration/step 비율이 과도하면 422 로 거부(빠르게)."""
+    import time
+
+    t0 = time.monotonic()
+    r = client.post(
+        "/api/simulate",
+        json={"st_code": "X := A OR B;", "duration_ms": 600_000, "step_ms": 1},
+    )
+    assert r.status_code == 422
+    assert time.monotonic() - t0 < 1.0  # 폭증 응답을 만들지 않고 즉시 거부
+
+
+def test_simulate_no_logic_not_ok() -> None:
+    """대입문 없는 ST 는 ok:False(가짜 통과 방지)."""
+    r = client.post("/api/simulate", json={"st_code": "FOO BAR BAZ"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is False
+    assert "NO_LOGIC" in (data["error"] or "")
+
+
 def test_download_zip(tmp_path, monkeypatch) -> None:
     import dataclasses
     import io
