@@ -68,6 +68,71 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
 _SEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*초")
 _COUNT_RE = re.compile(r"(\d+)\s*(?:개|번|회|ea|EA)")
 
+# ── 시간/개수 정규화 (한국어 단위·수사·범위) — 슬롯 추출 강건성 ───────────
+_KO_NUM = {
+    "한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7,
+    "여덟": 8, "아홉": 9, "열": 10, "스물": 20, "서른": 30, "마흔": 40, "쉰": 50,
+    "일": 1, "이": 2, "삼": 3, "사": 4, "오": 5, "육": 6, "칠": 7, "팔": 8,
+    "구": 9, "십": 10,
+}
+_KO_ALT = "|".join(sorted(_KO_NUM, key=len, reverse=True))  # 긴 토큰 우선 매칭
+_UNIT_TO_SEC: dict[str, float] = {
+    "시간": 3600, "시": 3600, "hr": 3600, "분": 60, "min": 60,
+    "초": 1, "sec": 1, "ms": 0.001,
+}
+_UNIT_RANK = {"시간": 3, "시": 3, "hr": 3, "분": 2, "min": 2, "초": 1, "sec": 1, "ms": 0}
+_TIME_UNIT = "시간|분|초|sec|min|ms|hr|시"
+_COUNT_UNIT = "개수|갯수|개|매|장|본|회|번|사이클|ea|pcs|pc"
+
+_RANGE_RE = re.compile(
+    rf"(\d+)\s*[~\-]\s*\d+\s*(?=(?:{_TIME_UNIT}|{_COUNT_UNIT}))", re.IGNORECASE
+)
+_TIME_TOKEN = re.compile(rf"(\d+(?:\.\d+)?|{_KO_ALT})\s*({_TIME_UNIT})", re.IGNORECASE)
+_COUNT_DIGIT = re.compile(rf"(\d+)\s*(?:{_COUNT_UNIT})", re.IGNORECASE)
+_COUNT_KO = re.compile(rf"({_KO_ALT})\s*(?:{_COUNT_UNIT})")
+
+
+def _num_of(tok: str) -> float:
+    return float(_KO_NUM[tok]) if tok in _KO_NUM else float(tok)
+
+
+def _collapse_ranges(text: str) -> str:
+    """'5~10초' → '5초'(하한)으로 정규화."""
+    return _RANGE_RE.sub(r"\1", text)
+
+
+def _extract_durations(text: str) -> list[int]:
+    """문장의 시간 표현들을 초(int) 리스트로(등장 순서 유지).
+
+    단위가 큰→작(시간>분>초)으로 인접하면 한 값으로 합산('1시간30분'=5400),
+    같거나 커지는 단위면 새 값('30초 60초'=[30,60]). 각 값은 ≥1 로 클램프.
+    이로써 단계별 시퀀서(승온/유지/냉각 등)의 슬롯도 각각 채워진다.
+    """
+    grouped: list[float] = []
+    prev_rank: int | None = None
+    for m in _TIME_TOKEN.finditer(_collapse_ranges(text)):
+        unit = m.group(2).lower()
+        rank = _UNIT_RANK[unit]
+        val = _num_of(m.group(1)) * _UNIT_TO_SEC[unit]
+        if prev_rank is not None and rank < prev_rank:
+            grouped[-1] += val  # 복합 지속(내림차순) → 합산
+        else:
+            grouped.append(val)
+        prev_rank = rank
+    return [max(1, int(g)) for g in grouped]
+
+
+def _extract_count(text: str) -> str | None:
+    """개수 표현(숫자/한글수사 + 단위, 범위는 하한)을 문자열로."""
+    collapsed = _collapse_ranges(text)
+    m = _COUNT_DIGIT.search(collapsed)
+    if m:
+        return m.group(1)
+    km = _COUNT_KO.search(collapsed)
+    if km:
+        return str(_KO_NUM[km.group(1)])
+    return None
+
 _MIN_SCORE = 0.6
 _MARGIN = 1.25  # 1위가 2위의 이 배수 이상이면 확신
 _AMBIG_MARGIN = 1.6  # 헷갈림(confusable) 쌍은 이 배수 미만이면 모호로 본다(더 엄격)
@@ -92,6 +157,22 @@ CONFUSABLE_QUESTIONS: dict[frozenset[str], str] = {
         "온도 승온-유지-냉각 공정인가요(열처리), 충전-교반-배출 공정인가요(배치)?",
     frozenset({"weld_cell", "two_hand_safety"}):
         "용접 클램프→용접→해제 사이클인가요(용접 셀), 양손 기동 허가만인가요(양수)?",
+    frozenset({"hi_lo_level", "duty_standby"}):
+        "수위(저수위/만수위)로 펌프를 켜고 끄나요(수위 제어), "
+        "펌프 여러 대를 번갈아/예비로 돌리나요(교번/리드-래그)?",
+    frozenset({"count_eject", "batch_fill_mix_drain"}):
+        "센서로 개수를 세서 배출하나요(부품 카운터), "
+        "충전→교반→배출을 시간대로 진행하나요(배치)?",
+    frozenset({"car_wash", "plating_line"}):
+        "세차(비누→헹굼→건조)인가요, 표면처리(탈지→수세→도금→건조) 침지 라인인가요?",
+    frozenset({"conveyor_divert", "fwd_rev"}):
+        "컨베이어를 A/B 갈래로 분기하나요(분기 게이트), "
+        "모터를 정·역 두 방향으로 돌리나요(정역)?",
+    frozenset({"heat_treat", "plating_line"}):
+        "온도 승온-유지-냉각 공정인가요(열처리), 약품조 침지(탈지-수세-도금) 공정인가요(도금)?",
+    frozenset({"motion_home_move", "jog_run"}):
+        "서보 원점복귀→이동→정위치 사이클인가요(모션), "
+        "모터를 조그(누름)/연속으로 돌리나요(조그/연속)?",
 }
 
 
@@ -166,17 +247,22 @@ def match_recipe(text: str, k: int | None = None) -> list[tuple[str, float]]:
 
 
 def extract_slots(text: str, recipe: Recipe) -> dict[str, str]:
-    """텍스트에서 숫자 슬롯(초/개수)을 채운다(심볼은 기본값이 안전하므로 생략)."""
+    """텍스트에서 숫자 슬롯(초/개수)을 채운다(심볼은 기본값이 안전하므로 생략).
+
+    시간은 분/시간/한글수사/범위를 정규화하고, **단계별 시퀀서**는 등장한 시간
+    값을 k번째 time_sec 필드에 순서대로 배정한다. 개수도 단위·한글수사·범위 지원.
+    """
     answers: dict[str, str] = {}
-    for f in recipe.fields:
-        if f.kind == "time_sec":
-            m = _SEC_RE.search(text)
-            if m:
-                answers[f.key] = str(int(float(m.group(1))))
-        elif f.kind == "int":
-            m = _COUNT_RE.search(text)
-            if m:
-                answers[f.key] = m.group(1)
+    durations = _extract_durations(text)
+    time_fields = [f for f in recipe.fields if f.kind == "time_sec"]
+    for i, f in enumerate(time_fields):
+        if i < len(durations):
+            answers[f.key] = str(durations[i])
+    count = _extract_count(text)
+    if count is not None:
+        for f in recipe.fields:
+            if f.kind == "int":
+                answers[f.key] = count
     return answers
 
 
