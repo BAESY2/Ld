@@ -5,6 +5,7 @@
   POST /api/export/plcopen   : ST → PLCopen XML(OpenPLC/CODESYS 임포트)
   POST /api/generate         : 자연어 → ST + 래더 + 검증 (LLM)
   GET  /api/recipes          : 가이드 마법사 레시피 목록(키 불필요)
+  POST /api/nl-design        : 자연어 → 레시피 매칭+슬롯+설계 (결정론, 키 불필요)
   POST /api/wizard           : 레시피+답변 → 설계 (결정론, 키 불필요)
   POST /api/generate/files   : 파일 생성 진행 SSE 스트림(Codex 식)
   GET  /api/generated/{p}/.. : 생성된 파일 조회
@@ -41,12 +42,13 @@ from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
 from app.models import LadderProgram, StateMachineSpec, VerificationIssue, VerificationReport
+from app.nlmatch import analyze as nl_analyze
 from app.safety import SAFETY_NOTICE, safety_payload
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
 from app.verifier import check_double_coils, verify
-from app.wizard import WizardError, build_spec, list_recipes
+from app.wizard import RECIPES, WizardError, build_spec, list_recipes
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger("plc.server")
@@ -298,6 +300,49 @@ def read_generated(project: str, path: str) -> PlainTextResponse:
 def recipes() -> list[dict[str, object]]:
     """가이드 마법사 레시피 목록(비전문가용 템플릿)."""
     return list_recipes()
+
+
+class NLDesignRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=settings.max_request_chars)
+    autobuild: bool = True
+
+
+class NLDesignResponse(BaseModel):
+    ok: bool
+    recipe: str
+    recipe_title: str = ""
+    ranked: list[dict[str, object]] = Field(default_factory=list)
+    filled_answers: dict[str, str] = Field(default_factory=dict)
+    missing: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+    confident: bool = False
+    suggestion: str = ""
+    design: WizardResponse | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/nl-design", response_model=NLDesignResponse)
+def nl_design(req: NLDesignRequest) -> NLDesignResponse:
+    """자연어 → 레시피 매칭 + 슬롯(키 불필요). autobuild 면 곧장 설계까지."""
+    res = nl_analyze(req.text, allow_llm=False)
+    recipe_obj = RECIPES[res.recipe_id]
+    ranked = [
+        {"id": rid, "title": RECIPES[rid].title, "score": round(s, 3)}
+        for rid, s in res.scores[:3]
+    ]
+    if res.confident:
+        suggestion = f"'{recipe_obj.title}'(으)로 이해했어요."
+    else:
+        cands = ", ".join(RECIPES[rid].title for rid, _ in res.scores[:3])
+        suggestion = f"정확히 못 찾았어요. 후보 중 골라주세요: {cands}"
+    design = None
+    if req.autobuild:
+        design = wizard(WizardRequest(recipe=res.recipe_id, answers=res.answers))
+    return NLDesignResponse(
+        ok=True, recipe=res.recipe_id, recipe_title=recipe_obj.title, ranked=ranked,
+        filled_answers=res.answers, missing=res.missing, questions=res.questions,
+        confident=res.confident, suggestion=suggestion, design=design,
+    )
 
 
 class WizardRequest(BaseModel):
