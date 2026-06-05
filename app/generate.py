@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app import __version__
 from app.emit import render_for_vendor
+from app.explain import explain_all
 from app.export import infer_io_spec, to_plcopen_xml
 from app.memory_map import DeviceAllocator
 from app.models import LadderProgram, StateMachineSpec, VerificationReport
@@ -187,7 +188,7 @@ def _render_readme(m_project: str, art: _Artifacts) -> str:
 def _expected_relpaths(vendors: list[str]) -> list[str]:
     rels = [
         "manifest.json", "README.md", "SAFETY.md", "spec.json", "program.st",
-        "ladder.json", "verification.json", "plcopen.xml",
+        "ladder.json", "EXPLAIN.md", "verification.json", "plcopen.xml",
     ]
     for v in vendors:
         ext = "stl" if get_profile(v).il_style == "stl" else "il"
@@ -263,6 +264,7 @@ def generate_project(
     st_body = art.st if art.st.endswith("\n") else art.st + "\n"
     put("program.st", f"{SAFETY_INLINE_HINT}\n{st_body}", "st")
     put("ladder.json", art.ladder.model_dump_json(indent=2), "ladder")
+    put("EXPLAIN.md", explain_all(art.spec, art.ladder, art.report) + "\n", "explain")
     put("verification.json", art.report.model_dump_json(indent=2), "verification")
     put("plcopen.xml", art.plcopen, "plcopen")
     for v, text in art.il_texts.items():

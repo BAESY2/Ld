@@ -34,6 +34,7 @@ from app.config import settings
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
+from app.explain import explain_all
 from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
@@ -298,6 +299,7 @@ class GenerateResponse(BaseModel):
     structured_text: str
     ladder: LadderProgram | None
     verification: VerificationReport | None
+    explanation: str = ""
     error: str | None = None
     safety_notice: str = SAFETY_NOTICE
 
@@ -320,11 +322,15 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     """자연어 → ST + 래더 + 검증. LLM 사용(키 없으면 error 로 안내)."""
     state = run_pipeline(req.request)
     analysis = _logic_analysis(state.spec) if state.spec is not None else ""
+    explanation = ""
+    if state.spec is not None and state.ladder is not None and state.verification is not None:
+        explanation = explain_all(state.spec, state.ladder, state.verification)
     return GenerateResponse(
         logic_analysis=analysis,
         structured_text=state.st_code,
         ladder=state.ladder,
         verification=state.verification,
+        explanation=explanation,
         error=state.error,
     )
 

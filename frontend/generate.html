@@ -82,10 +82,12 @@
     <div class="errbar" id="errbar"></div>
     <div class="tabs" id="tabs">
       <button data-tab="ladder" class="active">래더</button>
+      <button data-tab="explain">설명</button>
       <button data-tab="view">파일</button>
     </div>
     <div id="view-wrap">
       <div id="ladder"><div class="empty" style="color:var(--muted)">생성하면 래더가 여기 그려집니다.</div></div>
+      <pre id="explain" hidden style="white-space:pre-wrap">생성하면 평문 설명이 여기 표시됩니다.</pre>
       <pre id="view" hidden>파일을 선택하면 내용이 여기 표시됩니다.</pre>
     </div>
     <div class="safety" id="safety" hidden></div>
@@ -130,6 +132,7 @@ function logEvent(ev) {
 function setTab(name) {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
   ladderEl.hidden = name !== "ladder";
+  $("explain").hidden = name !== "explain";
   view.hidden = name !== "view";
 }
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
@@ -210,7 +213,12 @@ async function generate() {
         try { payload = JSON.parse(dataLines.join("\n")); } catch { continue; }
         const ev = evLine ? evLine[1] : "progress";
         if (ev === "progress") logEvent(payload);
-        else if (ev === "manifest") { renderTree(payload); openFile("ladder.json"); }
+        else if (ev === "manifest") {
+          renderTree(payload);
+          openFile("ladder.json");
+          fetch(`/api/generated/${payload.project}/EXPLAIN.md`)
+            .then(r => r.ok ? r.text() : "").then(t => { if (t) $("explain").textContent = t; });
+        }
         else if (ev === "error") { logEvent({ stage:"error", status:"error", message: payload.error }); showError(payload.error); }
       }
     }
