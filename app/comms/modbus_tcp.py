@@ -225,8 +225,15 @@ class _ModbusTcp:
             raise ValueError(f"count out of range: {count}")
         pdu = struct.pack(">BHH", function, addr, count)
         resp = self._transaction(pdu)
-        # resp = function(1) + byte_count(1) + data...
+        # resp = function(1) + byte_count(1) + data... — 악성/불량 PLC 응답을
+        # 그대로 믿지 않는다(짧거나 byte_count 가 count 에 못 미치면 ModbusError).
+        if len(resp) < 2:
+            raise ModbusError("short read response (no byte count)")
         byte_count = resp[1]
+        if byte_count < (count + 7) // 8:
+            raise ModbusError(
+                f"read byte_count={byte_count} too small for {count} bits"
+            )
         data = resp[2 : 2 + byte_count]
         if len(data) != byte_count:
             raise ModbusError("short read response")
@@ -246,6 +253,8 @@ class _ModbusTcp:
         pdu = struct.pack(">BHH", _FC_WRITE_SINGLE_COIL, addr, payload)
         resp = self._transaction(pdu)
         # 정상 응답은 요청 에코.
+        if len(resp) < 3:
+            raise ModbusError("short write_coil echo")
         r_addr = struct.unpack(">H", resp[1:3])[0]
         if r_addr != addr:
             raise ModbusError("write_coil echo address mismatch")
@@ -260,6 +269,8 @@ class _ModbusTcp:
             ">BHHB", _FC_WRITE_MULTIPLE_COILS, addr, count, len(data)
         ) + data
         resp = self._transaction(pdu)
+        if len(resp) < 5:
+            raise ModbusError("short write_coils echo")
         r_addr, r_count = struct.unpack(">HH", resp[1:5])
         if r_addr != addr or r_count != count:
             raise ModbusError("write_coils echo mismatch")

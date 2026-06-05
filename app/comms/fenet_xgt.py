@@ -332,12 +332,17 @@ class _FenetClient:
     @staticmethod
     def _iter_read_blocks(body: bytes, count: int) -> list[bytes]:
         # body: command(2) dtype(2) reserved(2) errstate(2) blockcnt(2) [blocks]
+        # 악성/불량 PLC 응답: 짧은 바디로 struct.error 가 새지 않게 길이 가드.
+        if len(body) < 10:
+            raise FenetError("short read response (no block count)")
         block_count = struct.unpack("<H", body[8:10])[0]
         if block_count != count:
             raise FenetError(f"block count mismatch: want {count}, got {block_count}")
         out: list[bytes] = []
         off = 10
         for _ in range(count):
+            if off + 2 > len(body):
+                raise FenetError("short read block header")
             (dcount,) = struct.unpack("<H", body[off : off + 2])
             off += 2
             chunk = body[off : off + dcount]

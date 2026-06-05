@@ -271,3 +271,15 @@ def test_determinism_repeated_frames_identical() -> None:
         _Mc3eBinary._request_prefix(0x0401, 0x0001, 0x90, 0, 16)
     )
     assert f1 == f2
+
+
+def test_short_bit_read_raises_melsec_error(monkeypatch) -> None:
+    """짧은 비트읽기 응답이 IndexError 가 아닌 MelsecError 로(R7-P1)."""
+    import pytest
+
+    from app.comms.melsec import MelsecError, _Mc3eBinary
+
+    c = _Mc3eBinary("127.0.0.1", 5007)
+    monkeypatch.setattr(c, "_transaction", lambda req: b"\x00")  # 16비트엔 8바이트 필요
+    with pytest.raises(MelsecError):
+        c.read_bits("M0", 16)

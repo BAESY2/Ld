@@ -253,3 +253,24 @@ def test_server_context_manager() -> None:
         link.write_inputs({"A": True})
         assert link.read_outputs() == {"A": True}
         link.close()
+
+
+def test_malformed_response_raises_modbus_error(monkeypatch) -> None:
+    """악성/불량 PLC 응답(짧거나 byte_count 부족)이 raw 예외가 아닌 ModbusError 로(R7-P1)."""
+    import pytest
+
+    from app.comms.modbus_tcp import ModbusError, _ModbusTcp
+
+    c = _ModbusTcp("127.0.0.1", 502)
+    monkeypatch.setattr(c, "_transaction", lambda pdu: b"\x01")  # byte_count 없음
+    with pytest.raises(ModbusError):
+        c.read_coils(0, 16)
+    monkeypatch.setattr(c, "_transaction", lambda pdu: b"\x01\x01\x00")  # 16비트인데 1바이트
+    with pytest.raises(ModbusError):
+        c.read_coils(0, 16)
+    monkeypatch.setattr(c, "_transaction", lambda pdu: b"\x05\x00")  # write 에코 짧음
+    with pytest.raises(ModbusError):
+        c.write_coil(0, True)
+    monkeypatch.setattr(c, "_transaction", lambda pdu: b"\x0f\x00\x00")  # write_coils 에코 짧음
+    with pytest.raises(ModbusError):
+        c.write_coils(0, [True, False])

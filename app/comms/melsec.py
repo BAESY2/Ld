@@ -318,6 +318,8 @@ class _Mc3eBinary:
             _CMD_BATCH_READ, _SUBCMD_BIT, code, head, count
         )
         data = self._transaction(req)
+        if len(data) < (count + 1) // 2:  # 니블 패킹: 2점/바이트(불량 응답 방지)
+            raise MelsecError("short bit-read response")
         return unpack_bits_nibble(data, count)
 
     def write_bits(self, device: str, vals: Sequence[bool]) -> None:

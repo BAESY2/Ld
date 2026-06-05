@@ -280,3 +280,15 @@ def test_server_echoes_invoke_id_and_source(server: MockFenetServer) -> None:
         assert length > 0
     finally:
         sock.close()
+
+
+def test_short_read_body_raises_fenet_error(monkeypatch) -> None:
+    """짧은 읽기 바디(블록카운트 미만)가 struct.error 가 아닌 FenetError 로(R7-P1)."""
+    import pytest
+
+    from app.comms.fenet_xgt import FenetError, _FenetClient
+
+    c = _FenetClient("127.0.0.1", 2004)
+    monkeypatch.setattr(c, "_transaction", lambda payload: b"\x55\x00\x00\x00\x00\x00")
+    with pytest.raises(FenetError):
+        c.read_bits(["%MX0", "%MX1"])

@@ -112,8 +112,20 @@ class SafetyKernel:
         if reason is not None:
             self._deny(reason)
 
-        # 모든 체크 통과 — 실링크로 전달하고 ALLOW 기록.
-        self._link.write_inputs(values)
+        # 모든 체크 통과 — 실링크로 전달. 링크 쓰기 자체가 실패해도(소켓 단절 등)
+        # fail-safe 로 DENY 를 감사기록하고 WriteRejected 로 올린다(원시 예외 누출·
+        # 감사 누락 금지). ALLOW 는 실제 전달이 성공했을 때만 기록한다.
+        try:
+            self._link.write_inputs(values)
+        except Exception as exc:  # noqa: BLE001 — fail-safe
+            self.audit.append(
+                AuditEntry(
+                    decision="DENY",
+                    reason=f"링크 쓰기 실패(fail-safe): {exc!r}",
+                    seq=self._seq,
+                )
+            )
+            raise WriteRejected(f"링크 쓰기 실패(fail-safe): {exc!r}") from exc
         self._last_write_at = self._now() if self._now is not None else self._last_write_at
         self.audit.append(
             AuditEntry(decision="ALLOW", reason="안전검증 통과", seq=self._seq)

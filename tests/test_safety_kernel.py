@@ -227,3 +227,28 @@ def test_audit_log_records_decisions_deterministically() -> None:
 def test_audit_entry_as_tuple() -> None:
     entry = AuditEntry(decision="ALLOW", reason="ok", seq=3)
     assert entry.as_tuple() == ("ALLOW", "ok")
+
+
+def test_link_write_failure_fails_safe_and_audits() -> None:
+    """링크 쓰기 자체가 실패해도 fail-safe: WriteRejected + DENY 감사기록(R7-P2)."""
+    import pytest
+
+    from app.comms import WriteRejected
+    from app.comms.safety_kernel import SafetyKernel
+    from app.wizard import build_spec
+
+    class _RaisingLink:
+        def write_inputs(self, values: dict[str, bool]) -> None:
+            raise RuntimeError("link boom")
+
+        def read_outputs(self) -> dict[str, bool]:
+            return {}
+
+        def close(self) -> None:
+            pass
+
+    k = SafetyKernel(_RaisingLink(), build_spec("fwd_rev"))
+    with pytest.raises(WriteRejected):
+        k.write_inputs({"FWD_PB": True})  # 검증 통과 후 링크 쓰기에서 폭발
+    assert k.audit[-1].decision == "DENY"
+    assert k._last_write_at is None
