@@ -42,7 +42,9 @@ def _counter_call(c: CounterSpec) -> str:
     r = c.reset_condition.strip() or "FALSE"
     parse(cu)
     parse(r)
-    return f"{c.name}(CU := {cu}, RESET := {r}, PV := {c.preset});"
+    # IEC 61131-3 표준 CTU 입력은 R(리셋)이다 — 'RESET' 은 비표준이라 표준 런타임
+    # (OpenPLC/CODESYS)에서 로드 실패한다(실 OpenPLC 차등검증이 잡은 이식성 버그).
+    return f"{c.name}(CU := {cu}, R := {r}, PV := {c.preset});"
 
 
 def synthesize_fb_calls(spec: StateMachineSpec) -> list[str]:

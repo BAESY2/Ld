@@ -41,7 +41,7 @@ def test_counter_fb_call_emitted() -> None:
         counters=[CounterSpec(name="C1", preset=10, count_condition="PULSE", reset_condition="R")]
     )
     lines = synthesize_fb_calls(spec)
-    assert "C1(CU := PULSE, RESET := R, PV := 10);" in lines
+    assert "C1(CU := PULSE, R := R, PV := 10);" in lines  # IEC 표준 R(리셋)
 
 
 def _timer_spec() -> StateMachineSpec:

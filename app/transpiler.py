@@ -94,7 +94,7 @@ def _rung_from_fb_call(
         ],
     )
     rungs = [body]
-    reset_expr = args.get("RESET") if is_counter else None
+    reset_expr = (args.get("R") or args.get("RESET")) if is_counter else None
     if reset_expr is not None and reset_expr.strip().upper() not in ("FALSE", "0", ""):
         rungs.append(
             LadderRung(

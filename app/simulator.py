@@ -179,7 +179,7 @@ class _Program:
                 kind=kind,
                 preset=int(re.sub(r"\D", "", args.get("PV", "0")) or 0),
                 count_expr=parse(args.get("CU") or args.get("CD") or "FALSE"),
-                reset_expr=parse(args.get("RESET", "FALSE")),
+                reset_expr=parse(args.get("R") or args.get("RESET") or "FALSE"),
             )
         elif "IN" in args:
             self.timers[name] = _Timer(
