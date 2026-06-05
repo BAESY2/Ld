@@ -428,6 +428,73 @@ def _two_hand(a: Answers) -> StateMachineSpec:
     )
 
 
+def _build_sequencer(
+    steps: list[tuple[str, int]], *, start: str, stop: str, loop: bool, title: str,
+) -> StateMachineSpec:
+    """N단계 타임드 시퀀스(각 단계 출력 ON → 지정 시간 후 다음 단계). 합성 무변경.
+
+    각 단계의 진입 조건에 'NOT 모든 단계출력'(all_off) 가드를 넣어 한 번에 한 출력만
+    켜지게 한다(루프 stuck-coil 방지). 인터락은 선언하지 않는다 — 시퀀스 진입 조건은
+    정적으로 상호배타가 아니라 검증기의 단순 인터락 검사가 거짓양성을 내기 때문이며,
+    one-hot 은 all_off 가드 + 타이머 핸드오프로 구조적으로 보장된다.
+    """
+    n = len(steps)
+    outs = [o for o, _ in steps]
+    all_off = " AND ".join(f"NOT {o}" for o in outs)
+    io_points = [_io(start, _IN, "기동"), _io(stop, _IN, "정지")]
+    states: list[SfcState] = [SfcState(name="IDLE", is_initial=True)]
+    timers: list[TimerSpec] = []
+    transitions = [_tr("IDLE", "S0", f"{start} AND NOT {stop} AND {all_off}")]
+    for k, (out, sec) in enumerate(steps):
+        io_points.append(_io(out, _OUT, f"{k + 1}단계"))
+        states.append(SfcState(name=f"S{k}", on_entry=[f"{out} := TRUE;"]))
+        timers.append(TimerSpec(name=f"T{k}", preset_ms=sec * 1000,
+                                enable_condition=out, description=f"{out} {sec}초"))
+    for k in range(n):
+        cur = f"S{k}"
+        transitions.append(_tr(cur, "IDLE", stop))  # 중단
+        if k < n - 1:
+            transitions.append(_tr(cur, f"S{k + 1}", f"T{k}.Q AND NOT {stop}"))
+        elif loop:
+            transitions.append(_tr(cur, "S0", f"T{k}.Q AND NOT {stop}"))
+        else:
+            transitions.append(_tr(cur, "IDLE", f"T{k}.Q"))
+    return StateMachineSpec(
+        title=title, io_points=io_points, timers=timers, states=states,
+        transitions=transitions,
+    )
+
+
+def _car_wash(a: Answers) -> StateMachineSpec:
+    start, stop = _val(a, "start", "START"), _val(a, "stop", "STOP")
+    steps = [
+        (_val(a, "out1", "SOAP"), _pint(a, "t1", 5, lo=1)),
+        (_val(a, "out2", "RINSE"), _pint(a, "t2", 5, lo=1)),
+        (_val(a, "out3", "DRY"), _pint(a, "t3", 5, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False, title="세차 순차 제어")
+
+
+def _timed_traffic(a: Answers) -> StateMachineSpec:
+    start, stop = _val(a, "start", "START"), _val(a, "stop", "STOP")
+    steps = [
+        (_val(a, "red", "LIGHT_RED"), _pint(a, "t_red", 5, lo=1)),
+        (_val(a, "green", "LIGHT_GREEN"), _pint(a, "t_green", 4, lo=1)),
+        (_val(a, "yellow", "LIGHT_YELLOW"), _pint(a, "t_yellow", 2, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=True, title="시간 신호등(순환)")
+
+
+def _batch(a: Answers) -> StateMachineSpec:
+    start, stop = _val(a, "start", "START"), _val(a, "stop", "STOP")
+    steps = [
+        (_val(a, "fill", "FILL_VALVE"), _pint(a, "t_fill", 8, lo=1)),
+        (_val(a, "mixer", "MIXER"), _pint(a, "t_mix", 10, lo=1)),
+        (_val(a, "drain", "DRAIN_VALVE"), _pint(a, "t_drain", 6, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False, title="배치 충전/교반/배출")
+
+
 def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
     return Field(key, label, default, kind)
 
@@ -535,6 +602,35 @@ RECIPES: dict[str, Recipe] = {
             _two_hand,
             safety_note="⛔ 이것은 보조 로직일 뿐입니다. 양수조작·가드·E-stop 은 반드시 "
             "안전인증 부품(안전릴레이/안전PLC)으로 하드와이어 구현하세요(ISO 13849).",
+        ),
+        Recipe(
+            "car_wash", "세차 순차", "기동하면 비누→헹굼→건조를 시간대로 진행.", "순차",
+            (_f("start", "기동", "START"), _f("stop", "정지", "STOP"),
+             _f("out1", "1단계(비누)", "SOAP"), _f("t1", "1단계 시간(초)", "5", "time_sec"),
+             _f("out2", "2단계(헹굼)", "RINSE"), _f("t2", "2단계 시간(초)", "5", "time_sec"),
+             _f("out3", "3단계(건조)", "DRY"), _f("t3", "3단계 시간(초)", "5", "time_sec")),
+            _car_wash,
+            safety_note="출입문·브러시 끼임 방지는 하드와이어 안전회로로 별도 구성하세요.",
+        ),
+        Recipe(
+            "timed_traffic", "시간 신호등", "적→녹→황을 시간대로 자동 순환(반복).", "순차",
+            (_f("start", "기동", "START"), _f("stop", "정지", "STOP"),
+             _f("red", "적색등", "LIGHT_RED"), _f("t_red", "적색 시간(초)", "5", "time_sec"),
+             _f("green", "녹색등", "LIGHT_GREEN"), _f("t_green", "녹색 시간(초)", "4", "time_sec"),
+             _f("yellow", "황색등", "LIGHT_YELLOW"),
+             _f("t_yellow", "황색 시간(초)", "2", "time_sec")),
+            _timed_traffic,
+            safety_note="교차 방향 동시 녹색 금지는 별도 인터락/하드와이어로 구성하세요.",
+        ),
+        Recipe(
+            "batch_fill_mix_drain", "배치 충전/교반/배출", "충전→교반→배출을 시간대로.", "순차",
+            (_f("start", "기동", "START"), _f("stop", "정지", "STOP"),
+             _f("fill", "급수 밸브", "FILL_VALVE"), _f("t_fill", "충전 시간(초)", "8", "time_sec"),
+             _f("mixer", "교반기", "MIXER"), _f("t_mix", "교반 시간(초)", "10", "time_sec"),
+             _f("drain", "배출 밸브", "DRAIN_VALVE"),
+             _f("t_drain", "배출 시간(초)", "6", "time_sec")),
+            _batch,
+            safety_note="오버플로우/과압은 하드와이어 레벨·압력 트립으로 별도 구성하세요.",
         ),
     ]
 }

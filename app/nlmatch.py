@@ -40,6 +40,11 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
                      "lead", "lag", "standby"],
     "two_hand_safety": ["양수", "양손", "두손", "프레스", "가드", "안전", "허가", "two",
                         "hand", "press"],
+    "car_wash": ["세차", "세척", "비누", "헹굼", "건조", "단계", "순차", "carwash", "wash"],
+    "timed_traffic": ["신호등", "신호", "적색", "녹색", "황색", "교통", "순환", "traffic",
+                      "신호기"],
+    "batch_fill_mix_drain": ["배치", "충전", "교반", "배출", "혼합", "탱크", "공정", "batch",
+                             "급수", "교반기"],
 }
 
 _SEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*초")
