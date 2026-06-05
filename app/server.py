@@ -373,6 +373,7 @@ class NLDesignResponse(BaseModel):
     suggestion: str = ""
     design: WizardResponse | None = None
     safety_warning: str = ""
+    out_of_scope: str = ""  # 21개 템플릿 밖(아날로그/모션/통신/PID 등) → 정직 거절
     safety_notice: str = SAFETY_NOTICE
 
 
@@ -385,7 +386,10 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         {"id": rid, "title": RECIPES[rid].title, "score": round(s, 3)}
         for rid, s in res.scores[:3]
     ]
-    if res.confident:
+    out_of_scope = res.extras.get("out_of_scope", "")
+    if out_of_scope:
+        suggestion = "21개 결정론 템플릿 밖의 요청이에요(아날로그·모션·통신·PID 등)."
+    elif res.confident:
         suggestion = f"'{recipe_obj.title}'(으)로 이해했어요."
     else:
         cands = ", ".join(RECIPES[rid].title for rid, _ in res.scores[:3])
@@ -402,7 +406,7 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         confident=res.confident,
         provisional=(design is None and req.autobuild),
         suggestion=suggestion, design=design,
-        safety_warning=safety_warning,
+        safety_warning=safety_warning, out_of_scope=out_of_scope,
     )
 
 

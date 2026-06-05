@@ -319,6 +319,29 @@ def disambiguation_question(scores: list[tuple[str, float]]) -> str | None:
     return CONFUSABLE_QUESTIONS.get(pair)
 
 
+# 21개 결정론 템플릿(불리언 상태머신/타이머/카운터)으로 *표현 불가*한 능력의 단서.
+# 이런 요청은 가장 가까운 템플릿에 자신있게 매칭하면 '침묵 실패'(자신있게 틀림)가 된다.
+# → 감지되면 확신을 강등하고 "범위 밖" 안내를 띄운다(자신있게 거짓 금지).
+_OUT_OF_SCOPE_CUES = (
+    "pid", "아날로그", "비례 제어", "비례제어", "폐루프", "클로즈드루프", "closed loop",
+    "setpoint", "셋포인트", "인버터", "vfd", "주파수", "속도지령", "토크", "압력 프로파일",
+    "압력프로파일", "전류 프로파일", "프로파일", "보간", "티칭", "6축", "다관절", "팔레타이징",
+    "좌표", "마이크로스텝", "스텝모터", "펄스열", "전자캠", "대수제어", "통신으로", "데이터를",
+    "집계", "리포트", "mes", "배합비", "레시피 ", "레시피를", "로드셀", "무게 피드백",
+    "농도", "압입", "비전", "색 구분", "색구분", "마이크로", "엔코더", "전자캠",
+)
+_OUT_OF_SCOPE_MSG = (
+    "이 요청은 아날로그·모션(보간/다축)·통신·PID·레시피 등 21개 결정론 템플릿으로는 "
+    "표현할 수 없습니다. 가까운 템플릿으로 자신있게 잘못 만들지 않도록 보류합니다 — "
+    "LLM 합성 경로(키 필요) 또는 전문가 설계가 필요합니다."
+)
+
+
+def _out_of_scope(text: str) -> bool:
+    low = text.lower()
+    return any(cue in low for cue in _OUT_OF_SCOPE_CUES)
+
+
 def analyze(text: str, allow_llm: bool = True) -> NLResult:
     """자연어 → 레시피+슬롯+질문. 키 불필요(BM25). LLM 폴백은 미연결(키 없을 때 동일)."""
     scores = match_recipe(text)
@@ -337,6 +360,10 @@ def analyze(text: str, allow_llm: bool = True) -> NLResult:
         confident = False
         extras["disambiguation"] = disambig
         qs = [disambig, *qs]
+    # 범위 밖(아날로그/모션/통신/PID 등)이면 자신있게 틀린 템플릿에 매칭하지 않는다.
+    if _out_of_scope(text):
+        confident = False
+        extras["out_of_scope"] = _OUT_OF_SCOPE_MSG
     # 안전필수 표현이 보이면 자신만만한 매칭을 막고 하드와이어 경고를 띄운다.
     if _has_safety_term(text):
         confident = False
