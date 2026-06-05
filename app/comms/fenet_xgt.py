@@ -36,8 +36,30 @@ XGT/XGB FEnet 전용 프로토콜(TCP 2004)의 응용 프레임(application fram
             Error State 2  0x0000=정상, 그 외=NAK/에러
             (정상 읽기응답) Block Cnt 2, per block: Data Cnt 2 + Data
 
-바이트 순서는 LE(little-endian) 다 — XGT 전용 프로토콜은 멀티바이트 수치를
-모두 리틀엔디언으로 보낸다. 비트 데이터(bit) 는 1바이트(0x00/0x01)로 표현된다.
+바이트 순서는 헤더·명령블록 **전부 LE(little-endian)** 다 — XGT 전용 프로토콜은
+모든 멀티바이트 수치(Invoke ID/Length/Command/Data Type/Block Count/Var-name Len)를
+리틀엔디언으로 보낸다. 비트 데이터(bit) 는 1바이트(0x00/0x01)로 표현된다.
+
+엔디언 검증(2026-06, 3개 독립 1차 출처 교차검증 — 정형 결론):
+  * **권위 출처(LS 매뉴얼 본문)**: LS ELECTRIC 공식 *XGB FEnet I/F Module User's
+    Manual* (XBL-EMTA), Chapter 5.2 "Frame examples — Request frame for individual
+    reading of variables" 의 워크드 예제가 와이어 바이트를 직접 명시한다:
+        Command 0x54 0x00 / Block No. 0x01 0x00 / Variable Length 0x04 0x00
+    → Command(0x0054), Block(1), VarLen(4) 모두 **저위바이트 선행(LE)**.
+    또한 명령코드 표는 Read-Req 를 "0x5400" (와이어형 `54 00`) 로 표기 → LE 확정.
+    (https://www.dalroad.com/wp-content/uploads/2015/04/XGB-FEnet_Manual-ENG_V1.5.pdf)
+  * **Wireshark 디섹터**(ciaoly/PLC-XGT-protocol-for-Wireshark/xgb.lua): Invoke ID,
+    Length 포함 모든 멀티바이트 필드를 ``add_le`` 로 읽는다 → 헤더도 LE.
+  * **golanglsplc**(song9063/golanglsplc/lsplc.go) makeHeader: ``get2BytesFromInt``
+    가 ``(hi, lo)`` 를 반환하고 ``bytes[15], bytes[14] = get2BytesFromInt(invokeId)``
+    로 대입 → **bytes[14]=lo, bytes[15]=hi** = 낮은 오프셋에 저위바이트 = LE.
+    (Length 도 동일 패턴.)
+
+  ⇒ docs/LS_MITSUBISHI_PROTOCOL_BRIEF.md 의 "헤더=BE, 블록=LE" 주장은 **오류**다
+    (golanglsplc 의 헷갈리는 다중대입을 BE 로 오독한 데서 비롯). 실제로는 헤더·블록
+    모두 LE 이며, 본 어댑터(모든 struct 포맷 ``<``)가 **맞다**. 따라서 로직은
+    변경하지 않는다. 바이트 정밀 핀은 tests/test_fenet_conformance.py 가, 실 CPU
+    대조 절차는 scripts/fenet_pcap_verify.py 가 못박는다.
 """
 
 from __future__ import annotations
