@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from app.comms import WriteRejected
-from app.comms.modbus_tcp import AddressMap, ModbusPlcLink, MockModbusServer
+from app.comms.modbus_tcp import AddressMap, MockModbusServer, ModbusPlcLink
 from app.comms.safety_kernel import SafetyKernel
 from app.models import IODirection
 from app.wizard import build_spec
