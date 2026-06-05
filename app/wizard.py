@@ -266,6 +266,168 @@ def _auto_manual(a: Answers) -> StateMachineSpec:
     )
 
 
+def _jog_run(a: Answers) -> StateMachineSpec:
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    jog = _val(a, "jog", "JOG_PB")
+    run = _val(a, "motor_run", "MOTOR_RUN")
+    mjog = _val(a, "motor_jog", "MOTOR_JOG")
+    return StateMachineSpec(
+        title="조그/연속 운전",
+        io_points=[
+            _io(start, _IN, "연속 기동"), _io(stop, _IN, "정지"), _io(jog, _IN, "조그(누름)"),
+            _io(run, _OUT, "연속 운전"), _io(mjog, _OUT, "조그 운전"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="RUNNING", on_entry=[f"{run} := TRUE;"]),
+            SfcState(name="JOGGING", on_entry=[f"{mjog} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "RUNNING", f"{start} AND NOT {jog} AND NOT {stop}"),
+            _tr("RUNNING", "IDLE", f"{stop}"),
+            _tr("IDLE", "JOGGING", f"{jog} AND NOT {start}"),
+            _tr("JOGGING", "IDLE", f"NOT {jog}"),
+        ],
+        interlocks=[Interlock(output_a=run, output_b=mjog, reason="연속/조그 동시 금지")],
+    )
+
+
+def _star_delta(a: Answers) -> StateMachineSpec:
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    main = _val(a, "main", "MAIN_CON")
+    star = _val(a, "star", "STAR_CON")
+    delta = _val(a, "delta", "DELTA_CON")
+    sec = _pint(a, "delay_sec", 5)
+    return StateMachineSpec(
+        title="Y-Δ(스타-델타) 기동",
+        io_points=[
+            _io(start, _IN, "기동"), _io(stop, _IN, "정지"),
+            _io(main, _OUT, "주접촉기"), _io(star, _OUT, "스타"), _io(delta, _OUT, "델타"),
+        ],
+        timers=[TimerSpec(name="T1", preset_ms=sec * 1000, enable_condition=star,
+                          description=f"{sec}초 후 델타 전환")],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="STAR", on_entry=[f"{main} := TRUE;", f"{star} := TRUE;"]),
+            SfcState(name="DELTA", on_entry=[f"{main} := TRUE;", f"{delta} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "STAR", f"({start} OR {main}) AND NOT {stop} AND NOT T1.Q"),
+            _tr("STAR", "DELTA", f"T1.Q AND NOT {stop} AND {main}"),
+            _tr("DELTA", "IDLE", f"{stop}"),
+            _tr("STAR", "IDLE", f"{stop}"),
+        ],
+        interlocks=[Interlock(output_a=star, output_b=delta, reason="스타/델타 동시 투입 금지")],
+    )
+
+
+def _latch_alarm(a: Answers) -> StateMachineSpec:
+    fa = _val(a, "fault_a", "FAULT_A")
+    fb = _val(a, "fault_b", "FAULT_B")
+    fc = _val(a, "fault_c", "FAULT_C")
+    reset = _val(a, "reset", "ALARM_RST")
+    alarm = _val(a, "alarm", "ALARM")
+    return StateMachineSpec(
+        title="래치형 알람",
+        io_points=[
+            _io(fa, _IN, "고장 A"), _io(fb, _IN, "고장 B"), _io(fc, _IN, "고장 C"),
+            _io(reset, _IN, "리셋"), _io(alarm, _OUT, "알람"),
+        ],
+        states=[
+            SfcState(name="NORMAL", is_initial=True),
+            SfcState(name="ALARMED", on_entry=[f"{alarm} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("NORMAL", "ALARMED", f"{fa} OR {fb} OR {fc}"),
+            _tr("ALARMED", "NORMAL", f"{reset} AND NOT {fa} AND NOT {fb} AND NOT {fc}"),
+        ],
+    )
+
+
+def _first_out_alarm(a: Answers) -> StateMachineSpec:
+    fa = _val(a, "fault_a", "FAULT_A")
+    fb = _val(a, "fault_b", "FAULT_B")
+    ack = _val(a, "ack", "ALM_ACK")
+    reset = _val(a, "reset", "ALM_RST")
+    la = _val(a, "latch_a", "LATCH_A")
+    lb = _val(a, "latch_b", "LATCH_B")
+    horn = _val(a, "horn", "HORN")
+    return StateMachineSpec(
+        title="최초고장 알람(first-out)",
+        io_points=[
+            _io(fa, _IN, "고장 A"), _io(fb, _IN, "고장 B"), _io(ack, _IN, "확인"),
+            _io(reset, _IN, "리셋"), _io(la, _OUT, "A 최초"), _io(lb, _OUT, "B 최초"),
+            _io(horn, _OUT, "경음기"),
+        ],
+        states=[
+            SfcState(name="NORMAL", is_initial=True),
+            SfcState(name="FIRST_A", on_entry=[f"{la} := TRUE;"]),
+            SfcState(name="FIRST_B", on_entry=[f"{lb} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("NORMAL", "FIRST_A", f"{fa} AND NOT {lb}"),
+            _tr("NORMAL", "FIRST_B", f"{fb} AND NOT {la}"),
+            _tr("FIRST_A", "NORMAL", f"{reset} AND NOT {fa}"),
+            _tr("FIRST_B", "NORMAL", f"{reset} AND NOT {fb}"),
+        ],
+        derived_outputs=[
+            DerivedOutput(output=horn, expression=f"({la} OR {lb}) AND NOT {ack}",
+                          description="최초 고장이 잡히면 경음기 ON, 확인하면 OFF"),
+        ],
+    )
+
+
+def _duty_standby(a: Answers) -> StateMachineSpec:
+    demand = _val(a, "demand", "DEMAND")
+    high = _val(a, "high_demand", "HIGH_DEMAND")
+    stop = _val(a, "stop", "SYS_STOP")
+    lead = _val(a, "lead", "PUMP_LEAD")
+    lag = _val(a, "lag", "PUMP_LAG")
+    return StateMachineSpec(
+        title="펌프 리드/래그(듀티-스탠바이)",
+        io_points=[
+            _io(demand, _IN, "수요"), _io(high, _IN, "고수요"), _io(stop, _IN, "정지"),
+            _io(lead, _OUT, "리드 펌프"), _io(lag, _OUT, "래그 펌프"),
+        ],
+        states=[
+            SfcState(name="OFF", is_initial=True),
+            SfcState(name="LEAD", on_entry=[f"{lead} := TRUE;"]),
+            SfcState(name="LAG_ON", on_entry=[f"{lag} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("OFF", "LEAD", f"{demand} AND NOT {stop}"),
+            _tr("LEAD", "OFF", f"{stop}"),
+            _tr("LEAD", "LAG_ON", f"{high} AND NOT {stop}"),
+            _tr("LAG_ON", "LEAD", f"NOT {high}"),
+        ],
+    )
+
+
+def _two_hand(a: Answers) -> StateMachineSpec:
+    lh = _val(a, "lh", "LH_BTN")
+    rh = _val(a, "rh", "RH_BTN")
+    guard = _val(a, "guard", "GUARD_CLOSED")
+    estop = _val(a, "estop_ok", "ESTOP_OK")
+    enable = _val(a, "enable", "PRESS_ENABLE")
+    return StateMachineSpec(
+        title="양수 조작 허가(보조)",
+        io_points=[
+            _io(lh, _IN, "좌측 버튼"), _io(rh, _IN, "우측 버튼"), _io(guard, _IN, "가드 닫힘"),
+            _io(estop, _IN, "E-stop 정상"), _io(enable, _OUT, "기동 허가"),
+        ],
+        states=[
+            SfcState(name="SAFE", is_initial=True),
+            SfcState(name="ENABLED", on_entry=[f"{enable} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("SAFE", "ENABLED", f"{lh} AND {rh} AND {guard} AND {estop}"),
+            _tr("ENABLED", "SAFE", f"NOT {lh} OR NOT {rh} OR NOT {estop}"),
+        ],
+    )
+
+
 def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
     return Field(key, label, default, kind)
 
@@ -321,6 +483,58 @@ RECIPES: dict[str, Recipe] = {
             _auto_manual,
             safety_note="수동(점동/조그) 모드의 위험 동작은 "
             "홀드-투-런 + 하드와이어 E-stop으로 보호하세요.",
+        ),
+        Recipe(
+            "jog_run", "조그/연속 운전", "버튼으로 연속운전, 조그버튼은 누를 때만.", "기본",
+            (_f("start", "연속 기동", "START_PB"), _f("stop", "정지", "STOP_PB"),
+             _f("jog", "조그 버튼", "JOG_PB"), _f("motor_run", "연속 운전", "MOTOR_RUN"),
+             _f("motor_jog", "조그 운전", "MOTOR_JOG")),
+            _jog_run,
+            safety_note="조그(점동)는 홀드-투-런으로만 동작시키고 "
+            "위험부 접근은 하드와이어로 막으세요.",
+        ),
+        Recipe(
+            "star_delta", "Y-Δ 기동", "스타로 기동 후 N초 뒤 델타로 전환(타이머).", "타이머",
+            (_f("start", "기동", "START_PB"), _f("stop", "정지", "STOP_PB"),
+             _f("main", "주접촉기", "MAIN_CON"), _f("star", "스타", "STAR_CON"),
+             _f("delta", "델타", "DELTA_CON"), _f("delay_sec", "전환 지연(초)", "5", "time_sec")),
+            _star_delta,
+            safety_note="스타/델타 동시투입 금지는 기계식 상호잠금 접촉기로도 반드시 구성하세요.",
+        ),
+        Recipe(
+            "latch_alarm", "래치형 알람", "고장 시 알람 래치, 해소+리셋으로 소거.", "알람",
+            (_f("fault_a", "고장 A", "FAULT_A"), _f("fault_b", "고장 B", "FAULT_B"),
+             _f("fault_c", "고장 C", "FAULT_C"), _f("reset", "리셋", "ALARM_RST"),
+             _f("alarm", "알람", "ALARM")),
+            _latch_alarm,
+            safety_note="알람은 통지용입니다. 위험 정지는 "
+            "하드와이어 안전회로가 별도로 해야 합니다.",
+        ),
+        Recipe(
+            "first_out_alarm", "최초고장 알람", "먼저 난 고장만 표시(first-out).", "알람",
+            (_f("fault_a", "고장 A", "FAULT_A"), _f("fault_b", "고장 B", "FAULT_B"),
+             _f("ack", "확인", "ALM_ACK"), _f("reset", "리셋", "ALM_RST"),
+             _f("latch_a", "A 최초", "LATCH_A"), _f("latch_b", "B 최초", "LATCH_B"),
+             _f("horn", "경음기", "HORN")),
+            _first_out_alarm,
+            safety_note="알람/경음기는 통지용입니다. 안전 정지는 하드와이어로 구현하세요.",
+        ),
+        Recipe(
+            "duty_standby", "펌프 리드/래그", "수요에 따라 주펌프, 고수요면 예비펌프 추가.", "공정",
+            (_f("demand", "수요", "DEMAND"), _f("high_demand", "고수요", "HIGH_DEMAND"),
+             _f("stop", "정지", "SYS_STOP"), _f("lead", "리드 펌프", "PUMP_LEAD"),
+             _f("lag", "래그 펌프", "PUMP_LAG")),
+            _duty_standby,
+            safety_note="과압/공운전 보호는 하드와이어 압력/레벨 트립으로 별도 구성하세요.",
+        ),
+        Recipe(
+            "two_hand_safety", "양수 조작 허가", "양손+가드+E-stop 정상일 때만 허가(보조).", "안전",
+            (_f("lh", "좌측 버튼", "LH_BTN"), _f("rh", "우측 버튼", "RH_BTN"),
+             _f("guard", "가드 닫힘", "GUARD_CLOSED"), _f("estop_ok", "E-stop 정상", "ESTOP_OK"),
+             _f("enable", "기동 허가", "PRESS_ENABLE")),
+            _two_hand,
+            safety_note="⛔ 이것은 보조 로직일 뿐입니다. 양수조작·가드·E-stop 은 반드시 "
+            "안전인증 부품(안전릴레이/안전PLC)으로 하드와이어 구현하세요(ISO 13849).",
         ),
     ]
 }
