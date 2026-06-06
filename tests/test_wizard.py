@@ -233,3 +233,88 @@ def test_press_muting_has_strong_safety_note() -> None:
     """프레스 뮤팅은 강한(⛔) 안전 경고를 단다."""
     from app.wizard import RECIPES
     assert "⛔" in RECIPES["press_muting"].safety_note
+
+
+# --- 라운드3 신규 12 레시피 회귀 ---
+_NEW_RECIPES = [
+    "three_wire", "cascade_conveyor", "overload_latch", "guard_interlock",
+    "tower_lamp", "flasher", "one_shot", "conveyor_jam",
+    "retry_alarm", "shutter_gate", "runtime_maint",
+]
+
+
+@pytest.mark.parametrize("rid", _NEW_RECIPES)
+def test_new_recipe_synth_verify_clean(rid: str) -> None:
+    """신규 레시피: 이중코일 0·인터락오류 0·검증 통과·완전 커버."""
+    spec = build_spec(rid)
+    assert covers_all_outputs(spec), f"{rid}: 출력 미커버"
+    st = synthesize_st(spec)
+    assert detect_double_coils(st) == {}, f"{rid}: 이중코일"
+    report = verify(spec, st)
+    errs = [i.code for i in report.issues if i.severity == "error"]
+    assert report.passed, f"{rid}: 검증 실패 {errs}"
+    assert "INTERLOCK" not in errs, f"{rid}: 인터락 오류"
+
+
+def test_three_wire_stop_dominant() -> None:
+    """3선식은 정지 우선 — RUN→STOPPED 전이 조건이 정지뿐이어야 한다."""
+    spec = build_spec("three_wire")
+    leave = [t for t in spec.transitions if t.from_state == "RUN"][0]
+    assert leave.condition == "STOP_PB"
+    assert "MTR := " in synthesize_st(spec)
+
+
+def test_cascade_conveyor_timed_sequence() -> None:
+    """다단 컨베이어: 타이머로 단계 시간차, 세 컨베이어 모두 출력."""
+    spec = build_spec("cascade_conveyor", {"step_sec": "4"})
+    assert spec.timers and all(t.preset_ms == 4000 for t in spec.timers)
+    outs = {p.symbol for p in spec.io_points if p.description and "컨베이어" in p.description}
+    assert {"CONV_UP", "CONV_MID", "CONV_DOWN"} <= outs
+
+
+def test_shutter_gate_has_interlock() -> None:
+    """셔터: 개·폐 동시금지 인터락이 선언되고 ST에 상호 NOT 보호가 든다."""
+    spec = build_spec("shutter_gate")
+    assert spec.interlocks and {spec.interlocks[0].output_a, spec.interlocks[0].output_b} == {
+        "MTR_OPEN", "MTR_CLOSE"
+    }
+    st = synthesize_st(spec)
+    assert "NOT MTR_OPEN" in st and "NOT MTR_CLOSE" in st
+
+
+def test_tower_lamp_derived_one_color() -> None:
+    """타워램프: 적/녹/황이 파생식으로 상호배타(동시 1색)."""
+    spec = build_spec("tower_lamp")
+    exprs = {d.output: d.expression for d in spec.derived_outputs}
+    assert exprs["LAMP_RED"] == "FAULT"
+    assert exprs["LAMP_GREEN"] == "RUNNING AND NOT FAULT"
+    assert exprs["LAMP_AMBER"] == "NOT RUNNING AND NOT FAULT"
+    assert verify(spec, synthesize_st(spec)).passed
+
+
+def test_retry_alarm_uses_counter() -> None:
+    spec = build_spec("retry_alarm", {"retries": "5"})
+    assert spec.counters and spec.counters[0].preset == 5
+
+
+def test_runtime_maint_uses_counter() -> None:
+    spec = build_spec("runtime_maint", {"hours": "250"})
+    assert spec.counters and spec.counters[0].preset == 250
+
+
+def test_conveyor_jam_uses_timer() -> None:
+    spec = build_spec("conveyor_jam", {"jam_sec": "6"})
+    assert spec.timers and spec.timers[0].preset_ms == 6000
+
+
+def test_guard_interlock_off_condition_has_guard() -> None:
+    """가드가 열리면 즉시 정지 — RUN 이탈 조건에 NOT guard 포함."""
+    spec = build_spec("guard_interlock")
+    leave = [t for t in spec.transitions if t.from_state == "RUN"][0]
+    assert "GUARD_CLOSED" in leave.condition and "ESTOP_OK" in leave.condition
+
+
+def test_new_recipes_reject_bad_symbol() -> None:
+    with pytest.raises(WizardError):
+        build_spec("three_wire", {"motor": "모터"})
+

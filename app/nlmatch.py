@@ -64,6 +64,28 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
     # 넣지 않는다 — '뮤팅'이 명시될 때만 press_muting 이 이기고, 그 외 일반 양수조작은
     # two_hand_safety 가 기본이 되게 한다. 둘은 CONFUSABLE_QUESTIONS 로 가른다).
     "press_muting": ["뮤팅", "뮤트", "muting", "mute", "자동공급", "뮤팅모듈", "뮤팅구간"],
+    "three_wire": ["3선식", "삼선식", "표준", "기동정지", "정지우선", "자기유지회로",
+                   "푸시버튼", "전동기", "마그네트", "전자접촉기", "3-wire", "seal"],
+    "cascade_conveyor": ["다단", "컨베이어", "캐스케이드", "순차기동", "하류", "상류",
+                         "시간차", "라인", "이송", "벨트", "cascade", "conveyor"],
+    "overload_latch": ["과부하", "트립", "이오씨알", "전자식과부하", "과전류", "차단",
+                       "과부하트립", "래치리셋", "overload", "trip", "eocr"],
+    "guard_interlock": ["안전문", "가드", "도어", "방호문", "문열림", "인터락",
+                        "안전스위치", "방호", "guard", "interlock", "door"],
+    "tower_lamp": ["타워램프", "신호탑", "표시등", "삼색등", "패트라이트", "상태표시",
+                   "녹색등", "적색등", "황색등", "tower", "lamp", "stack"],
+    "flasher": ["점멸", "플래셔", "깜빡", "깜박", "점멸등", "블링크", "명멸",
+                "주기점등", "flash", "blink", "flasher"],
+    "one_shot": ["원샷", "펄스", "상승에지", "에지", "한번만", "단발", "트리거",
+                 "원펄스", "oneshot", "pulse", "edge"],
+    "conveyor_jam": ["적체", "잼", "막힘", "걸림", "정체", "상류정지", "병목",
+                     "쌓임", "jam", "block", "pileup"],
+    "retry_alarm": ["재시도", "리트라이", "재시도횟수", "실패누적", "n회", "횟수초과",
+                    "재시도알람", "retry", "attempt", "재시도후알람"],
+    "shutter_gate": ["셔터", "게이트", "개폐", "도어개폐", "열림닫힘", "리밋",
+                     "올림내림", "셔터문", "shutter", "gate", "개폐기"],
+    "runtime_maint": ["운전시간", "적산", "정비", "정비알람", "가동시간", "메인터넌스",
+                      "누적시간", "점검주기", "runtime", "maintenance", "hour"],
 }
 
 _SEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*초")

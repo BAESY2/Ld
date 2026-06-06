@@ -272,6 +272,8 @@ def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str
     for i in range(len(inputs) - 1):  # 인접 입력 쌍 ON(전이 트리거 다양화)
         pair = {inputs[i], inputs[i + 1]}
         phases.append({s: (s in pair) for s in inputs})
+    for sym in inputs:  # 단독 OFF(나머지 전부 ON) — 다중 허가 출력(예: 가드+E-stop+기동)
+        phases.append({s: (s != sym) for s in inputs})  # 을 깨우고 정지 입력만 끄는 조합
     phases.append({s: True for s in inputs})  # 마지막: 전부 ON(차단/정지 경계)
     stim: list[tuple[int, dict[str, bool]]] = []
     for k, ph in enumerate(phases):

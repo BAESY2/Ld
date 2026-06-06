@@ -682,6 +682,343 @@ def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
     return Field(key, label, default, kind)
 
 
+def _three_wire(a: Answers) -> StateMachineSpec:
+    """3선식 표준 기동/정지(자기유지, 정지 우선). 정지가 기동을 항상 이긴다."""
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    motor = _val(a, "motor", "MTR")
+    return StateMachineSpec(
+        title="3선식 표준 기동/정지(정지 우선)",
+        io_points=[
+            _io(start, _IN, "기동(a접점)"),
+            _io(stop, _IN, "정지(b접점·평상시 ON으로 배선 권장)"),
+            _io(motor, _OUT, "전동기"),
+        ],
+        states=[
+            SfcState(name="STOPPED", is_initial=True),
+            SfcState(name="RUN", on_entry=[f"{motor} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("STOPPED", "RUN", f"{start} AND NOT {stop}"),
+            _tr("RUN", "STOPPED", f"{stop}"),  # 정지 우선
+        ],
+    )
+
+
+def _cascade_conveyor(a: Answers) -> StateMachineSpec:
+    """다단 컨베이어 순차 기동·정지(하류부터 기동, 상류부터 정지).
+
+    기동: C3(하류)→C2→C1(상류) 순으로 시간차 투입(역류·적체 방지).
+    정지: C1(상류)→C2→C3(하류) 순으로 시간차 차단(잔류물 배출).
+    각 단계 출력 one-hot 가 아니라 누적 ON 이므로 타임드 시퀀서를 직접 쓰지 않고
+    상태 누적형으로 합성한다(자기유지 + 단계 진입).
+    """
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    c1 = _val(a, "up", "CONV_UP")
+    c2 = _val(a, "mid", "CONV_MID")
+    c3 = _val(a, "down", "CONV_DOWN")
+    t = _pint(a, "step_sec", 3, lo=1)
+    return StateMachineSpec(
+        title="다단 컨베이어 순차 기동·정지(하류기동/상류정지)",
+        io_points=[
+            _io(start, _IN, "기동"), _io(stop, _IN, "정지"),
+            _io(c3, _OUT, "하류 컨베이어"), _io(c2, _OUT, "중간 컨베이어"),
+            _io(c1, _OUT, "상류 컨베이어"),
+        ],
+        timers=[
+            TimerSpec(name="T0", preset_ms=t * 1000, enable_condition=c3,
+                      description="하류 기동 후 중간 투입 지연"),
+            TimerSpec(name="T1", preset_ms=t * 1000, enable_condition=c2,
+                      description="중간 기동 후 상류 투입 지연"),
+            TimerSpec(name="T2", preset_ms=t * 1000, enable_condition=f"{stop} AND {c1}",
+                      description="정지 시 상류 차단 후 중간 차단 지연"),
+            TimerSpec(name="T3", preset_ms=t * 1000, enable_condition=f"{stop} AND {c2}",
+                      description="정지 시 중간 차단 후 하류 차단 지연"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="RUN_DOWN", on_entry=[f"{c3} := TRUE;"]),
+            SfcState(name="RUN_MID", on_entry=[f"{c3} := TRUE;", f"{c2} := TRUE;"]),
+            SfcState(name="RUN_ALL",
+                     on_entry=[f"{c3} := TRUE;", f"{c2} := TRUE;", f"{c1} := TRUE;"]),
+            SfcState(name="STOP_UP", on_entry=[f"{c3} := TRUE;", f"{c2} := TRUE;"]),
+            SfcState(name="STOP_MID", on_entry=[f"{c3} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "RUN_DOWN", f"{start} AND NOT {stop}"),
+            _tr("RUN_DOWN", "RUN_MID", f"T0.Q AND NOT {stop}"),
+            _tr("RUN_MID", "RUN_ALL", f"T1.Q AND NOT {stop}"),
+            _tr("RUN_DOWN", "IDLE", f"{stop}"),
+            _tr("RUN_MID", "STOP_MID", f"{stop}"),
+            _tr("RUN_ALL", "STOP_UP", f"{stop}"),
+            _tr("STOP_UP", "STOP_MID", "T2.Q"),
+            _tr("STOP_MID", "IDLE", "T3.Q"),
+        ],
+    )
+
+
+def _overload_latch(a: Answers) -> StateMachineSpec:
+    """과부하 트립 래치 + 리셋. 트립되면 트립표시 래치, 해소+리셋으로만 복귀."""
+    ol = _val(a, "overload", "OL_TRIP")
+    reset = _val(a, "reset", "TRIP_RST")
+    tripped = _val(a, "tripped", "TRIPPED")
+    return StateMachineSpec(
+        title="과부하 트립 래치+리셋",
+        io_points=[
+            _io(ol, _IN, "과부하 계전기(EOCR) 트립"),
+            _io(reset, _IN, "트립 리셋"),
+            _io(tripped, _OUT, "트립 표시/차단"),
+        ],
+        states=[
+            SfcState(name="NORMAL", is_initial=True),
+            SfcState(name="TRIP", on_entry=[f"{tripped} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("NORMAL", "TRIP", f"{ol}"),
+            _tr("TRIP", "NORMAL", f"{reset} AND NOT {ol}"),
+        ],
+    )
+
+
+def _guard_interlock(a: Answers) -> StateMachineSpec:
+    """안전문/가드 인터락 — 가드 닫힘+E-stop 정상일 때만 운전, 열리면 즉시 정지."""
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    guard = _val(a, "guard", "GUARD_CLOSED")
+    estop = _val(a, "estop_ok", "ESTOP_OK")
+    motor = _val(a, "motor", "MACHINE")
+    return StateMachineSpec(
+        title="안전문/가드 인터락(가드 열리면 정지)",
+        io_points=[
+            _io(start, _IN, "기동"), _io(stop, _IN, "정지"),
+            _io(guard, _IN, "가드 닫힘(닫히면 ON)"),
+            _io(estop, _IN, "E-stop 정상(안전릴레이 접점)"),
+            _io(motor, _OUT, "기계 구동"),
+        ],
+        states=[
+            SfcState(name="SAFE", is_initial=True),
+            SfcState(name="RUN", on_entry=[f"{motor} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("SAFE", "RUN", f"{start} AND {guard} AND {estop} AND NOT {stop}"),
+            # 가드 열림·E-stop·정지 중 하나라도면 즉시 정지
+            _tr("RUN", "SAFE", f"{stop} OR NOT {guard} OR NOT {estop}"),
+        ],
+    )
+
+
+def _tower_lamp(a: Answers) -> StateMachineSpec:
+    """신호탑 타워램프 상태표시 — 운전=녹/고장=적/대기=황(파생 출력, 동시 1색)."""
+    run = _val(a, "running", "RUNNING")
+    fault = _val(a, "fault", "FAULT")
+    green = _val(a, "green", "LAMP_GREEN")
+    red = _val(a, "red", "LAMP_RED")
+    amber = _val(a, "amber", "LAMP_AMBER")
+    return StateMachineSpec(
+        title="신호탑 타워램프 상태표시(녹/적/황)",
+        io_points=[
+            _io(run, _IN, "운전중(설비 RUN 접점)"),
+            _io(fault, _IN, "고장 발생"),
+            _io(green, _OUT, "녹색(운전)"),
+            _io(red, _OUT, "적색(고장)"),
+            _io(amber, _OUT, "황색(대기)"),
+        ],
+        derived_outputs=[
+            # 우선순위: 고장(적) > 운전(녹) > 대기(황). 동시 점등 방지.
+            DerivedOutput(output=red, expression=f"{fault}",
+                          description="고장이면 적색"),
+            DerivedOutput(output=green, expression=f"{run} AND NOT {fault}",
+                          description="고장 아니고 운전중이면 녹색"),
+            DerivedOutput(output=amber, expression=f"NOT {run} AND NOT {fault}",
+                          description="고장 아니고 정지(대기)면 황색"),
+        ],
+    )
+
+
+def _flasher(a: Answers) -> StateMachineSpec:
+    """점멸/플래셔 — 기동 중 램프가 N초 주기로 ON/OFF 반복(타이머 토글)."""
+    start = _val(a, "start", "START_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    lamp = _val(a, "lamp", "FLASH_LAMP")
+    sec = _pint(a, "period_sec", 1, lo=1)
+    # 점등(ON) 상태에서 T_ON 후 소등, 소등(OFF) 상태에서 T_OFF 후 점등 → 반복.
+    return StateMachineSpec(
+        title=f"점멸/플래셔(주기 {sec}초)",
+        io_points=[
+            _io(start, _IN, "기동"), _io(stop, _IN, "정지"),
+            _io(lamp, _OUT, "점멸 램프"),
+        ],
+        timers=[
+            TimerSpec(name="T0", preset_ms=sec * 1000, enable_condition=lamp,
+                      description="점등 유지 시간"),
+            TimerSpec(name="T1", preset_ms=sec * 1000,
+                      enable_condition=f"{start} AND NOT {stop} AND NOT {lamp}",
+                      description="소등 유지 시간"),
+        ],
+        states=[
+            SfcState(name="OFF", is_initial=True),
+            SfcState(name="LIT", on_entry=[f"{lamp} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("OFF", "LIT", f"({start} AND NOT {stop}) AND (T1.Q OR NOT {start})"),
+            _tr("LIT", "OFF", f"T0.Q OR {stop}"),
+        ],
+    )
+
+
+def _one_shot(a: Answers) -> StateMachineSpec:
+    """원샷 펄스 — 트리거 상승에지에서 출력 1스캔 펄스(타이머 1스캔 폭)."""
+    trig = _val(a, "trigger", "TRIG_PB")
+    reset = _val(a, "reset", "OS_RST")
+    pulse = _val(a, "pulse", "ONE_SHOT")
+    return StateMachineSpec(
+        title="원샷 펄스(상승에지)",
+        io_points=[
+            _io(trig, _IN, "트리거"),
+            _io(reset, _IN, "재무장 리셋"),
+            _io(pulse, _OUT, "원샷 출력"),
+        ],
+        states=[
+            SfcState(name="ARMED", is_initial=True),
+            SfcState(name="FIRED", on_entry=[f"{pulse} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("ARMED", "FIRED", f"{trig}"),
+            # 트리거를 놓거나(에지 소비) 리셋하면 재무장 → 다음 상승에지에 다시 1발
+            _tr("FIRED", "ARMED", f"NOT {trig} OR {reset}"),
+        ],
+    )
+
+
+def _conveyor_jam(a: Answers) -> StateMachineSpec:
+    """컨베이어 적체(jam) 감지 → 상류 정지. 적체 센서가 N초 지속이면 상류 차단."""
+    start = _val(a, "start", "START_PB")
+    reset = _val(a, "reset", "JAM_RST")
+    jam = _val(a, "jam_sensor", "JAM_LS")
+    upstream = _val(a, "upstream", "CONV_UP")
+    sec = _pint(a, "jam_sec", 3, lo=1)
+    return StateMachineSpec(
+        title="컨베이어 적체(jam) 감지→상류 정지",
+        io_points=[
+            _io(start, _IN, "운전 지령"),
+            _io(reset, _IN, "적체 해소 리셋"),
+            _io(jam, _IN, "적체 감지 센서"),
+            _io(upstream, _OUT, "상류 컨베이어"),
+        ],
+        timers=[
+            TimerSpec(name="T1", preset_ms=sec * 1000, enable_condition=jam,
+                      description=f"적체 {sec}초 지속 판정"),
+        ],
+        states=[
+            SfcState(name="STOPPED", is_initial=True),
+            SfcState(name="RUN", on_entry=[f"{upstream} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("STOPPED", "RUN", f"{start} AND NOT T1.Q"),
+            # 적체 N초 지속이면 상류 정지(잼 누적 방지)
+            _tr("RUN", "STOPPED", f"T1.Q OR NOT {start}"),
+            _tr("STOPPED", "RUN", f"{reset} AND {start} AND NOT {jam}"),
+        ],
+    )
+
+
+def _retry_alarm(a: Answers) -> StateMachineSpec:
+    """재시도 N회 후 알람 — 실패가 N회 누적되면 알람 래치(카운터→알람)."""
+    fail = _val(a, "fail", "FAIL_PULSE")
+    reset = _val(a, "reset", "RETRY_RST")
+    alarm = _val(a, "alarm", "RETRY_ALARM")
+    n = _pint(a, "retries", 3, lo=1)
+    return StateMachineSpec(
+        title=f"재시도 {n}회 후 알람",
+        io_points=[
+            _io(fail, _IN, "실패 1회 펄스"),
+            _io(reset, _IN, "재시도 카운터 리셋"),
+            _io(alarm, _OUT, "재시도 초과 알람"),
+        ],
+        counters=[
+            CounterSpec(name="C1", preset=n, count_condition=fail,
+                        reset_condition=reset, description=f"실패 {n}회 누적"),
+        ],
+        states=[
+            SfcState(name="RETRYING", is_initial=True),
+            SfcState(name="ALARMED", on_entry=[f"{alarm} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("RETRYING", "ALARMED", f"C1.Q AND NOT {reset}"),
+            _tr("ALARMED", "RETRYING", f"{reset}"),
+        ],
+    )
+
+
+def _shutter_gate(a: Answers) -> StateMachineSpec:
+    """셔터/게이트 개폐 — 열림/닫힘/정지, 리밋 정지, 개폐 동시금지(인터락)."""
+    open_pb = _val(a, "open_pb", "OPEN_PB")
+    close_pb = _val(a, "close_pb", "CLOSE_PB")
+    stop = _val(a, "stop", "STOP_PB")
+    open_ls = _val(a, "open_ls", "OPEN_LS")
+    close_ls = _val(a, "close_ls", "CLOSE_LS")
+    open_m = _val(a, "open_motor", "MTR_OPEN")
+    close_m = _val(a, "close_motor", "MTR_CLOSE")
+    return StateMachineSpec(
+        title="셔터/게이트 개폐(리밋·동시금지)",
+        io_points=[
+            _io(open_pb, _IN, "열림 버튼"), _io(close_pb, _IN, "닫힘 버튼"),
+            _io(stop, _IN, "정지"), _io(open_ls, _IN, "열림 끝 리밋"),
+            _io(close_ls, _IN, "닫힘 끝 리밋"),
+            _io(open_m, _OUT, "열림 구동"), _io(close_m, _OUT, "닫힘 구동"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="OPENING", on_entry=[f"{open_m} := TRUE;"]),
+            SfcState(name="CLOSING", on_entry=[f"{close_m} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "OPENING",
+                f"{open_pb} AND NOT {close_pb} AND NOT {stop} AND NOT {open_ls}"),
+            _tr("OPENING", "IDLE", f"{stop} OR {open_ls} OR {close_pb}"),
+            _tr("IDLE", "CLOSING",
+                f"{close_pb} AND NOT {open_pb} AND NOT {stop} AND NOT {close_ls}"),
+            _tr("CLOSING", "IDLE", f"{stop} OR {close_ls} OR {open_pb}"),
+        ],
+        interlocks=[
+            Interlock(output_a=open_m, output_b=close_m, reason="개·폐 동시 구동 금지"),
+        ],
+    )
+
+
+def _runtime_maint(a: Answers) -> StateMachineSpec:
+    """적산 운전시간→정비 알람 — 운전 1초 펄스를 N회 누적하면 정비 알람."""
+    run = _val(a, "run_pulse", "RUN_1S")
+    reset = _val(a, "reset", "MAINT_RST")
+    alarm = _val(a, "alarm", "MAINT_DUE")
+    hours = _pint(a, "hours", 100, lo=1)
+    return StateMachineSpec(
+        title=f"적산 운전시간 정비 알람({hours}h proxy)",
+        io_points=[
+            _io(run, _IN, "운전시간 적산 펄스(1시간 1펄스)"),
+            _io(reset, _IN, "정비 완료 리셋"),
+            _io(alarm, _OUT, "정비 도래 알람"),
+        ],
+        counters=[
+            CounterSpec(name="C1", preset=hours, count_condition=run,
+                        reset_condition=reset, description=f"누적 {hours}시간"),
+        ],
+        states=[
+            SfcState(name="OK", is_initial=True),
+            SfcState(name="DUE", on_entry=[f"{alarm} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("OK", "DUE", f"C1.Q AND NOT {reset}"),
+            _tr("DUE", "OK", f"{reset}"),
+        ],
+    )
+
+
+def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
+    return Field(key, label, default, kind)
+
+
 RECIPES: dict[str, Recipe] = {
     r.id: r
     for r in [
@@ -890,6 +1227,103 @@ RECIPES: dict[str, Recipe] = {
             safety_note="⛔ 이것은 보조 로직일 뿐입니다. 양수조작·가드·뮤팅·E-stop 은 반드시 "
             "안전인증 부품(안전릴레이/안전PLC, 뮤팅은 인증 뮤팅모듈)으로 하드와이어 "
             "구현하세요. 뮤팅 오용은 중대재해로 직결됩니다(KOSHA 프레스 방호, ISO 13849).",
+        ),
+        Recipe(
+            "three_wire", "3선식 기동/정지", "표준 3선식 자기유지(정지 우선).", "기본",
+            (_f("start", "기동 버튼", "START_PB"), _f("stop", "정지 버튼", "STOP_PB"),
+             _f("motor", "전동기 출력", "MTR")),
+            _three_wire,
+            safety_note="정지(b접점)는 단선 시 정지되도록 평상시 ON(NC)으로 배선하세요. "
+            "비상정지는 별도 하드와이어 E-stop 회로로 전원을 차단해야 합니다.",
+        ),
+        Recipe(
+            "cascade_conveyor", "다단 컨베이어 순차", "하류부터 기동, 상류부터 정지(시간차).",
+            "순차",
+            (_f("start", "기동", "START_PB"), _f("stop", "정지", "STOP_PB"),
+             _f("up", "상류 컨베이어", "CONV_UP"), _f("mid", "중간 컨베이어", "CONV_MID"),
+             _f("down", "하류 컨베이어", "CONV_DOWN"),
+             _f("step_sec", "단간 시간(초)", "3", "time_sec")),
+            _cascade_conveyor,
+            safety_note="물림점·인입부 끼임은 하드와이어 풀코드/가드 안전회로로 별도 막으세요.",
+        ),
+        Recipe(
+            "overload_latch", "과부하 트립 래치", "과부하 트립을 래치하고 리셋으로만 복귀.",
+            "알람",
+            (_f("overload", "과부하 트립", "OL_TRIP"), _f("reset", "트립 리셋", "TRIP_RST"),
+             _f("tripped", "트립 표시/차단", "TRIPPED")),
+            _overload_latch,
+            safety_note="EOCR/과부하 차단은 동력 차단을 하드와이어로도 보장하세요. "
+            "이 로직은 표시·운전금지용입니다.",
+        ),
+        Recipe(
+            "guard_interlock", "안전문/가드 인터락",
+            "가드 열리면 즉시 정지(가드+E-stop 정상시만 운전).", "안전",
+            (_f("start", "기동", "START_PB"), _f("stop", "정지", "STOP_PB"),
+             _f("guard", "가드 닫힘", "GUARD_CLOSED"), _f("estop_ok", "E-stop 정상", "ESTOP_OK"),
+             _f("motor", "기계 구동", "MACHINE")),
+            _guard_interlock,
+            safety_note="⛔ 가드·E-stop 은 반드시 안전인증 부품(안전릴레이/안전PLC)으로 "
+            "하드와이어 구현하세요(ISO 13849). 이 소프트 로직은 보조일 뿐입니다.",
+        ),
+        Recipe(
+            "tower_lamp", "신호탑 상태표시", "운전=녹/고장=적/대기=황 자동 표시.", "표시",
+            (_f("running", "운전중 접점", "RUNNING"), _f("fault", "고장", "FAULT"),
+             _f("green", "녹색등", "LAMP_GREEN"), _f("red", "적색등", "LAMP_RED"),
+             _f("amber", "황색등", "LAMP_AMBER")),
+            _tower_lamp,
+            safety_note="표시등은 통지용입니다. 위험 정지·차단은 하드와이어로 별도 구성하세요.",
+        ),
+        Recipe(
+            "flasher", "점멸/플래셔", "기동 중 램프가 일정 주기로 깜빡임.", "타이머",
+            (_f("start", "기동", "START_PB"), _f("stop", "정지", "STOP_PB"),
+             _f("lamp", "점멸 램프", "FLASH_LAMP"),
+             _f("period_sec", "점멸 주기(초)", "1", "time_sec")),
+            _flasher,
+            safety_note="경고 점멸은 통지용입니다. 안전 정지는 하드와이어로 구현하세요.",
+        ),
+        Recipe(
+            "one_shot", "원샷 펄스", "트리거 상승에지에 1회 펄스 출력.", "기본",
+            (_f("trigger", "트리거", "TRIG_PB"), _f("reset", "재무장 리셋", "OS_RST"),
+             _f("pulse", "원샷 출력", "ONE_SHOT")),
+            _one_shot,
+            safety_note="펄스 출력에 위험동작을 직접 걸지 말고 홀드-투-런·하드와이어로 보호하세요.",
+        ),
+        Recipe(
+            "conveyor_jam", "적체 감지 상류정지", "적체가 지속되면 상류 컨베이어를 정지.", "공정",
+            (_f("start", "운전 지령", "START_PB"), _f("reset", "적체 리셋", "JAM_RST"),
+             _f("jam_sensor", "적체 센서", "JAM_LS"), _f("upstream", "상류 컨베이어", "CONV_UP"),
+             _f("jam_sec", "적체 판정(초)", "3", "time_sec")),
+            _conveyor_jam,
+            safety_note="물림점 끼임은 하드와이어 풀코드/가드 안전회로로 별도 막으세요.",
+        ),
+        Recipe(
+            "retry_alarm", "재시도 후 알람", "실패가 N회 누적되면 알람 래치.", "카운터",
+            (_f("fail", "실패 펄스", "FAIL_PULSE"), _f("reset", "리셋", "RETRY_RST"),
+             _f("alarm", "초과 알람", "RETRY_ALARM"), _f("retries", "재시도 횟수", "3", "int")),
+            _retry_alarm,
+            safety_note="알람은 통지용입니다. 위험 정지는 하드와이어 안전회로로 하세요.",
+        ),
+        Recipe(
+            "shutter_gate", "셔터/게이트 개폐", "열림/닫힘/정지, 리밋 정지, 동시 구동 금지.",
+            "기본",
+            (_f("open_pb", "열림 버튼", "OPEN_PB"), _f("close_pb", "닫힘 버튼", "CLOSE_PB"),
+             _f("stop", "정지", "STOP_PB"), _f("open_ls", "열림 끝 리밋", "OPEN_LS"),
+             _f("close_ls", "닫힘 끝 리밋", "CLOSE_LS"),
+             _f("open_motor", "열림 구동", "MTR_OPEN"),
+             _f("close_motor", "닫힘 구동", "MTR_CLOSE")),
+            _shutter_gate,
+            safety_note="개·폐 동시투입 금지는 기계식 상호잠금 접점으로도 반드시 막고, "
+            "끼임 방지는 하드와이어 안전엣지/광커튼으로 구성하세요.",
+        ),
+        Recipe(
+            "runtime_maint", "운전시간 정비알람", "누적 운전시간이 한도에 도달하면 정비 알람.",
+            "카운터",
+            (_f("run_pulse", "운전시간 적산 펄스", "RUN_1S"),
+             _f("reset", "정비 완료 리셋", "MAINT_RST"),
+             _f("alarm", "정비 알람", "MAINT_DUE"),
+             _f("hours", "정비 한도(시간)", "100", "int")),
+            _runtime_maint,
+            safety_note="알람은 통지용입니다. 안전 관련 정비 주기는 별도 관리체계로 보장하세요.",
         ),
     ]
 }

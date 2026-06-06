@@ -9,6 +9,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.server import app  # noqa: E402
+from app.wizard import RECIPES  # noqa: E402
 
 client = TestClient(app)
 
@@ -174,7 +175,7 @@ def test_recipes_returns_21_flat() -> None:
     r = client.get("/api/recipes")
     assert r.status_code == 200
     data = r.json()
-    assert len(data) == 21
+    assert len(data) == len(RECIPES)
     assert all("category" in rec and "fields" in rec for rec in data)
 
 
@@ -183,13 +184,13 @@ def test_recipes_grouped_has_categories() -> None:
     r = client.get("/api/recipes/grouped")
     assert r.status_code == 200
     data = r.json()
-    assert data["total"] == 21
+    assert data["total"] == len(RECIPES)
     cats = {g["category"] for g in data["groups"]}
     # 핵심 그룹이 모두 존재한다.
     assert {"뿌리산업", "안전", "순차", "모션"}.issubset(cats)
     # 그룹 안의 레시피 총합이 21 과 같다(누락/중복 없음).
-    assert sum(g["count"] for g in data["groups"]) == 21
-    assert sum(len(g["recipes"]) for g in data["groups"]) == 21
+    assert sum(g["count"] for g in data["groups"]) == len(RECIPES)
+    assert sum(len(g["recipes"]) for g in data["groups"]) == len(RECIPES)
 
 
 # ---------------------------------------------------------------------------
