@@ -1015,10 +1015,6 @@ def _runtime_maint(a: Answers) -> StateMachineSpec:
     )
 
 
-def _f(key: str, label: str, default: str, kind: str = "symbol") -> Field:
-    return Field(key, label, default, kind)
-
-
 RECIPES: dict[str, Recipe] = {
     r.id: r
     for r in [

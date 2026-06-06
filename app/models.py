@@ -174,6 +174,50 @@ class StateMachineSpec(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 프로젝트 합성 (다중 서브시스템 → 하나의 명세)
+# ---------------------------------------------------------------------------
+class ModuleInstance(BaseModel):
+    """프로젝트 안의 서브시스템 인스턴스 1개.
+
+    한 레시피(recipe)를 answers 로 파라미터화해 만든 명세를, ``name`` 네임스페이스로
+    감싸 전역 프로젝트에 합성한다. 같은 레시피를 이름만 달리해 여러 번 인스턴스화하면
+    (예: conv1/conv2/conv3) 주소·심볼 충돌 없이 나란히 놓인다.
+
+    shared: 이 모듈의 *로컬 심볼* → *프로젝트 전역 심볼* 매핑. 여기 들어간 심볼은
+    네임스페이스 프리픽스를 붙이지 않고 전역 이름으로 공유된다(예: 공통 비상정지
+    ``{"ESTOP": "MASTER_ESTOP"}``). 주로 공유 입력에 쓴다 — 공유 출력에 두 모듈이
+    대입하면 검증기가 이중코일로 잡는다(은닉 병합 금지).
+    """
+
+    name: str = Field(..., description="모듈 인스턴스 이름(네임스페이스, 예: conv1)")
+    recipe: str = Field(..., description="레시피 id (wizard.RECIPES 의 키)")
+    answers: dict[str, str] = Field(default_factory=dict, description="레시피 빈칸 답변")
+    shared: dict[str, str] = Field(
+        default_factory=dict, description="로컬 심볼→전역 공유 심볼(프리픽스 면제)"
+    )
+
+
+class CrossInterlock(BaseModel):
+    """서브시스템 *사이* 의 상호배타. 예: 탱크A 배출 중엔 펌프2 금지.
+
+    출력 참조는 ``"모듈이름.로컬심볼"`` 형식(예: ``"pump2.MOTOR"``) 또는 공유 전역
+    심볼(점 없음)을 쓴다. 합성 시 실제 렌더 심볼로 해석돼 spec.interlocks 에 합쳐진다.
+    """
+
+    output_a: str = Field(..., description="'모듈.심볼' 또는 공유 심볼")
+    output_b: str = Field(..., description="'모듈.심볼' 또는 공유 심볼")
+    reason: str = Field(default="", description="교차 인터락 사유")
+
+
+class Project(BaseModel):
+    """대규모 설계 단위 — 서브시스템 N개를 하나의 프로그램으로 합성하는 명세."""
+
+    title: str = ""
+    modules: list[ModuleInstance] = Field(default_factory=list)
+    cross_interlocks: list[CrossInterlock] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # A3 산출물: VerificationReport
 # ---------------------------------------------------------------------------
 class VerificationIssue(BaseModel):
