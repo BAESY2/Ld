@@ -3,170 +3,230 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ladder Studio — 자연어 공장 자동화 설계</title>
+<title>ladder-studio</title>
 <style>
+  /* ── 터미널/Cursor 미니멀 테마 (변수명은 studio.js 인라인 스타일과 호환 유지) ── */
   :root {
-    --bg: #0e1620; --panel: #141e2b; --panel2: #1a2636; --line: #243348;
-    --txt: #dce4f0; --dim: #8b97a8; --accent: #4f9dff; --ok: #46c46a;
-    --warn: #f5b14c; --err: #ff7a7a;
+    --bg: #0a0a0b; --panel: #0f1011; --panel2: #131417; --line: #1e2024;
+    --txt: #cfd2d6; --dim: #6a6e76; --accent: #82aaff; --prompt: #7ee787;
+    --ok: #7ee787; --warn: #e3b341; --err: #f7768e;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.5 -apple-system, "Noto Sans KR", Segoe UI, Roboto, sans-serif;
-         background: var(--bg); color: var(--txt); height: 100vh; overflow: hidden; }
-  header { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
-           background: var(--panel); border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
-  header .sp { flex: 1; }
-  header select, header button { background: var(--panel2); color: var(--txt);
-           border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
-  header button:hover { border-color: var(--accent); }
-  .safety { background: #2a1d12; color: #f5c48c; border-bottom: 1px solid #4a3417;
-            font-size: 12px; padding: 5px 14px; }
-  .grid { display: grid; grid-template-columns: 340px 1fr 320px; height: calc(100vh - 78px); }
-  .col { overflow: hidden; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt); font-family: var(--mono);
+    font-size: 13px; line-height: 1.55; height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: #2a3b5e; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #20232a; border-radius: 4px; }
+
+  /* ── 터미널 창 타이틀바 (신호등) ── */
+  .titlebar {
+    display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px;
+    background: var(--panel); border-bottom: 1px solid var(--line); user-select: none;
+  }
+  .dots { display: flex; gap: 7px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .dots .r { background: #ff5f56; } .dots .y { background: #ffbd2e; } .dots .g { background: #27c93f; }
+  .ttl { color: var(--dim); font-size: 12px; }
+  .ttl b { color: var(--txt); font-weight: 600; }
+  .sp { flex: 1; }
+  .titlebar #status { font-size: 12px; color: var(--dim); margin-right: 4px; }
+  .tbtn, .titlebar select {
+    background: transparent; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 5px; padding: 3px 8px; font-family: var(--mono); font-size: 12px; cursor: pointer;
+  }
+  .tbtn:hover, .titlebar select:hover { color: var(--txt); border-color: #2f333b; }
+  .titlebar select { color: var(--txt); }
+
+  .safety {
+    font-size: 11.5px; color: #c9a368; background: #16120a;
+    border-bottom: 1px solid var(--line); padding: 4px 14px;
+  }
+  .safety b { color: #e3b341; }
+
+  /* ── 3-pane ── */
+  .grid { display: grid; grid-template-columns: 320px 1fr 300px; height: calc(100vh - 38px - 25px); }
+  .col { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--line); }
   .col:last-child { border-right: none; }
-  .col h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim);
-            margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  .scroll { overflow-y: auto; flex: 1; padding: 10px 12px; }
+  .col h2 {
+    margin: 0; padding: 7px 12px; font-size: 11.5px; font-weight: 500; color: var(--dim);
+    border-bottom: 1px solid var(--line); letter-spacing: .02em;
+  }
+  .col h2::before { content: "» "; color: #34373d; }
+  .scroll { flex: 1; overflow-y: auto; padding: 10px 12px; }
 
-  /* 좌: 프로젝트 + 채팅 */
-  .module { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
-            padding: 8px 10px; margin-bottom: 8px; }
-  .module .row { display: flex; align-items: center; gap: 6px; }
-  .module .nm { font-weight: 600; color: #bcd2f0; }
+  /* ── 좌: 프로젝트(파일트리 느낌) ── */
+  .module { padding: 5px 0; border-bottom: 1px dotted #181a1e; }
+  .module .row { display: flex; align-items: center; gap: 7px; }
+  .module .row::before { content: "●"; color: var(--prompt); font-size: 9px; }
+  .module .nm { color: var(--txt); font-weight: 600; }
   .module .rc { color: var(--dim); font-size: 12px; }
-  .module .io { font-size: 11px; color: var(--dim); margin-top: 4px; word-break: break-all; }
-  .module .x { margin-left: auto; color: var(--err); cursor: pointer; border: none;
-               background: none; font-size: 16px; line-height: 1; }
-  .empty { color: var(--dim); padding: 16px 4px; font-size: 13px; }
-  .chat { border-top: 1px solid var(--line); display: flex; flex-direction: column; max-height: 46%; }
-  #chat-log { overflow-y: auto; padding: 10px 12px; flex: 1; }
-  .msg { margin-bottom: 8px; font-size: 13px; }
-  .msg.u { text-align: right; }
-  .msg .b { display: inline-block; padding: 6px 10px; border-radius: 10px; max-width: 90%; }
-  .msg.u .b { background: #1f3a5c; }
-  .msg.a .b { background: var(--panel2); }
-  .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px;
-          padding: 3px 10px; font-size: 12px; cursor: pointer; }
-  .chip:hover { border-color: var(--accent); }
-  .inrow { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
-  .inrow input { flex: 1; background: var(--panel2); border: 1px solid var(--line);
-                 color: var(--txt); border-radius: 6px; padding: 8px 10px; }
-  .inrow button { background: var(--accent); color: #06101e; border: none; border-radius: 6px;
-                  padding: 8px 14px; font-weight: 600; cursor: pointer; }
+  .module .io { color: #565a62; font-size: 11px; margin-left: 16px; word-break: break-all; }
+  .module .io::first-letter { color: var(--accent); }
+  .module .x {
+    margin-left: auto; background: none; border: none; color: var(--dim);
+    cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; font-family: var(--mono);
+  }
+  .module .x:hover { color: var(--err); }
+  .sec-title { color: #4a4e56; font-size: 10.5px; text-transform: uppercase; margin: 12px 0 4px; letter-spacing: .06em; }
+  .empty { color: var(--dim); font-size: 12.5px; padding: 10px 0; }
 
-  /* 중: 래더 미리보기 + 탭 */
-  .tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--line);
-          background: var(--panel); }
-  .tab { padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--dim);
-         border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; }
-  .tab.on { color: var(--txt); background: var(--panel2); border-color: var(--line); }
+  /* ── 좌하: 터미널 채팅 ── */
+  .chat { display: flex; flex-direction: column; border-top: 1px solid var(--line); height: 48%; background: #0c0d0e; }
+  .chat h2 { background: transparent; }
+  #chat-log { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 12.5px; }
+  .msg { margin: 2px 0; white-space: pre-wrap; word-break: break-word; }
+  .msg .b { display: inline; }
+  .msg.u .b::before { content: "❯ "; color: var(--prompt); }
+  .msg.u .b { color: var(--txt); }
+  .msg.a .b::before { content: "  "; }
+  .msg.a .b { color: var(--dim); }
+  .chips { margin: 4px 0 6px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    background: #15171b; border: 1px solid var(--line); border-radius: 4px;
+    padding: 2px 8px; font-size: 11.5px; color: var(--txt); cursor: pointer; font-family: var(--mono);
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip::before { content: "↳ "; color: var(--dim); }
+  .inrow { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+  .inrow::before { content: "❯"; color: var(--prompt); font-weight: 700; }
+  .inrow input {
+    flex: 1; background: transparent; border: none; outline: none; color: var(--txt);
+    font-family: var(--mono); font-size: 13px; caret-color: var(--prompt);
+  }
+  .inrow input::placeholder { color: #41454d; }
+  .inrow button {
+    background: transparent; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 5px; padding: 4px 10px; cursor: pointer; font-family: var(--mono); font-size: 12px;
+  }
+  .inrow button:hover { color: var(--prompt); border-color: var(--prompt); }
+
+  /* ── 중: 래더 + 탭 ── */
+  .tabs { display: flex; gap: 0; padding: 0 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .tab {
+    padding: 8px 12px; font-size: 12px; cursor: pointer; color: var(--dim);
+    border-bottom: 1.5px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--txt); }
+  .tab.on { color: var(--txt); border-bottom-color: var(--accent); }
   .view { display: none; }
   .view.on { display: block; }
-  #ladder svg { background: #0b121b; border-radius: 8px; }
-  pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, Menlo, monospace;
-        background: #0b121b; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  #ladder svg { background: transparent; }
+  pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12px;
+        color: #aeb4bd; background: transparent; margin: 0; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
-  th { color: var(--dim); }
-  .verdict { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 13px; }
-  .verdict .ic { font-size: 15px; }
+  th, td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; }
+  td { color: #aeb4bd; }
+  td:last-child { color: var(--accent); }
+  .verdict { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; font-size: 12.5px; border-bottom: 1px dotted #181a1e; }
+  .verdict .ic { font-size: 13px; }
 
-  /* 우: 라이브 시뮬 */
+  /* ── 우: 시뮬 ── */
   .simctl { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-  .simctl button { flex: 1; background: var(--panel2); border: 1px solid var(--line);
-                   color: var(--txt); border-radius: 6px; padding: 6px; cursor: pointer; }
-  .simctl button.run { background: var(--ok); color: #06140a; font-weight: 600; border: none; }
-  .io-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
-  .io-item .lab { font-size: 12px; flex: 1; word-break: break-all; }
-  .lamp { width: 14px; height: 14px; border-radius: 50%; background: #33414f; border: 1px solid #46566a; }
-  .lamp.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); border-color: var(--ok); }
-  .lamp.outon { background: var(--warn); box-shadow: 0 0 8px var(--warn); border-color: var(--warn); }
-  .sw { position: relative; width: 38px; height: 20px; background: #33414f; border-radius: 12px;
-        cursor: pointer; transition: background .15s; flex: none; }
-  .sw.on { background: var(--accent); }
-  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-        border-radius: 50%; background: #fff; transition: left .15s; }
-  .sw.on::after { left: 20px; }
-  .sec-title { font-size: 11px; color: var(--dim); text-transform: uppercase; margin: 10px 0 4px; }
-  .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; }
-  .badge.ok { background: #163a22; color: var(--ok); }
-  .badge.err { background: #3a1616; color: var(--err); }
-  .badge.warn { background: #3a2e16; color: var(--warn); }
+  .simctl button {
+    flex: 1; background: transparent; border: 1px solid var(--line); color: var(--txt);
+    border-radius: 5px; padding: 5px; cursor: pointer; font-family: var(--mono); font-size: 12px;
+  }
+  .simctl button:hover { border-color: #2f333b; }
+  .simctl button.run { color: var(--prompt); border-color: #244a2c; }
+  .io-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .io-item .lab { font-size: 12px; flex: 1; word-break: break-all; color: #aeb4bd; }
+  .lamp { width: 9px; height: 9px; border-radius: 2px; background: #20232a; flex: none; }
+  .lamp.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .lamp.outon { background: var(--prompt); box-shadow: 0 0 6px var(--prompt); }
+  .sw { position: relative; width: 32px; height: 17px; background: #1c1f25; border-radius: 9px; cursor: pointer; flex: none; transition: background .12s; }
+  .sw.on { background: #2a4a6e; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #6a6e76; transition: left .12s; }
+  .sw.on::after { left: 17px; background: var(--accent); }
   .hint { color: var(--dim); font-size: 12px; }
+
+  /* 상태표시줄(맨 아래, 터미널 statusline) */
+  .statusline {
+    height: 25px; display: flex; align-items: center; gap: 14px; padding: 0 12px;
+    background: var(--panel); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--dim);
+  }
+  .statusline .k { color: var(--prompt); }
 </style>
 </head>
 <body>
-<header>
-  <h1>⚙️ Ladder Studio</h1>
-  <span class="hint">자연어로 공장 자동화 설계 · 실시간 래더 · 가상 시뮬</span>
+<div class="titlebar">
+  <span class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+  <span class="ttl"><b>ladder-studio</b> — 자연어 → PLC 설계</span>
   <span class="sp"></span>
-  <span id="status" class="hint"></span>
+  <span id="status"></span>
   <select id="vendor" title="출력 벤더">
     <option value="LS_XGK">LS XGK</option>
-    <option value="LS_XGI">LS XGI (IEC)</option>
+    <option value="LS_XGI">LS XGI</option>
     <option value="MITSUBISHI_FX">미쓰비시 FX</option>
     <option value="SIEMENS_S7">지멘스 S7</option>
     <option value="OMRON_NX">옴론 NX</option>
   </select>
-  <button id="btn-undo" title="마지막 변경 되돌리기">↶ 되돌리기</button>
-  <button id="btn-emit">📋 래더 내보내기</button>
-  <button id="btn-xml">⬇ PLCopen XML</button>
-</header>
+  <button class="tbtn" id="btn-undo" title="되돌리기">↶ undo</button>
+  <button class="tbtn" id="btn-emit">래더 export</button>
+  <button class="tbtn" id="btn-xml">xml</button>
+</div>
 <div class="safety" id="safety">
-  ⚠ 생성물은 <b>표준 제어 로직</b>입니다. 비상정지·안전문·라이트커튼 등 <b>안전기능</b>은
-  소프트 로직이 아니라 인증 안전PLC/하드와이어 회로(ISO 13849 / IEC 62061)로 별도 구현하고,
-  배포 전 유자격 엔지니어가 반드시 검토하세요.
+  ⚠ 표준 제어 로직입니다. <b>비상정지·안전기능</b>은 소프트 로직이 아니라 인증 안전PLC/하드와이어(ISO 13849·IEC 62061)로 구현하고, 배포 전 유자격 엔지니어 검토 필수.
 </div>
 
 <div class="grid">
-  <!-- 좌: 프로젝트 + 채팅 -->
+  <!-- 좌: 프로젝트 + 터미널 채팅 -->
   <div class="col">
-    <h2>프로젝트 (서브시스템)</h2>
+    <h2>project</h2>
     <div class="scroll" id="project-list"></div>
     <div class="chat">
-      <h2>설계 대화</h2>
+      <h2>console</h2>
       <div id="chat-log"></div>
       <div class="inrow">
-        <input id="nl" placeholder="예: 버튼 누르면 모터 돌고 정지하면 선다" autocomplete="off" />
-        <button id="send">보내기</button>
+        <input id="nl" placeholder="버튼 누르면 모터 돌고 정지하면 선다…" autocomplete="off" spellcheck="false" />
+        <button id="send">run</button>
       </div>
     </div>
   </div>
 
-  <!-- 중: 래더 미리보기 -->
+  <!-- 중: 래더 -->
   <div class="col">
     <div class="tabs">
-      <div class="tab on" data-v="ladder">래더</div>
-      <div class="tab" data-v="st">ST</div>
-      <div class="tab" data-v="addr">디바이스 맵</div>
-      <div class="tab" data-v="verify">검증</div>
+      <div class="tab on" data-v="ladder">ladder</div>
+      <div class="tab" data-v="st">st</div>
+      <div class="tab" data-v="addr">map</div>
+      <div class="tab" data-v="verify">check</div>
     </div>
     <div class="scroll">
-      <div class="view on" id="v-ladder"><div id="ladder"><div class="empty">왼쪽에서 자연어로 서브시스템을 추가하면 여기에 래더가 실시간으로 그려집니다.</div></div></div>
-      <div class="view" id="v-st"><pre id="st">(아직 없음)</pre></div>
-      <div class="view" id="v-addr"><table id="addr"><thead><tr><th>심볼</th><th>주소</th></tr></thead><tbody></tbody></table></div>
+      <div class="view on" id="v-ladder"><div id="ladder"><div class="empty">왼쪽 console 에 한국어로 입력하면 래더가 실시간으로 그려집니다.</div></div></div>
+      <div class="view" id="v-st"><pre id="st">(empty)</pre></div>
+      <div class="view" id="v-addr"><table id="addr"><thead><tr><th>symbol</th><th>addr</th></tr></thead><tbody></tbody></table></div>
       <div class="view" id="v-verify"><div id="verify"><div class="empty">검증 결과가 여기 표시됩니다.</div></div></div>
     </div>
   </div>
 
-  <!-- 우: 라이브 시뮬 -->
+  <!-- 우: 시뮬 -->
   <div class="col">
-    <h2>가상 시뮬레이션 (디지털 트윈)</h2>
+    <h2>sim</h2>
     <div class="simctl">
-      <button id="sim-toggle" class="run">▶ 가동</button>
-      <button id="sim-once">스텝 1회</button>
+      <button id="sim-toggle" class="run">▶ run</button>
+      <button id="sim-once">step</button>
     </div>
     <div class="scroll">
-      <div class="sec-title">입력 (클릭해 강제)</div>
-      <div id="sim-inputs"><div class="hint">서브시스템을 추가하면 입력 스위치가 생깁니다.</div></div>
-      <div class="sec-title">출력 (코일)</div>
+      <div class="sec-title">inputs · 클릭해 강제</div>
+      <div id="sim-inputs"><div class="hint">서브시스템을 추가하면 입력이 생깁니다.</div></div>
+      <div class="sec-title">outputs · 코일</div>
       <div id="sim-outputs"><div class="hint">—</div></div>
-      <div class="sec-title">설명</div>
+      <div class="sec-title">notes</div>
       <div id="explain" class="hint">—</div>
     </div>
   </div>
+</div>
+
+<div class="statusline">
+  <span><span class="k">●</span> deterministic core · no-key</span>
+  <span><span class="k">⊥</span> double-coil 0 · interlock z3</span>
+  <span><span class="k">↻</span> live scan 100ms</span>
 </div>
 
 <script src="ladder-render.js"></script>
