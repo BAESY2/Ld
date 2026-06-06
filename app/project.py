@@ -199,14 +199,19 @@ def compose(project: Project) -> StateMachineSpec:
             raise ProjectError(f"모듈 이름 '{module.name}' 이(가) 중복됩니다.")
         seen.add(module.name)
 
-        try:
-            sub = build_spec(module.recipe, module.answers)
-        except KeyError as exc:
-            raise ProjectError(
-                f"모듈 '{module.name}' 의 레시피 '{module.recipe}' 를 찾을 수 없습니다."
-            ) from exc
-        except WizardError as exc:
-            raise ProjectError(f"모듈 '{module.name}' 입력 오류: {exc}") from exc
+        if module.spec is not None:
+            # 인라인 명세(LLM 설계 산출물 등) — 템플릿을 거치지 않는 일반 IR 경로.
+            # 깊은 복사로 원본 보호(이후 리네임이 새 인스턴스에만 적용되도록).
+            sub = module.spec.model_copy(deep=True)
+        else:
+            try:
+                sub = build_spec(module.recipe, module.answers)
+            except KeyError as exc:
+                raise ProjectError(
+                    f"모듈 '{module.name}' 의 레시피 '{module.recipe}' 를 찾을 수 없습니다."
+                ) from exc
+            except WizardError as exc:
+                raise ProjectError(f"모듈 '{module.name}' 입력 오류: {exc}") from exc
 
         mapping = _build_mapping(module, _owned_names(sub))
         mappings[module.name] = mapping

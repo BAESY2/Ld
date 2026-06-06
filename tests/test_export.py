@@ -58,10 +58,12 @@ def test_input_output_vars() -> None:
 
 
 def test_st_body_contains_code() -> None:
-    root = ET.fromstring(to_plcopen_xml(_SPEC, _ST))
-    xhtml = root.find(f".//{_q('body')}/{_q('ST')}/{{http://www.w3.org/1999/xhtml}}xhtml")
-    assert xhtml is not None
-    assert xhtml.text is not None and "MOTOR := (START OR MOTOR) AND NOT STOP;" in xhtml.text
+    xml = to_plcopen_xml(_SPEC, _ST)
+    root = ET.fromstring(xml)
+    p = root.find(f".//{_q('body')}/{_q('ST')}/{{http://www.w3.org/1999/xhtml}}p")
+    assert p is not None
+    assert p.text is not None and "MOTOR := (START OR MOTOR) AND NOT STOP;" in p.text
+    assert "<![CDATA[" in xml
 
 
 def test_bool_type_emitted() -> None:

@@ -37,6 +37,7 @@ from app import __version__
 from app.comms.protocols import WriteRejected
 from app.comms.safety_kernel import SafetyKernel
 from app.config import settings
+from app.design import design_project
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
@@ -647,6 +648,102 @@ def project_nl_add(req: ProjectNLAddRequest) -> ProjectNLAddResponse:
         suggestion=suggestion,
         safety_warning=safety_warning,
         out_of_scope=out_of_scope,
+    )
+
+
+# ---------------------------------------------------------------------------
+# LLM 설계 — 자유 한국어 문단 → 다중 서브시스템 분해 → 결정론 검증(근간 재설계의 심장)
+# ---------------------------------------------------------------------------
+class DesignRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=settings.max_request_chars)
+
+
+class DesignResponse(BaseModel):
+    ok: bool
+    title: str = ""
+    structured_text: str = ""
+    ladder: LadderProgram | None = None
+    verification: VerificationReport | None = None
+    explanation: str = ""
+    modules: list[ProjectModuleSummary] = Field(default_factory=list)
+    address_map: list[AddrEntry] = Field(default_factory=list)
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+def _summarize_project(project: Project) -> list[ProjectModuleSummary]:
+    """모듈별 입출력 요약(인라인 명세/레시피 공통). 렌더 심볼=네임스페이스 적용 후."""
+    out: list[ProjectModuleSummary] = []
+    for m in project.modules:
+        sub = m.spec
+        title = ""
+        if sub is None and m.recipe in RECIPES:
+            title = RECIPES[m.recipe].title
+            try:
+                sub = build_spec(m.recipe, m.answers)
+            except (KeyError, WizardError):
+                sub = None
+        if sub is None:
+            out.append(ProjectModuleSummary(name=m.name, recipe=m.recipe, recipe_title=title))
+            continue
+
+        def render(sym: str, mod: ModuleInstance = m) -> str:
+            return mod.shared.get(sym, f"{mod.name}__{sym}")
+
+        ins = [render(p.symbol) for p in sub.io_points if p.direction == IODirection.INPUT]
+        outs = [render(p.symbol) for p in sub.io_points if p.direction == IODirection.OUTPUT]
+        out.append(
+            ProjectModuleSummary(
+                name=m.name, recipe=m.recipe, recipe_title=title or m.recipe,
+                inputs=ins, outputs=outs,
+            )
+        )
+    return out
+
+
+@app.post("/api/design", response_model=DesignResponse)
+def design(req: DesignRequest) -> DesignResponse:
+    """자유 한국어 요구 → LLM 이 다중 서브시스템으로 분해 → 결정론 합성·검증.
+
+    32개 템플릿/키워드 매칭의 천장을 넘는 경로: LLM 이 임의 명세를 생성하고, 코어가
+    compose→verify 로 검증/차단한다. 키가 없거나 LLM 미설치면 친절히 안내(503 아님,
+    ok=false). 검증 실패해도 결과를 돌려주되 ok=false 로 표시한다(불량 은닉 금지).
+    """
+    try:
+        project = design_project(req.text)
+    except ValueError as exc:
+        return DesignResponse(ok=False, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - LLM 미설치/키 없음 등을 친절히 안내
+        logger.warning("설계 LLM 실패: %s", exc)
+        return DesignResponse(
+            ok=False,
+            error="자연어 설계에는 LLM 설정이 필요합니다(ANTHROPIC_API_KEY 등). "
+            "키 없이 쓰려면 좌측 console 의 레시피 매칭 경로를 사용하세요.",
+        )
+    try:
+        spec = compose(project)
+        st = synthesize_st(spec)
+        ladder = transpile_st(st, title=spec.title)
+    except ProjectError as exc:
+        return DesignResponse(ok=False, error=str(exc))
+    except ValueError as exc:
+        return DesignResponse(ok=False, error=f"합성 실패: {exc}")
+    if not ladder.rungs:
+        return DesignResponse(
+            ok=False, title=spec.title,
+            error="유효한 래더 로직이 생성되지 않았습니다(요구가 이산 제어로 표현 어려울 수 있음).",
+            modules=_summarize_project(project),
+        )
+    report = verify(spec, st)
+    return DesignResponse(
+        ok=report.passed,
+        title=spec.title or project.title,
+        structured_text=st,
+        ladder=ladder,
+        verification=report,
+        explanation=explain_all(spec, ladder, report),
+        modules=_summarize_project(project),
+        address_map=_address_map(spec),
     )
 
 

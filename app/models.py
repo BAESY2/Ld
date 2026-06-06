@@ -190,8 +190,13 @@ class ModuleInstance(BaseModel):
     """
 
     name: str = Field(..., description="모듈 인스턴스 이름(네임스페이스, 예: conv1)")
-    recipe: str = Field(..., description="레시피 id (wizard.RECIPES 의 키)")
+    recipe: str = Field(default="", description="레시피 id(wizard.RECIPES). spec 을 주면 무시")
     answers: dict[str, str] = Field(default_factory=dict, description="레시피 빈칸 답변")
+    spec: StateMachineSpec | None = Field(
+        default=None,
+        description="레시피 대신 직접 주는 명세(LLM 설계 산출물 등). 있으면 recipe 무시 — "
+        "32개 템플릿을 넘어 임의 로직을 합성 파이프라인에 태우는 일반 IR 경로.",
+    )
     shared: dict[str, str] = Field(
         default_factory=dict, description="로컬 심볼→전역 공유 심볼(프리픽스 면제)"
     )
@@ -214,6 +219,29 @@ class Project(BaseModel):
 
     title: str = ""
     modules: list[ModuleInstance] = Field(default_factory=list)
+    cross_interlocks: list[CrossInterlock] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# LLM 설계 에이전트 산출물 — 자유 한국어 문단 → 다중 서브시스템 분해(템플릿 不제약)
+# ---------------------------------------------------------------------------
+class PlannedModule(BaseModel):
+    """설계 에이전트가 만든 모듈 1개 — 이름 + (템플릿이 아닌) 직접 명세."""
+
+    name: str = Field(..., description="모듈 이름(영문 식별자, 예: conv1/tankA)")
+    spec: StateMachineSpec = Field(..., description="이 서브시스템의 상태머신 명세")
+
+
+class ProjectPlan(BaseModel):
+    """LLM 설계 에이전트의 구조화 출력 — 복합 요구를 서브시스템들로 분해한 계획.
+
+    각 모듈은 32개 템플릿에 묶이지 않은 임의 명세를 가지며, 모듈 사이 상호배타는
+    cross_interlocks 로 선언한다. 이 계획은 ``app.design`` 에서 ``Project`` 로 변환돼
+    결정론 합성·검증 파이프라인(compose→verify)을 그대로 탄다(LLM 생성 / 코어 검증).
+    """
+
+    title: str = ""
+    modules: list[PlannedModule] = Field(default_factory=list)
     cross_interlocks: list[CrossInterlock] = Field(default_factory=list)
 
 

@@ -1,0 +1,50 @@
+{"id": "easy-01", "text": "버튼 누르면 모터 돌고 정지 누르면 선다", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["motor_start_stop", "three_wire"], "notes": "기본 기동/정지 자기유지"}}
+{"id": "easy-02", "text": "기동 버튼 한번 누르면 컨베이어 계속 돌게 해줘", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["motor_start_stop", "three_wire"], "notes": "자기유지 운전"}}
+{"id": "easy-03", "text": "모타 정역 운전 시키고 싶은데 정방향 역방향 동시에 못 돌게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["fwd_rev"], "notes": "정역 인터락"}}
+{"id": "easy-04", "text": "기동하고 5초 뒤에 램프 켜지게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["on_delay"], "notes": "ON 딜레이 5초"}}
+{"id": "easy-05", "text": "물탱크 저수위 되면 펌프 켜고 만수위 되면 꺼줘", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["hi_lo_level"], "notes": "수위 히스테리시스"}}
+{"id": "easy-06", "text": "센서로 부품 10개 세면 배출하게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["count_eject"], "notes": "카운터 10개"}}
+{"id": "easy-07", "text": "조그 버튼은 누르는 동안만 돌고 연속 버튼은 계속 돌게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["jog_run"], "notes": "조그/연속"}}
+{"id": "easy-08", "text": "전동기 스타델타로 감압기동 시키고 몇초 뒤 델타로 전환", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["star_delta"], "notes": "Y-Δ 기동"}}
+{"id": "easy-09", "text": "고장 나면 경광등 켜지고 리셋 누를 때까지 유지되게 해줘", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["latch_alarm"], "notes": "래치 알람"}}
+{"id": "easy-10", "text": "안전문 열리면 기계 바로 멈추게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["guard_interlock"], "notes": "가드 인터락"}}
+{"id": "easy-11", "text": "타워램프 운전중이면 녹색 고장이면 적색 대기면 황색", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["tower_lamp"], "notes": "신호탑 상태표시"}}
+{"id": "easy-12", "text": "운전중에 경고등 1초 주기로 깜빡깜빡 하게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["flasher"], "notes": "점멸"}}
+{"id": "easy-13", "text": "셔터 열림 닫힘 버튼으로 올리고 내리는데 끝까지 가면 리밋으로 정지", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["shutter_gate"], "notes": "셔터 개폐"}}
+{"id": "easy-14", "text": "과부하 트립 걸리면 표시 래치하고 리셋해야 풀리게", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["overload_latch"], "notes": "EOCR 트립 래치"}}
+{"id": "easy-15", "text": "세차기 비누 뿌리고 헹구고 건조까지 순서대로", "difficulty": "easy", "expected": {"kind": "recipe", "recipes": ["car_wash"], "notes": "세차 시퀀스"}}
+
+{"id": "compound-01", "text": "컨베이어 3개인데 2번에서 불량 감지되면 앞 컨베이어 세우고 경광등 켜고 알람 울려", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["cascade_conveyor", "conveyor_jam", "latch_alarm", "tower_lamp"], "notes": "다중 서브시스템: 컨베이어 정지 + 경광등 + 알람. 단일 레시피로 표현 불가"}}
+{"id": "compound-02", "text": "버튼 누르면 모터 돌고 5초 뒤 두번째 모터도 돌고 고장나면 둘다 정지하고 경광등", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["motor_start_stop", "on_delay", "latch_alarm"], "notes": "순차 기동 + 알람 결합"}}
+{"id": "compound-03", "text": "탱크 채우고 교반한 다음 배출하고 그동안 고수위 넘으면 알람 울리게", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["batch_fill_mix_drain", "hi_lo_level", "latch_alarm"], "notes": "배치 공정 + 수위 알람"}}
+{"id": "compound-04", "text": "프레스는 양손 동시에 눌러야 동작하고 가드 열리면 멈추고 비상스위치 누르면 전체 정지", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["two_hand_safety", "guard_interlock"], "notes": "양수 + 가드 + 비상정지(하드와이어 경고 예상)"}}
+{"id": "compound-05", "text": "라인 기동하면 컨베이어 돌고 부품 50개 차면 배출하고 잼 생기면 상류 정지", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["motor_start_stop", "count_eject", "conveyor_jam"], "notes": "운전 + 카운트 + 적체"}}
+{"id": "compound-06", "text": "도금라인 탈지 수세 도금 건조 순서로 돌리고 약품조 수위 낮으면 알람", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["plating_line", "hi_lo_level", "latch_alarm"], "notes": "도금 시퀀스 + 수위 알람"}}
+{"id": "compound-07", "text": "용접 클램프하고 용접하고 풀어주는데 안전문 열려있으면 시작 안되게", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["weld_cell", "guard_interlock"], "notes": "용접 셀 + 가드 조건"}}
+{"id": "compound-08", "text": "신호등 적녹황 돌리면서 보행자 버튼 누르면 녹색 연장하고 야간엔 황색 점멸", "difficulty": "compound", "expected": {"kind": "out_of_scope", "recipes": ["timed_traffic", "flasher"], "notes": "조건부 연장 + 모드전환은 단순 시퀀서로 표현 불가"}}
+{"id": "compound-09", "text": "모터 기동 정지에 운전시간 적산해서 100시간 되면 정비 알람도 띄워줘", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["motor_start_stop", "runtime_maint"], "notes": "운전 + 적산 정비 알람"}}
+{"id": "compound-10", "text": "고장이 여러개 나는데 제일 먼저 난 고장만 표시하고 경음기 울리고 확인 누르면 경음기만 끄게", "difficulty": "compound", "expected": {"kind": "recipe", "recipes": ["first_out_alarm"], "notes": "퍼스트아웃 — 단일 레시피로 커버 가능"}}
+{"id": "compound-11", "text": "셔터 열고 닫는데 동시에 누르면 안되고 차량 감지되면 자동으로 열리고 5초 뒤 닫힘", "difficulty": "compound", "expected": {"kind": "out_of_scope", "recipes": ["shutter_gate", "on_delay"], "notes": "자동개폐 + 타이머 결합은 단일 레시피 밖"}}
+{"id": "compound-12", "text": "재시도 3번 실패하면 알람 띄우고 동시에 타워램프 적색으로 바꿔", "difficulty": "compound", "expected": {"kind": "multi", "recipes": ["retry_alarm", "tower_lamp"], "notes": "재시도 알람 + 상태표시"}}
+
+{"id": "quant-01", "text": "탱크 수위 80%면 펌프1 끄고 펌프2 켜, 둘이 동시에 돌면 안 돼", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["duty_standby", "hi_lo_level"], "notes": "퍼센트 아날로그 수위 + 펌프 교번 인터락 — 80%는 아날로그라 디지털 레벨스위치로 근사밖에 안됨"}}
+{"id": "quant-02", "text": "펌프 두대 번갈아 돌리고 수요 많으면 둘 다 켜되 절대 동시기동은 금지", "difficulty": "quantified", "expected": {"kind": "recipe", "recipes": ["duty_standby"], "notes": "리드/래그 관계 — 단일 레시피로 근사"}}
+{"id": "quant-03", "text": "히터 200도까지 올리고 그 온도 10분 유지한 다음 식혀", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["heat_treat"], "notes": "200도 목표온도는 아날로그 PV 비교 필요 — 시퀀서는 시간만 안다"}}
+{"id": "quant-04", "text": "컨베이어 속도 30Hz로 돌리다가 불량 나오면 10Hz로 줄여", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "인버터 주파수 지령 — 아날로그/통신"}}
+{"id": "quant-05", "text": "부품 100개마다 한번씩 검사 게이트 열어", "difficulty": "quantified", "expected": {"kind": "recipe", "recipes": ["count_eject"], "notes": "100개 카운트 후 동작 — 게이트 의미는 근사"}}
+{"id": "quant-06", "text": "모터 두대가 있는데 1번 도는 동안엔 2번 절대 못 돌게 인터락 걸어", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["fwd_rev"], "notes": "독립 두 모터의 상호배제 인터락 — fwd_rev는 한 모터 정역이라 의미가 다름. 교차인터락은 compose 영역"}}
+{"id": "quant-07", "text": "압력 5바 넘으면 밸브 닫고 3바 밑으로 떨어지면 다시 열어", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["hi_lo_level"], "notes": "아날로그 압력 비교 — 압력스위치 2개로 근사는 가능하나 바 단위는 아날로그"}}
+{"id": "quant-08", "text": "탱크 3개 있고 각각 저수위면 해당 펌프 켜, 펌프끼리는 동시 2대까지만", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["hi_lo_level"], "notes": "다중 탱크 + 동시가동 대수 제한(2대) — 대수제어는 범위 밖"}}
+{"id": "quant-09", "text": "버튼 누르고 3초 안에 응답 없으면 알람, 응답 있으면 통과", "difficulty": "quantified", "expected": {"kind": "out_of_scope", "recipes": ["on_delay", "latch_alarm"], "notes": "타임아웃 감시 로직 — 시간 조건 + 분기, 단일 레시피 밖"}}
+{"id": "quant-10", "text": "8시간 가동하면 자동으로 정지하고 정비 알람", "difficulty": "quantified", "expected": {"kind": "recipe", "recipes": ["runtime_maint"], "notes": "적산시간 정비 알람 — 8시간 근사"}}
+
+{"id": "oos-01", "text": "항온조 온도를 PID로 60도 ±0.5도로 유지해줘", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "PID 폐루프 제어"}}
+{"id": "oos-02", "text": "모드버스 TCP로 다른 PLC랑 생산수량 데이터 주고받기", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "통신 프로토콜"}}
+{"id": "oos-03", "text": "6축 다관절 로봇을 티칭점 따라 보간 이동시켜", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "다축 모션 보간"}}
+{"id": "oos-04", "text": "인버터로 모터 속도를 0에서 60Hz까지 램프업", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "VFD 속도지령 아날로그"}}
+{"id": "oos-05", "text": "로드셀 무게 피드백 받아서 정량 충전 5kg 맞춰", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "로드셀 아날로그 피드백 정량제어"}}
+{"id": "oos-06", "text": "비전카메라로 색 구분해서 빨강 파랑 분류", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "비전 색구분"}}
+{"id": "oos-07", "text": "생산 데이터 집계해서 MES로 리포트 올려", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "데이터 집계/MES 통신"}}
+{"id": "oos-08", "text": "스텝모터 마이크로스텝으로 좌표 이동 위치결정", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "스텝모터 펄스열 위치결정"}}
+{"id": "oos-09", "text": "배합비 레시피대로 원료 A 60% B 40% 비율로 투입", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "배합비/레시피 정량 — 아날로그 비율제어"}}
+{"id": "oos-10", "text": "전자캠으로 마스터축 따라 슬레이브축 프로파일 추종", "difficulty": "out_of_scope", "expected": {"kind": "out_of_scope", "recipes": [], "notes": "전자캠 모션"}}
