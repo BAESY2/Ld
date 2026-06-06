@@ -17,7 +17,10 @@
   let last = null;          // 최근 compose 응답
   const history = [];       // 되돌리기용 프로젝트 스냅샷
   const forced = {};        // 시뮬 강제 입력 {symbol: bool}
-  let simRunning = false, simEpoch = 0, simEvents = [];
+  let simRunning = false, simEngine = null, simTimer = null;
+  const SIM_STEP_MS = 100;  // 스캔 주기(브라우저 라이브 루프)
+  let recipeFields = {};    // recipe_id -> [{key,label,default,kind}] (모듈 편집용)
+  let editingIdx = -1;      // 현재 인라인 편집 중인 모듈 인덱스
 
   async function api(path, body) {
     const r = await fetch(path, {
@@ -32,6 +35,13 @@
   }
   function snapshot() { history.push(JSON.stringify({ m: project.modules, c: project.cross_interlocks })); }
   function takenNames() { return project.modules.map((m) => m.name); }
+
+  async function loadRecipes() {
+    try {
+      const list = await (await fetch("/api/recipes")).json();
+      list.forEach((r) => { recipeFields[r.id] = r.fields || []; });
+    } catch (e) { /* 오프라인이면 편집 폼 없이 진행 */ }
+  }
 
   // ── 채팅 ──────────────────────────────────────────────────────────────────
   function addMsg(who, html) {
@@ -95,6 +105,24 @@
     recompose();
   }
 
+  function editorHTML(m, i) {
+    const fields = recipeFields[m.recipe] || [];
+    const rows = fields.map((f) => {
+      const val = (m.answers && m.answers[f.key] != null) ? m.answers[f.key] : f.default;
+      const num = f.kind && f.kind !== "symbol" ? 'type="number"' : "";
+      return `<label style="display:flex;gap:6px;align-items:center;margin:3px 0;font-size:12px">
+        <span style="flex:1;color:var(--dim)">${esc(f.label)}</span>
+        <input data-fk="${esc(f.key)}" value="${esc(val)}" ${num}
+          style="width:130px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:3px 6px"/></label>`;
+    }).join("");
+    return `<div style="margin-top:8px;border-top:1px dashed var(--line);padding-top:6px">
+      ${rows}
+      <div class="row" style="gap:6px;margin-top:6px">
+        <button data-apply="${i}" style="background:var(--accent);color:#06101e;border:none;border-radius:6px;padding:4px 10px;cursor:pointer">적용</button>
+        <button data-cancel="1" style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer">취소</button>
+      </div></div>`;
+  }
+
   function renderProject() {
     const el = $("project-list");
     if (!project.modules.length) {
@@ -105,12 +133,15 @@
     let html = "";
     project.modules.forEach((m, i) => {
       const s = summ.find((x) => x.name === m.name) || { inputs: [], outputs: [] };
+      const canEdit = (recipeFields[m.recipe] || []).length > 0;
       html += `<div class="module"><div class="row">
         <span class="nm">${esc(m.name)}</span>
         <span class="rc">${esc(m.recipe_title)}</span>
+        ${canEdit ? `<button class="x" data-edit="${i}" title="편집" style="color:var(--accent);font-size:13px">✎</button>` : ""}
         <button class="x" data-rm="${i}" title="삭제">×</button></div>
         <div class="io">IN ${(s.inputs || []).map(pretty).join(", ") || "—"}</div>
-        <div class="io">OUT ${(s.outputs || []).map(pretty).join(", ") || "—"}</div></div>`;
+        <div class="io">OUT ${(s.outputs || []).map(pretty).join(", ") || "—"}</div>
+        ${editingIdx === i ? editorHTML(m, i) : ""}</div>`;
     });
     // 교차 인터락
     html += `<div class="sec-title">교차 인터락 (모듈 간 동시 금지)</div>`;
@@ -132,6 +163,19 @@
     el.innerHTML = html;
     el.querySelectorAll("[data-rm]").forEach((b) =>
       b.onclick = () => removeModule(+b.dataset.rm));
+    el.querySelectorAll("[data-edit]").forEach((b) =>
+      b.onclick = () => { editingIdx = +b.dataset.edit; renderProject(); });
+    el.querySelectorAll("[data-cancel]").forEach((b) =>
+      b.onclick = () => { editingIdx = -1; renderProject(); });
+    el.querySelectorAll("[data-apply]").forEach((b) =>
+      b.onclick = () => {
+        const i = +b.dataset.apply;
+        const ans = {};
+        b.closest(".module").querySelectorAll("[data-fk]").forEach((inp) => {
+          const v = inp.value.trim(); if (v) ans[inp.dataset.fk] = v;
+        });
+        snapshot(); project.modules[i].answers = ans; editingIdx = -1; recompose();
+      });
     el.querySelectorAll("[data-rmci]").forEach((b) =>
       b.onclick = () => { snapshot(); project.cross_interlocks.splice(+b.dataset.rmci, 1); recompose(); });
     const add = $("ci-add");
@@ -162,7 +206,6 @@
     $("explain").innerHTML = esc(res.explanation || "—").replace(/\n/g, "<br>");
     rebuildSimInputs(res);
     setStatus(res.ok ? "✓ 검증 통과" : "검증 이슈 있음", res.ok ? "ok" : "err");
-    if (simRunning) runSim();
   }
 
   function clearViews() {
@@ -199,10 +242,14 @@
     box.innerHTML = items.join("") || '<div class="empty">검증 결과가 여기 표시됩니다.</div>';
   }
 
-  // ── 라이브 시뮬 ─────────────────────────────────────────────────────────────
+  // ── 라이브 시뮬 (브라우저 내 SimEngine 스캔 루프 — 서버 왕복 없음) ───────────
+  function cssesc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+
   function rebuildSimInputs(res) {
-    const ins = (res.modules || []).flatMap((m) => m.inputs || []);
-    const uniq = [...new Set(ins)];
+    // 검증된 ST 로 브라우저 스캔 엔진을 새로 만든다(파이썬 시뮬레이터와 패리티 보장).
+    simEngine = (window.SimEngine && res.structured_text)
+      ? window.SimEngine.create(res.structured_text) : null;
+    const uniq = simEngine ? simEngine.inputs : [];
     Object.keys(forced).forEach((k) => { if (!uniq.includes(k)) delete forced[k]; });
     uniq.forEach((s) => { if (!(s in forced)) forced[s] = false; });
     const box = $("sim-inputs");
@@ -214,49 +261,41 @@
       : '<div class="hint">입력이 없습니다.</div>';
     box.querySelectorAll("[data-sw]").forEach((sw) =>
       sw.onclick = () => toggleInput(sw.dataset.sw));
-    renderOutputs((res.modules || []).flatMap((m) => m.outputs || []), {});
+    renderOutputs(simEngine ? simEngine.outputs : [], {});
+    tick(); // 현재 입력으로 1스캔 — 즉시 출력 반영
   }
   function renderOutputs(outs, state) {
     const uniq = [...new Set(outs)];
     $("sim-outputs").innerHTML = uniq.length
       ? uniq.map((s) => `<div class="io-item">
-          <span class="lamp ${state[s] ? "outon" : ""}"></span>
+          <span class="lamp ${state[s] ? "outon" : ""}" data-ol="${esc(s)}"></span>
           <span class="lab">${pretty(s)}</span></div>`).join("")
       : '<div class="hint">출력이 없습니다.</div>';
   }
+  function updateLamps(r) {
+    for (const s in r.outputs)
+      document.querySelectorAll(`[data-ol="${cssesc(s)}"]`).forEach((e) => e.classList.toggle("outon", r.outputs[s]));
+    for (const s in r.inputs) {
+      document.querySelectorAll(`[data-il="${cssesc(s)}"]`).forEach((e) => e.classList.toggle("on", r.inputs[s]));
+    }
+  }
+  function tick() {
+    if (!simEngine) return;
+    updateLamps(simEngine.step(forced, SIM_STEP_MS));
+  }
   function toggleInput(sym) {
     forced[sym] = !forced[sym];
-    if (simRunning) simEvents.push([Date.now() - simEpoch, { [sym]: forced[sym] }]);
-    // 입력 램프/스위치 즉시 갱신
     document.querySelectorAll(`[data-sw="${cssesc(sym)}"]`).forEach((e) => e.classList.toggle("on", forced[sym]));
     document.querySelectorAll(`[data-il="${cssesc(sym)}"]`).forEach((e) => e.classList.toggle("on", forced[sym]));
-    if (simRunning) runSim(); else runSim(true);
+    if (!simRunning) tick(); // 정지 상태에서도 토글하면 1스캔 반영(조합/즉시 결과)
   }
-  function cssesc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
-
-  async function runSim(once) {
-    if (!last || !last.structured_text) return;
-    let timeline, duration;
-    if (once || !simRunning) {
-      timeline = [[0, { ...forced }]]; duration = 300;
-    } else {
-      timeline = simEvents.length ? simEvents : [[0, { ...forced }]];
-      duration = Math.min(60000, Math.max(800, (simEvents.length ? simEvents[simEvents.length - 1][0] : 0) + 1500));
-    }
-    let res;
-    try { res = await api("/api/simulate", { st_code: last.structured_text, inputs_timeline: timeline, duration_ms: duration, step_ms: 100 }); }
-    catch (e) { return; }
-    if (!res.ok || !res.samples || !res.samples.length) { return; }
-    const lastS = res.samples[res.samples.length - 1];
-    renderOutputs(res.outputs || [], lastS.outputs || {});
-  }
-
   function toggleSim() {
     simRunning = !simRunning;
     const b = $("sim-toggle");
     b.textContent = simRunning ? "■ 정지" : "▶ 가동";
     b.classList.toggle("run", !simRunning);
-    if (simRunning) { simEpoch = Date.now(); simEvents = [[0, { ...forced }]]; runSim(); }
+    if (simTimer) { clearInterval(simTimer); simTimer = null; }
+    if (simRunning) simTimer = setInterval(tick, SIM_STEP_MS);
   }
 
   // ── 내보내기 ────────────────────────────────────────────────────────────────
@@ -295,7 +334,8 @@
   $("btn-emit").onclick = exportEmit;
   $("btn-xml").onclick = exportXml;
   $("sim-toggle").onclick = toggleSim;
-  $("sim-once").onclick = () => runSim(true);
+  $("sim-once").onclick = tick;
 
+  loadRecipes();
   renderProject();
 })();

@@ -140,6 +140,28 @@ def _bm25_lite_score(
     return score
 
 
+def _filter_by_vendor(
+    corpus: list[_CorpusEntry],
+    vendor: str | None,
+) -> list[_CorpusEntry]:
+    """vendor 가 주어지면 해당 vendor 항목만 남긴다 (대소문자 무시).
+
+    vendor 필드가 없는(공용) 항목은 vendor 필터가 있을 때 제외된다.
+    vendor 가 None 이면 전체 corpus 를 그대로 반환한다 (하위 호환).
+    """
+    if vendor is None:
+        return corpus
+    target = vendor.strip().upper()
+    if not target:
+        return corpus
+    out: list[_CorpusEntry] = []
+    for entry in corpus:
+        v = entry.get("vendor")
+        if isinstance(v, str) and v.strip().upper() == target:
+            out.append(entry)
+    return out
+
+
 def _rank_corpus(
     query: str,
     corpus: list[_CorpusEntry],
@@ -236,23 +258,41 @@ class InstructionRetriever:
     def __init__(self, corpus_path: Path | None = None) -> None:
         self._corpus_path = corpus_path
 
-    def retrieve(self, query: str, k: int = 4) -> str:
+    def retrieve(self, query: str, k: int = 4, vendor: str | None = None) -> str:
         """query 에 가장 관련 있는 명령어 규격 텍스트를 반환한다.
 
         USE_RAG=false 이면 항상 ``_FALLBACK_INSTRUCTIONS`` 를 반환한다.
+
+        Parameters
+        ----------
+        query:
+            검색 질의(한국어/영어 혼용 가능).
+        k:
+            반환할 상위 항목 수.
+        vendor:
+            벤더 코드(예: ``"LS"``, ``"MITSUBISHI"``, ``"SIEMENS"``,
+            ``"OMRON"``, ``"ROCKWELL"``). 주어지면 해당 벤더 항목만
+            검색 대상으로 한다. None(기본)이면 전체 corpus 를 검색해
+            기존 호출과 완전히 호환된다.
         """
         if not settings.use_rag:
             return _FALLBACK_INSTRUCTIONS
 
-        # 선택적 FAISS 경로 시도
-        faiss_result = _try_faiss_retrieve(query, k)
-        if faiss_result is not None:
-            return faiss_result
+        # 선택적 FAISS 경로 시도 (vendor 필터 없을 때만; 벤더 필터는 BM25 경로 전용)
+        if vendor is None:
+            faiss_result = _try_faiss_retrieve(query, k)
+            if faiss_result is not None:
+                return faiss_result
 
         # BM25-lite 경량 검색
         corpus = _load_corpus(self._corpus_path)
         if not corpus:
             # corpus 로드 실패 → 폴백
+            return _FALLBACK_INSTRUCTIONS
+
+        corpus = _filter_by_vendor(corpus, vendor)
+        if not corpus:
+            # 해당 벤더 항목이 없으면 폴백 (예외 없이 degrade)
             return _FALLBACK_INSTRUCTIONS
 
         top_entries = _rank_corpus(query, corpus, k=k)
@@ -263,6 +303,10 @@ class InstructionRetriever:
 _retriever = InstructionRetriever()
 
 
-def get_instruction_context(query: str) -> str:
-    """싱글톤 진입점.  agents.py 에서 임포트한다."""
-    return _retriever.retrieve(query)
+def get_instruction_context(query: str, vendor: str | None = None) -> str:
+    """싱글톤 진입점.  agents.py 에서 임포트한다.
+
+    ``vendor`` 는 선택 인자로, 주어지면 해당 벤더 명령어만 검색한다.
+    기존 단일 인자 호출(``get_instruction_context(query)``)과 호환된다.
+    """
+    return _retriever.retrieve(query, vendor=vendor)
