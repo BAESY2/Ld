@@ -44,14 +44,19 @@ from app.explain import explain_all
 from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
+from app.memory_map import DeviceAllocator
 from app.models import (
+    CrossInterlock,
     IODirection,
     LadderProgram,
+    ModuleInstance,
+    Project,
     StateMachineSpec,
     VerificationIssue,
     VerificationReport,
 )
 from app.nlmatch import analyze as nl_analyze
+from app.project import ProjectError, compose
 from app.safety import SAFETY_NOTICE, safety_payload
 from app.simulator import MAX_SIM_SAMPLES, simulate
 from app.synth import synthesize_st
@@ -455,6 +460,193 @@ def wizard(req: WizardRequest) -> WizardResponse:
         verification=report,
         explanation=explain_all(spec, ladder, report),
         safety_note=RECIPES[req.recipe].safety_note,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 프로젝트 합성 — 서브시스템 N개를 하나의 프로그램으로(대규모 설계 진입점)
+# ---------------------------------------------------------------------------
+class ProjectComposeRequest(BaseModel):
+    """모듈 N개 + 교차 인터락 → 합성 요청. 상태는 클라이언트가 들고 매번 보낸다."""
+
+    title: str = Field(default="", max_length=200)
+    modules: list[ModuleInstance] = Field(default_factory=list, max_length=64)
+    cross_interlocks: list[CrossInterlock] = Field(default_factory=list, max_length=128)
+
+
+class ProjectModuleSummary(BaseModel):
+    name: str
+    recipe: str
+    recipe_title: str = ""
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+
+
+class AddrEntry(BaseModel):
+    symbol: str
+    address: str
+
+
+class ProjectComposeResponse(BaseModel):
+    ok: bool
+    title: str = ""
+    structured_text: str = ""
+    ladder: LadderProgram | None = None
+    verification: VerificationReport | None = None
+    explanation: str = ""
+    modules: list[ProjectModuleSummary] = Field(default_factory=list)
+    address_map: list[AddrEntry] = Field(default_factory=list)
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+def _module_summaries(req: ProjectComposeRequest) -> list[ProjectModuleSummary]:
+    """모듈별 입출력 심볼 요약(렌더 심볼 = 네임스페이스/공유 적용 후)."""
+    out: list[ProjectModuleSummary] = []
+    for m in req.modules:
+        title = RECIPES[m.recipe].title if m.recipe in RECIPES else ""
+        try:
+            sub = build_spec(m.recipe, m.answers)
+        except (KeyError, WizardError):
+            out.append(ProjectModuleSummary(name=m.name, recipe=m.recipe, recipe_title=title))
+            continue
+
+        def render(sym: str, mod: ModuleInstance = m) -> str:
+            return mod.shared.get(sym, f"{mod.name}__{sym}")
+
+        ins = [render(p.symbol) for p in sub.io_points if p.direction == IODirection.INPUT]
+        outs = [render(p.symbol) for p in sub.io_points if p.direction == IODirection.OUTPUT]
+        out.append(
+            ProjectModuleSummary(
+                name=m.name, recipe=m.recipe, recipe_title=title, inputs=ins, outputs=outs
+            )
+        )
+    return out
+
+
+def _address_map(spec: StateMachineSpec) -> list[AddrEntry]:
+    """합성 명세를 전역 디바이스 할당기에 넣어 심볼→주소 맵을 만든다(충돌 0 확인용)."""
+    alloc = DeviceAllocator().build_from_spec(spec)
+    entries: list[AddrEntry] = []
+    seen: set[str] = set()
+    for iop in spec.io_points:
+        if iop.symbol in seen:
+            continue
+        seen.add(iop.symbol)
+        addr = alloc.address_of(iop.symbol)
+        if addr is not None:
+            entries.append(AddrEntry(symbol=iop.symbol, address=addr))
+    for t in spec.timers:
+        addr = alloc.address_of(t.name)
+        if addr is not None:
+            entries.append(AddrEntry(symbol=t.name, address=addr))
+    for c in spec.counters:
+        addr = alloc.address_of(c.name)
+        if addr is not None:
+            entries.append(AddrEntry(symbol=c.name, address=addr))
+    return entries
+
+
+@app.post("/api/project/compose", response_model=ProjectComposeResponse)
+def project_compose(req: ProjectComposeRequest) -> ProjectComposeResponse:
+    """프로젝트(모듈 N개)를 하나의 ST→래더→검증으로 합성한다(결정론·키 불필요).
+
+    대규모 설계의 진입점: 같은 레시피를 이름만 달리해 여러 번 넣어도 네임스페이스로
+    주소·심볼 충돌 0, 이중코일 0 이 구조적으로 보장된다. 교차 인터락은 Z3 로 검증.
+    """
+    if not req.modules:
+        return ProjectComposeResponse(ok=False, error="모듈을 1개 이상 추가하세요.")
+    project = Project(
+        title=req.title, modules=req.modules, cross_interlocks=req.cross_interlocks
+    )
+    try:
+        spec = compose(project)
+        st = synthesize_st(spec)
+        ladder = transpile_st(st, title=spec.title)
+    except ProjectError as exc:
+        return ProjectComposeResponse(ok=False, error=str(exc))
+    except ValueError as exc:
+        return ProjectComposeResponse(ok=False, error=f"합성 실패: {exc}")
+    if not ladder.rungs:
+        return ProjectComposeResponse(
+            ok=False, title=spec.title,
+            error="유효한 래더 로직이 만들어지지 않았어요(상태구동 출력이 없는 모듈일 수 있음).",
+        )
+    report = verify(spec, st)
+    return ProjectComposeResponse(
+        ok=report.passed,
+        title=spec.title or req.title,
+        structured_text=st,
+        ladder=ladder,
+        verification=report,
+        explanation=explain_all(spec, ladder, report),
+        modules=_module_summaries(req),
+        address_map=_address_map(spec),
+    )
+
+
+def _suggest_name(recipe_id: str, taken: set[str]) -> str:
+    """레시피 id 앞토막 + 최소 미사용 번호로 모듈 이름을 제안한다(예: motor1)."""
+    base = recipe_id.split("_", 1)[0] or "mod"
+    i = 1
+    while f"{base}{i}" in taken:
+        i += 1
+    return f"{base}{i}"
+
+
+class ProjectNLAddRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=settings.max_request_chars)
+    existing_names: list[str] = Field(default_factory=list, max_length=64)
+
+
+class ProjectNLAddResponse(BaseModel):
+    ok: bool
+    recipe: str = ""
+    recipe_title: str = ""
+    suggested_name: str = ""
+    answers: dict[str, str] = Field(default_factory=dict)
+    confident: bool = False
+    ranked: list[dict[str, object]] = Field(default_factory=list)
+    suggestion: str = ""
+    safety_warning: str = ""
+    out_of_scope: str = ""
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/project/nl-add", response_model=ProjectNLAddResponse)
+def project_nl_add(req: ProjectNLAddRequest) -> ProjectNLAddResponse:
+    """자연어 한 문장 → 프로젝트에 더할 모듈 제안(레시피+이름+슬롯). 결정론·키 불필요.
+
+    클라이언트가 이 제안을 프로젝트 목록에 넣고 ``/api/project/compose`` 를 다시
+    호출하면 즉시 래더·시뮬이 갱신된다(대화형 증분 편집의 결정론 백본).
+    """
+    res = nl_analyze(req.text, allow_llm=False)
+    recipe_obj = RECIPES[res.recipe_id]
+    ranked = [
+        {"id": rid, "title": RECIPES[rid].title, "score": round(s, 3)}
+        for rid, s in res.scores[:3]
+    ]
+    out_of_scope = res.extras.get("out_of_scope", "")
+    safety_warning = res.extras.get("safety_warning", "")
+    if out_of_scope:
+        suggestion = "21개 결정론 템플릿 밖의 요청이에요(아날로그·모션·통신·PID 등)."
+    elif res.confident:
+        suggestion = f"'{recipe_obj.title}' 모듈로 추가할게요."
+    else:
+        cands = ", ".join(RECIPES[rid].title for rid, _ in res.scores[:3])
+        suggestion = f"정확히 못 찾았어요. 후보 중 골라주세요: {cands}"
+    name = _suggest_name(res.recipe_id, set(req.existing_names))
+    return ProjectNLAddResponse(
+        ok=True,
+        recipe=res.recipe_id,
+        recipe_title=recipe_obj.title,
+        suggested_name=name,
+        answers=res.answers,
+        confident=res.confident and not safety_warning and not out_of_scope,
+        ranked=ranked,
+        suggestion=suggestion,
+        safety_warning=safety_warning,
+        out_of_scope=out_of_scope,
     )
 
 

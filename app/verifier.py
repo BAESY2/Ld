@@ -135,8 +135,17 @@ def _collect_output_conditions(spec: StateMachineSpec) -> dict[str, list[str]]:
     return result
 
 
-def check_interlocks_z3(spec: StateMachineSpec) -> list[VerificationIssue]:
-    """인터락 쌍이 동시에 켜질 수 있는지 Z3 로 증명한다."""
+def check_interlocks_z3(
+    spec: StateMachineSpec, skip_pairs: frozenset[tuple[str, str]] = frozenset()
+) -> list[VerificationIssue]:
+    """인터락 쌍이 동시에 켜질 수 있는지 Z3 로 증명한다(명세-조건 수준).
+
+    이 검사는 *선언된 전이 조건* 의 겹침만 본다 — synth 가 코일식에 추가하는
+    ``AND NOT 상대`` 가드는 보지 못해, 기동 조건이 독립인 출력 쌍(예: 서로 다른
+    버튼으로 켜지는 두 모터를 교차 인터락으로 묶은 경우)에는 거짓양성을 낸다.
+    그래서 합성 ST 의 k-귀납으로 *실제 상호배제가 증명된* 쌍(``skip_pairs``)은
+    건너뛴다(거짓양성 억제, 보수성은 유지 — 증명 못 한 쌍은 그대로 검사).
+    """
     if not spec.interlocks:
         return []
     if not _HAS_Z3:
@@ -152,6 +161,8 @@ def check_interlocks_z3(spec: StateMachineSpec) -> list[VerificationIssue]:
     issues: list[VerificationIssue] = []
 
     for lock in spec.interlocks:
+        if (lock.output_a, lock.output_b) in skip_pairs:
+            continue  # 합성 ST 의 k-귀납이 이 쌍의 상호배제를 이미 증명함
         conds_a = conditions.get(lock.output_a, [])
         conds_b = conditions.get(lock.output_b, [])
         if not conds_a or not conds_b:
@@ -321,6 +332,36 @@ def check_interlocks_kinduction(
         if issue is not None:
             issues.append(issue)
     return issues
+
+
+def proven_safe_pairs(
+    spec: StateMachineSpec, st_code: str, k: int = 3
+) -> frozenset[tuple[str, str]]:
+    """합성 ST 의 k-귀납으로 *상호배제가 증명된* 인터락 쌍을 (a,b)·(b,a) 둘 다 반환한다.
+
+    증명(``_kinduction_pair`` 가 None)된 쌍만 넣는다 — base 위반(error)·증명불가
+    (warning)·분석불가(ValueError/비코일)는 제외하므로, 이 집합으로 스펙수준
+    거짓양성을 억제해도 실제 위반 탐지력은 약화되지 않는다(positive proof only).
+    """
+    if not spec.interlocks or not _HAS_Z3:
+        return frozenset()
+    if k < 1:
+        k = 1
+    outputs, eqs = _build_transition_system(st_code)
+    out_set = set(outputs)
+    proven: set[tuple[str, str]] = set()
+    for lock in spec.interlocks:
+        a, b = lock.output_a, lock.output_b
+        if a not in eqs or b not in eqs:
+            continue
+        try:
+            issue = _kinduction_pair(spec, eqs, outputs, out_set, lock, a, b, k)
+        except ValueError:
+            continue
+        if issue is None:
+            proven.add((a, b))
+            proven.add((b, a))
+    return frozenset(proven)
 
 
 def _trans_at(
@@ -507,8 +548,10 @@ def verify(
     증명불가(step-only)는 보수적 warning 으로 1-스텝 강도를 약화시키지 않는다.
     """
     issues: list[VerificationIssue] = []
+    # 합성 ST 의 k-귀납으로 상호배제가 증명된 쌍은 스펙수준 거짓양성에서 제외한다.
+    proven = proven_safe_pairs(spec, st_code, k=k) if kinduction else frozenset()
     issues.extend(check_double_coils(st_code))
-    issues.extend(check_interlocks_z3(spec))
+    issues.extend(check_interlocks_z3(spec, skip_pairs=proven))
     issues.extend(check_interlocks_st(spec, st_code))  # 1-스텝 빠른 경로/폴백
     if kinduction:
         issues.extend(check_interlocks_kinduction(spec, st_code, k=k))

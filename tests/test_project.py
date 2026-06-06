@@ -111,9 +111,10 @@ def test_cross_interlock_resolves_and_merges() -> None:
     assert ("pump1__MOTOR", "pump2__MOTOR") in locks
 
 
-def test_cross_interlock_violation_detected_by_verifier() -> None:
-    # 두 모터가 독립 기동 → 동시 ON 가능. 교차 인터락만 선언하고 합성식엔 상호배제가
-    # 안 들어가므로(레시피 내부 인터락 아님) 검증기가 위반을 잡아야 한다.
+def test_cross_interlock_enforced_in_synthesized_st() -> None:
+    # 두 모터는 독립 기동(다른 버튼) → 기동 조건만 보면 동시 ON 가능. 교차 인터락을
+    # 선언하면 synth 가 각 코일식에 'AND NOT 상대' 를 넣어 상호배제를 *강제* 하고,
+    # k-귀납이 그 상호배제를 증명해 verify 가 통과해야 한다(스펙수준 거짓양성 억제).
     proj = Project(
         modules=[
             ModuleInstance(name="p1", recipe="motor_start_stop"),
@@ -124,9 +125,12 @@ def test_cross_interlock_violation_detected_by_verifier() -> None:
         ],
     )
     spec = compose(proj)
-    report = verify(spec, synthesize_st(spec))
-    assert not report.passed
-    assert any(i.code == "INTERLOCK" and i.severity == "error" for i in report.issues)
+    st = synthesize_st(spec)
+    assert "AND NOT p2__MOTOR" in st  # p1 코일이 상대를 가드
+    assert "AND NOT p1__MOTOR" in st  # p2 코일이 상대를 가드
+    report = verify(spec, st)
+    assert report.passed, report.issues
+    assert not any(i.code == "INTERLOCK" and i.severity == "error" for i in report.issues)
 
 
 # ── 결정론: 같은 프로젝트를 두 번 합성하면 바이트 동일 ───────────────────────

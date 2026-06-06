@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ladder Studio — 자연어 공장 자동화 설계</title>
+<style>
+  :root {
+    --bg: #0e1620; --panel: #141e2b; --panel2: #1a2636; --line: #243348;
+    --txt: #dce4f0; --dim: #8b97a8; --accent: #4f9dff; --ok: #46c46a;
+    --warn: #f5b14c; --err: #ff7a7a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, "Noto Sans KR", Segoe UI, Roboto, sans-serif;
+         background: var(--bg); color: var(--txt); height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+           background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sp { flex: 1; }
+  header select, header button { background: var(--panel2); color: var(--txt);
+           border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  header button:hover { border-color: var(--accent); }
+  .safety { background: #2a1d12; color: #f5c48c; border-bottom: 1px solid #4a3417;
+            font-size: 12px; padding: 5px 14px; }
+  .grid { display: grid; grid-template-columns: 340px 1fr 320px; height: calc(100vh - 78px); }
+  .col { overflow: hidden; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+  .col:last-child { border-right: none; }
+  .col h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim);
+            margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .scroll { overflow-y: auto; flex: 1; padding: 10px 12px; }
+
+  /* 좌: 프로젝트 + 채팅 */
+  .module { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 10px; margin-bottom: 8px; }
+  .module .row { display: flex; align-items: center; gap: 6px; }
+  .module .nm { font-weight: 600; color: #bcd2f0; }
+  .module .rc { color: var(--dim); font-size: 12px; }
+  .module .io { font-size: 11px; color: var(--dim); margin-top: 4px; word-break: break-all; }
+  .module .x { margin-left: auto; color: var(--err); cursor: pointer; border: none;
+               background: none; font-size: 16px; line-height: 1; }
+  .empty { color: var(--dim); padding: 16px 4px; font-size: 13px; }
+  .chat { border-top: 1px solid var(--line); display: flex; flex-direction: column; max-height: 46%; }
+  #chat-log { overflow-y: auto; padding: 10px 12px; flex: 1; }
+  .msg { margin-bottom: 8px; font-size: 13px; }
+  .msg.u { text-align: right; }
+  .msg .b { display: inline-block; padding: 6px 10px; border-radius: 10px; max-width: 90%; }
+  .msg.u .b { background: #1f3a5c; }
+  .msg.a .b { background: var(--panel2); }
+  .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px;
+          padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  .inrow { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
+  .inrow input { flex: 1; background: var(--panel2); border: 1px solid var(--line);
+                 color: var(--txt); border-radius: 6px; padding: 8px 10px; }
+  .inrow button { background: var(--accent); color: #06101e; border: none; border-radius: 6px;
+                  padding: 8px 14px; font-weight: 600; cursor: pointer; }
+
+  /* 중: 래더 미리보기 + 탭 */
+  .tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--line);
+          background: var(--panel); }
+  .tab { padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--dim);
+         border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; }
+  .tab.on { color: var(--txt); background: var(--panel2); border-color: var(--line); }
+  .view { display: none; }
+  .view.on { display: block; }
+  #ladder svg { background: #0b121b; border-radius: 8px; }
+  pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, Menlo, monospace;
+        background: #0b121b; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); }
+  .verdict { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 13px; }
+  .verdict .ic { font-size: 15px; }
+
+  /* 우: 라이브 시뮬 */
+  .simctl { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .simctl button { flex: 1; background: var(--panel2); border: 1px solid var(--line);
+                   color: var(--txt); border-radius: 6px; padding: 6px; cursor: pointer; }
+  .simctl button.run { background: var(--ok); color: #06140a; font-weight: 600; border: none; }
+  .io-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .io-item .lab { font-size: 12px; flex: 1; word-break: break-all; }
+  .lamp { width: 14px; height: 14px; border-radius: 50%; background: #33414f; border: 1px solid #46566a; }
+  .lamp.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); border-color: var(--ok); }
+  .lamp.outon { background: var(--warn); box-shadow: 0 0 8px var(--warn); border-color: var(--warn); }
+  .sw { position: relative; width: 38px; height: 20px; background: #33414f; border-radius: 12px;
+        cursor: pointer; transition: background .15s; flex: none; }
+  .sw.on { background: var(--accent); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+        border-radius: 50%; background: #fff; transition: left .15s; }
+  .sw.on::after { left: 20px; }
+  .sec-title { font-size: 11px; color: var(--dim); text-transform: uppercase; margin: 10px 0 4px; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; }
+  .badge.ok { background: #163a22; color: var(--ok); }
+  .badge.err { background: #3a1616; color: var(--err); }
+  .badge.warn { background: #3a2e16; color: var(--warn); }
+  .hint { color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙️ Ladder Studio</h1>
+  <span class="hint">자연어로 공장 자동화 설계 · 실시간 래더 · 가상 시뮬</span>
+  <span class="sp"></span>
+  <span id="status" class="hint"></span>
+  <select id="vendor" title="출력 벤더">
+    <option value="LS_XGK">LS XGK</option>
+    <option value="LS_XGI">LS XGI (IEC)</option>
+    <option value="MITSUBISHI_FX">미쓰비시 FX</option>
+    <option value="SIEMENS_S7">지멘스 S7</option>
+    <option value="OMRON_NX">옴론 NX</option>
+  </select>
+  <button id="btn-undo" title="마지막 변경 되돌리기">↶ 되돌리기</button>
+  <button id="btn-emit">📋 래더 내보내기</button>
+  <button id="btn-xml">⬇ PLCopen XML</button>
+</header>
+<div class="safety" id="safety">
+  ⚠ 생성물은 <b>표준 제어 로직</b>입니다. 비상정지·안전문·라이트커튼 등 <b>안전기능</b>은
+  소프트 로직이 아니라 인증 안전PLC/하드와이어 회로(ISO 13849 / IEC 62061)로 별도 구현하고,
+  배포 전 유자격 엔지니어가 반드시 검토하세요.
+</div>
+
+<div class="grid">
+  <!-- 좌: 프로젝트 + 채팅 -->
+  <div class="col">
+    <h2>프로젝트 (서브시스템)</h2>
+    <div class="scroll" id="project-list"></div>
+    <div class="chat">
+      <h2>설계 대화</h2>
+      <div id="chat-log"></div>
+      <div class="inrow">
+        <input id="nl" placeholder="예: 버튼 누르면 모터 돌고 정지하면 선다" autocomplete="off" />
+        <button id="send">보내기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 중: 래더 미리보기 -->
+  <div class="col">
+    <div class="tabs">
+      <div class="tab on" data-v="ladder">래더</div>
+      <div class="tab" data-v="st">ST</div>
+      <div class="tab" data-v="addr">디바이스 맵</div>
+      <div class="tab" data-v="verify">검증</div>
+    </div>
+    <div class="scroll">
+      <div class="view on" id="v-ladder"><div id="ladder"><div class="empty">왼쪽에서 자연어로 서브시스템을 추가하면 여기에 래더가 실시간으로 그려집니다.</div></div></div>
+      <div class="view" id="v-st"><pre id="st">(아직 없음)</pre></div>
+      <div class="view" id="v-addr"><table id="addr"><thead><tr><th>심볼</th><th>주소</th></tr></thead><tbody></tbody></table></div>
+      <div class="view" id="v-verify"><div id="verify"><div class="empty">검증 결과가 여기 표시됩니다.</div></div></div>
+    </div>
+  </div>
+
+  <!-- 우: 라이브 시뮬 -->
+  <div class="col">
+    <h2>가상 시뮬레이션 (디지털 트윈)</h2>
+    <div class="simctl">
+      <button id="sim-toggle" class="run">▶ 가동</button>
+      <button id="sim-once">스텝 1회</button>
+    </div>
+    <div class="scroll">
+      <div class="sec-title">입력 (클릭해 강제)</div>
+      <div id="sim-inputs"><div class="hint">서브시스템을 추가하면 입력 스위치가 생깁니다.</div></div>
+      <div class="sec-title">출력 (코일)</div>
+      <div id="sim-outputs"><div class="hint">—</div></div>
+      <div class="sec-title">설명</div>
+      <div id="explain" class="hint">—</div>
+    </div>
+  </div>
+</div>
+
+<script src="ladder-render.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ from app.verifier import (
     check_interlocks_kinduction,
     check_interlocks_st,
     check_reachability,
+    proven_safe_pairs,
     verify,
 )
 
@@ -215,3 +216,55 @@ def test_unreachable_state_is_warning() -> None:
     )
     issues = check_reachability(spec)
     assert any(i.code == "UNREACHABLE" and i.severity == "warning" for i in issues)
+
+
+# ── 스펙수준 거짓양성 억제: 코일 가드가 증명되면(proof) 스펙수준 INTERLOCK 제외 ──
+# 기동 조건이 겹치는(독립 입력으로 둘 다 켜질 수 있는) 두 출력 — 교차 인터락 패턴.
+_OVERLAP_SPEC = StateMachineSpec(
+    io_points=[
+        IOPoint(symbol="X", direction=IODirection.INPUT),
+        IOPoint(symbol="A", direction=IODirection.OUTPUT),
+        IOPoint(symbol="B", direction=IODirection.OUTPUT),
+    ],
+    states=[
+        SfcState(name="S0", is_initial=True),
+        SfcState(name="SA", on_entry=["A := TRUE;"]),
+        SfcState(name="SB", on_entry=["B := TRUE;"]),
+    ],
+    transitions=[
+        Transition(from_state="S0", to_state="SA", condition="X"),
+        Transition(from_state="S0", to_state="SB", condition="X"),
+    ],
+    interlocks=[Interlock(output_a="A", output_b="B")],
+)
+_GUARDED_ST = "A := (X OR A) AND NOT B;\nB := (X OR B) AND NOT A;"
+_UNGUARDED_ST = "A := X OR A;\nB := X OR B;"
+
+
+@z3_only
+def test_proven_safe_pairs_includes_guarded_pair() -> None:
+    proven = proven_safe_pairs(_OVERLAP_SPEC, _GUARDED_ST, k=3)
+    assert ("A", "B") in proven and ("B", "A") in proven
+
+
+@z3_only
+def test_proven_safe_pairs_excludes_unguarded_pair() -> None:
+    # 가드 없는 ST 는 증명 불가/위반이므로 proven 집합에 들지 않는다.
+    assert proven_safe_pairs(_OVERLAP_SPEC, _UNGUARDED_ST, k=3) == frozenset()
+
+
+@z3_only
+def test_verify_suppresses_spec_level_false_positive_when_proven() -> None:
+    # 선언 조건은 겹치지만(스펙수준 z3 단독이면 거짓양성) 코일이 상대를 가드 →
+    # k-귀납이 상호배제를 증명 → 스펙수준 INTERLOCK 을 억제하고 통과.
+    report = verify(_OVERLAP_SPEC, _GUARDED_ST)
+    assert report.passed, report.issues
+    assert not any(i.code == "INTERLOCK" and i.severity == "error" for i in report.issues)
+
+
+@z3_only
+def test_verify_keeps_interlock_error_when_unguarded() -> None:
+    # 억제는 '증명된 쌍' 에만 적용 — 가드 없는 도달가능 위반은 여전히 error.
+    report = verify(_OVERLAP_SPEC, _UNGUARDED_ST)
+    assert not report.passed
+    assert any(i.code == "INTERLOCK" and i.severity == "error" for i in report.issues)
