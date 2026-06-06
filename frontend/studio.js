@@ -216,10 +216,14 @@
     $("sim-inputs").innerHTML = '<div class="hint">서브시스템을 추가하면 입력 스위치가 생깁니다.</div>';
     $("sim-outputs").innerHTML = '<div class="hint">—</div>';
   }
-  function renderLadder(ladder) {
+  function renderLadder(ladder, state) {
     $("ladder").innerHTML = (window.LadderRender && ladder)
-      ? window.LadderRender.svg(ladder)
+      ? window.LadderRender.svg(ladder, state)
       : '<div class="empty">래더 없음</div>';
+  }
+  function ladderVisible() {
+    const v = document.getElementById("v-ladder");
+    return v && v.classList.contains("on");
   }
   function renderAddr(map) {
     $("addr").querySelector("tbody").innerHTML =
@@ -281,7 +285,10 @@
   }
   function tick() {
     if (!simEngine) return;
-    updateLamps(simEngine.step(forced, SIM_STEP_MS));
+    const r = simEngine.step(forced, SIM_STEP_MS);
+    updateLamps(r);
+    // 래더 파워플로우: 매 스캔 table 로 도통 접점/경로/코일을 라이브 하이라이트.
+    if (last && last.ladder && ladderVisible()) renderLadder(last.ladder, r.table);
   }
   function toggleInput(sym) {
     forced[sym] = !forced[sym];

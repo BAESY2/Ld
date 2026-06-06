@@ -169,7 +169,8 @@
       prog.assigns.forEach(([lhs, node]) => { tbl[lhs] = evalNode(node, tbl); });
       const inputs = {}; prog.inputs.forEach((s) => { inputs[s] = tbl[s]; });
       const outputs = {}; prog.driven.forEach((s) => { outputs[s] = tbl[s]; });
-      return { inputs, outputs };
+      // table: 접점/코일/타이머.Q 등 전체 심볼값 — 래더 파워플로우 하이라이트용.
+      return { inputs, outputs, table: { ...tbl } };
     }
     return { step, reset, inputs: prog.inputs, outputs: prog.driven, timers: Object.keys(prog.timers) };
   }
