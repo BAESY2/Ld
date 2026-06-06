@@ -191,6 +191,7 @@
   // ── 합성 → 래더/ST/맵/검증 ─────────────────────────────────────────────────
   async function recompose() {
     renderProject();
+    persist();  // 모든 상태 변경마다 로컬 자동저장(빈 상태 포함)
     if (!project.modules.length) { last = null; clearViews(); return; }
     setStatus("합성 중…", "dim");
     let res;
@@ -327,6 +328,57 @@
     URL.revokeObjectURL(a.href);
   }
 
+  // ── 로컬 저장 (localStorage 자동저장 + .ldproj 파일 내보내기/가져오기) ───────────
+  const LS_KEY = "ladder-studio:project";
+  const PROJ_VERSION = 1;
+  function projectDoc() {
+    return { v: PROJ_VERSION, title: project.title,
+      modules: project.modules, cross_interlocks: project.cross_interlocks };
+  }
+  function applyDoc(doc) {
+    // 신뢰 못 할 입력 방어: 모양 검증 후에만 채택.
+    if (!doc || typeof doc !== "object" || !Array.isArray(doc.modules)) throw new Error("형식 오류");
+    project.title = typeof doc.title === "string" ? doc.title : "내 라인";
+    project.modules = doc.modules.filter((m) => m && typeof m.name === "string" && typeof m.recipe === "string")
+      .map((m) => ({ name: m.name, recipe: m.recipe, recipe_title: m.recipe_title || m.recipe,
+        answers: (m.answers && typeof m.answers === "object") ? m.answers : {},
+        shared: (m.shared && typeof m.shared === "object") ? m.shared : {} }));
+    project.cross_interlocks = Array.isArray(doc.cross_interlocks)
+      ? doc.cross_interlocks.filter((c) => c && c.output_a && c.output_b)
+        .map((c) => ({ output_a: c.output_a, output_b: c.output_b, reason: c.reason || "" })) : [];
+  }
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(projectDoc())); } catch (e) { /* 용량초과 등 무시 */ }
+  }
+  function loadLocal() {
+    let raw; try { raw = localStorage.getItem(LS_KEY); } catch (e) { return; }
+    if (!raw) return;
+    try { applyDoc(JSON.parse(raw)); } catch (e) { return; }
+  }
+  function exportProject() {
+    const name = (project.title || "ladder").replace(/[^\w가-힣 .-]/g, "_").trim() || "ladder";
+    download(`${name}.ldproj`, JSON.stringify(projectDoc(), null, 2));
+    setStatus("✓ 프로젝트 저장(.ldproj)", "ok");
+  }
+  function importProject(file) {
+    const r = new FileReader();
+    r.onload = () => {
+      try { applyDoc(JSON.parse(String(r.result))); }
+      catch (e) { setStatus("열기 실패: 형식이 올바르지 않습니다", "err"); return; }
+      history.length = 0; editingIdx = -1;
+      setStatus("✓ 프로젝트 열기 완료", "ok");
+      recompose();
+    };
+    r.readAsText(file);
+  }
+  function newProject() {
+    if (project.modules.length && !confirm("현재 프로젝트를 비우고 새로 시작할까요?")) return;
+    snapshot();
+    project.title = "내 라인"; project.modules = []; project.cross_interlocks = [];
+    editingIdx = -1; $("chat-log").innerHTML = "";
+    recompose();
+  }
+
   // ── 탭 ──────────────────────────────────────────────────────────────────────
   document.querySelectorAll(".tab").forEach((t) => t.onclick = () => {
     document.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
@@ -340,9 +392,19 @@
   $("btn-undo").onclick = undo;
   $("btn-emit").onclick = exportEmit;
   $("btn-xml").onclick = exportXml;
+  $("btn-new").onclick = newProject;
+  $("btn-save").onclick = exportProject;
+  $("btn-open").onclick = () => $("file-open").click();
+  $("file-open").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) importProject(f);
+    e.target.value = "";  // 같은 파일 다시 열기 허용
+  });
   $("sim-toggle").onclick = toggleSim;
   $("sim-once").onclick = tick;
 
   loadRecipes();
-  renderProject();
+  loadLocal();           // 새로고침해도 직전 작업 복원(로컬 자동저장)
+  if (project.modules.length) recompose();
+  else renderProject();
 })();

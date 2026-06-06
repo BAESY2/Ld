@@ -166,9 +166,13 @@
     <option value="SIEMENS_S7">지멘스 S7</option>
     <option value="OMRON_NX">옴론 NX</option>
   </select>
+  <button class="tbtn" id="btn-new" title="새 프로젝트">new</button>
+  <button class="tbtn" id="btn-open" title="프로젝트 열기(.ldproj)">open</button>
+  <button class="tbtn" id="btn-save" title="프로젝트 저장(.ldproj)">save</button>
   <button class="tbtn" id="btn-undo" title="되돌리기">↶ undo</button>
   <button class="tbtn" id="btn-emit">래더 export</button>
   <button class="tbtn" id="btn-xml">xml</button>
+  <input type="file" id="file-open" accept=".ldproj,.json,application/json" style="display:none" />
 </div>
 <div class="safety" id="safety">
   ⚠ 표준 제어 로직입니다. <b>비상정지·안전기능</b>은 소프트 로직이 아니라 인증 안전PLC/하드와이어(ISO 13849·IEC 62061)로 구현하고, 배포 전 유자격 엔지니어 검토 필수.
