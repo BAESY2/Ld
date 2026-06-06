@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PLC래더에디터",
+  "productName": "Ladder Studio",
   "version": "0.1.0",
-  "identifier": "com.ld.plcladder",
+  "identifier": "com.ld.ladderstudio",
   "build": {
     "frontendDist": "../../frontend",
     "devUrl": "http://localhost:8000",
@@ -12,12 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "PLC 래더 라이브 에디터",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 900,
-        "minHeight": 600,
-        "url": "http://localhost:8000"
+        "title": "Ladder Studio — 자연어 PLC 설계",
+        "width": 1480,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "url": "http://localhost:8000/studio.html"
       }
     ],
     "security": {
@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],
-    "icon": ["icons/icon.png"]
+    "icon": ["icons/icon.png"],
+    "externalBin": ["binaries/plc-backend"]
   }
 }
