@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.design import design_project, plan_to_project
+from app.design import design_and_verify, design_project, plan_to_project
 from app.models import (
     CrossInterlock,
     IODirection,
@@ -71,6 +71,39 @@ class _FakeStructuredModel:
         return self._plan
 
 
+class _SeqModel:
+    """호출 순서대로 다른 ProjectPlan 을 돌려준다(재생성 폐루프 검증용)."""
+
+    def __init__(self, plans: list[ProjectPlan]) -> None:
+        self._plans = plans
+        self.calls = 0
+
+    def invoke(self, messages: object) -> ProjectPlan:
+        plan = self._plans[min(self.calls, len(self._plans) - 1)]
+        self.calls += 1
+        return plan
+
+
+def _bad_plan() -> ProjectPlan:
+    # 초기 상태가 없는 명세 → 검증기 DEADLOCK error → verify 실패(폐루프 트리거).
+    bad = StateMachineSpec(
+        io_points=[
+            IOPoint(symbol="BTN", direction=IODirection.INPUT),
+            IOPoint(symbol="M", direction=IODirection.OUTPUT),
+        ],
+        states=[SfcState(name="RUN", on_entry=["M := TRUE;"])],
+        transitions=[],
+    )
+    return ProjectPlan(title="bad", modules=[PlannedModule(name="m", spec=bad)])
+
+
+def _good_plan() -> ProjectPlan:
+    return ProjectPlan(
+        title="good",
+        modules=[PlannedModule(name="m", spec=_motor_spec("START", "STOP", "MOTOR"))],
+    )
+
+
 def test_design_project_builds_inline_spec_modules() -> None:
     model = _FakeStructuredModel(_two_pump_plan())
     project = design_project("펌프 두 대, 동시에 돌면 안 돼", model=model)
@@ -120,30 +153,48 @@ def test_design_project_empty_plan_raises() -> None:
         design_project("뭔가", model=empty)
 
 
+# ── verify→재생성 폐루프(Agents4PLC) ─────────────────────────────────────────
+def test_repair_loop_recovers_after_feedback() -> None:
+    # 1차 설계 실패(DEADLOCK) → 피드백 → 2차 정상. 폐루프가 1회 돌고 합격해야 한다.
+    model = _SeqModel([_bad_plan(), _good_plan()])
+    result = design_and_verify("모터 하나", model=model, max_revisions=2)
+    assert result.report is not None and result.report.passed
+    assert result.revisions == 1
+    assert model.calls == 2
+
+
+def test_repair_loop_gives_up_without_hiding_failure() -> None:
+    # 계속 실패하면 max_revisions 후 마지막 결과를 passed=False 로 반환(은닉 금지).
+    model = _SeqModel([_bad_plan()])  # 항상 같은 불량 계획
+    result = design_and_verify("모터 하나", model=model, max_revisions=2)
+    assert result.revisions == 2
+    assert result.report is None or not result.report.passed
+
+
 # ── /api/design 엔드포인트 (LLM 은 monkeypatch 로 대체) ───────────────────────
 def test_api_design_success(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.server as server
 
     monkeypatch.setattr(
-        server, "design_project", lambda text: plan_to_project(_two_pump_plan())
+        server, "design_and_verify",
+        lambda text: design_and_verify(text, model=_FakeStructuredModel(_two_pump_plan())),
     )
     client = TestClient(server.app)
     j = client.post("/api/design", json={"text": "펌프 두 대 동시 금지"}).json()
     assert j["ok"] is True, j.get("verification")
     assert len(j["ladder"]["rungs"]) >= 2
     assert {m["name"] for m in j["modules"]} == {"pump1", "pump2"}
-    assert not any(
-        i["code"] == "DOUBLE_COIL" for i in j["verification"]["issues"]
-    )
+    assert j["project"] is not None  # studio 채택용 인라인 명세 동봉
+    assert not any(i["code"] == "DOUBLE_COIL" for i in j["verification"]["issues"])
 
 
 def test_api_design_without_llm_is_friendly(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.server as server
 
-    def _boom(text: str) -> Project:
+    def _boom(text: str) -> object:
         raise RuntimeError("no api key")
 
-    monkeypatch.setattr(server, "design_project", _boom)
+    monkeypatch.setattr(server, "design_and_verify", _boom)
     client = TestClient(server.app)
     j = client.post("/api/design", json={"text": "뭔가"}).json()
     assert j["ok"] is False

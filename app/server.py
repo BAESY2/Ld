@@ -37,7 +37,7 @@ from app import __version__
 from app.comms.protocols import WriteRejected
 from app.comms.safety_kernel import SafetyKernel
 from app.config import settings
-from app.design import design_project
+from app.design import design_and_verify
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
@@ -667,6 +667,8 @@ class DesignResponse(BaseModel):
     explanation: str = ""
     modules: list[ProjectModuleSummary] = Field(default_factory=list)
     address_map: list[AddrEntry] = Field(default_factory=list)
+    project: Project | None = None  # studio 가 인라인 명세 모듈을 채택·재합성하도록 동봉
+    revisions: int = 0              # verify→재생성 폐루프가 돈 횟수
     error: str | None = None
     safety_notice: str = SAFETY_NOTICE
 
@@ -710,7 +712,7 @@ def design(req: DesignRequest) -> DesignResponse:
     ok=false). 검증 실패해도 결과를 돌려주되 ok=false 로 표시한다(불량 은닉 금지).
     """
     try:
-        project = design_project(req.text)
+        result = design_and_verify(req.text)
     except ValueError as exc:
         return DesignResponse(ok=False, error=str(exc))
     except Exception as exc:  # noqa: BLE001 - LLM 미설치/키 없음 등을 친절히 안내
@@ -720,30 +722,33 @@ def design(req: DesignRequest) -> DesignResponse:
             error="자연어 설계에는 LLM 설정이 필요합니다(ANTHROPIC_API_KEY 등). "
             "키 없이 쓰려면 좌측 console 의 레시피 매칭 경로를 사용하세요.",
         )
-    try:
-        spec = compose(project)
-        st = synthesize_st(spec)
-        ladder = transpile_st(st, title=spec.title)
-    except ProjectError as exc:
-        return DesignResponse(ok=False, error=str(exc))
-    except ValueError as exc:
-        return DesignResponse(ok=False, error=f"합성 실패: {exc}")
+    if result.spec is None:  # 합성 단계에서 실패(폐루프도 못 고침)
+        return DesignResponse(
+            ok=False, error=result.error or "합성 실패",
+            project=result.project, modules=_summarize_project(result.project),
+            revisions=result.revisions,
+        )
+    ladder = transpile_st(result.st_code, title=result.spec.title)
     if not ladder.rungs:
         return DesignResponse(
-            ok=False, title=spec.title,
+            ok=False, title=result.spec.title,
             error="유효한 래더 로직이 생성되지 않았습니다(요구가 이산 제어로 표현 어려울 수 있음).",
-            modules=_summarize_project(project),
+            project=result.project, modules=_summarize_project(result.project),
+            revisions=result.revisions,
         )
-    report = verify(spec, st)
+    report = result.report
+    assert report is not None
     return DesignResponse(
         ok=report.passed,
-        title=spec.title or project.title,
-        structured_text=st,
+        title=result.spec.title or result.project.title,
+        structured_text=result.st_code,
         ladder=ladder,
         verification=report,
-        explanation=explain_all(spec, ladder, report),
-        modules=_summarize_project(project),
-        address_map=_address_map(spec),
+        explanation=explain_all(result.spec, ladder, report),
+        modules=_summarize_project(result.project),
+        address_map=_address_map(result.spec),
+        project=result.project,
+        revisions=result.revisions,
     )
 
 

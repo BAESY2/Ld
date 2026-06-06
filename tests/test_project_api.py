@@ -79,6 +79,31 @@ def test_compose_cross_interlock_enforced_and_passes() -> None:
     )
 
 
+def test_compose_accepts_inline_spec_module() -> None:
+    # studio 가 /api/design 결과(인라인 명세 모듈)를 채택해 재합성하는 경로.
+    spec = {
+        "title": "모터",
+        "io_points": [
+            {"symbol": "START", "direction": "INPUT"},
+            {"symbol": "STOP", "direction": "INPUT"},
+            {"symbol": "MOTOR", "direction": "OUTPUT"},
+        ],
+        "states": [
+            {"name": "IDLE", "is_initial": True},
+            {"name": "RUN", "on_entry": ["MOTOR := TRUE;"]},
+        ],
+        "transitions": [
+            {"from_state": "IDLE", "to_state": "RUN", "condition": "START AND NOT STOP"},
+            {"from_state": "RUN", "to_state": "IDLE", "condition": "STOP"},
+        ],
+    }
+    body = {"modules": [{"name": "m1", "spec": spec}]}
+    j = client.post("/api/project/compose", json=body).json()
+    assert j["ok"] is True
+    assert any("m1__MOTOR" in e["symbol"] for e in j["address_map"])
+    assert len(j["ladder"]["rungs"]) >= 1
+
+
 def test_compose_empty_is_error() -> None:
     j = client.post("/api/project/compose", json={"modules": []}).json()
     assert j["ok"] is False and j["error"]

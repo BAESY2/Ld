@@ -77,6 +77,41 @@
     }
   }
 
+  // 자유 문장 전체를 LLM 설계 에이전트로 — 여러 서브시스템 자동 분해(키워드 천장 돌파).
+  async function handleDesign(text) {
+    addMsg("u", esc(text));
+    const m = addMsg("a", "🤖 설계 중…");
+    const bubble = m.querySelector(".b");
+    let res;
+    try { res = await api("/api/design", { text }); }
+    catch (e) { bubble.textContent = "서버 연결 실패: " + String(e); return; }
+    if (res.project && (res.project.modules || []).length) {
+      snapshot();
+      adoptProject(res.project);
+      const n = res.project.modules.length;
+      const verdict = res.ok ? "✅ 검증 통과" : "⚠️ 검증 이슈 있음";
+      const rev = res.revisions ? ` · 재설계 ${res.revisions}회` : "";
+      bubble.innerHTML = `${n}개 서브시스템으로 설계했어요 — ${verdict}${rev}`;
+      recompose();
+    } else {
+      bubble.innerHTML = "⚠ " + esc(res.error || "설계 실패");
+    }
+  }
+
+  function adoptProject(proj) {
+    project.title = proj.title || project.title;
+    project.modules = (proj.modules || []).map((mod) => ({
+      name: mod.name,
+      recipe: mod.recipe || "",
+      recipe_title: (mod.spec && mod.spec.title) || mod.recipe || mod.name,
+      answers: mod.answers || {},
+      shared: mod.shared || {},
+      spec: mod.spec || null,
+    }));
+    project.cross_interlocks = proj.cross_interlocks || [];
+    editingIdx = -1;
+  }
+
   function suggestName(recipeId) {
     const base = (recipeId.split("_")[0] || "mod");
     const taken = new Set(takenNames());
@@ -339,10 +374,11 @@
     // 신뢰 못 할 입력 방어: 모양 검증 후에만 채택.
     if (!doc || typeof doc !== "object" || !Array.isArray(doc.modules)) throw new Error("형식 오류");
     project.title = typeof doc.title === "string" ? doc.title : "내 라인";
-    project.modules = doc.modules.filter((m) => m && typeof m.name === "string" && typeof m.recipe === "string")
-      .map((m) => ({ name: m.name, recipe: m.recipe, recipe_title: m.recipe_title || m.recipe,
+    project.modules = doc.modules.filter((m) => m && typeof m.name === "string")
+      .map((m) => ({ name: m.name, recipe: m.recipe || "", recipe_title: m.recipe_title || m.recipe || m.name,
         answers: (m.answers && typeof m.answers === "object") ? m.answers : {},
-        shared: (m.shared && typeof m.shared === "object") ? m.shared : {} }));
+        shared: (m.shared && typeof m.shared === "object") ? m.shared : {},
+        spec: (m.spec && typeof m.spec === "object") ? m.spec : null }));
     project.cross_interlocks = Array.isArray(doc.cross_interlocks)
       ? doc.cross_interlocks.filter((c) => c && c.output_a && c.output_b)
         .map((c) => ({ output_a: c.output_a, output_b: c.output_b, reason: c.reason || "" })) : [];
@@ -388,6 +424,7 @@
 
   // ── 이벤트 ────────────────────────────────────────────────────────────────────
   $("send").onclick = () => { const v = $("nl").value.trim(); if (v) { $("nl").value = ""; handleNL(v); } };
+  $("design-btn").onclick = () => { const v = $("nl").value.trim(); if (v) { $("nl").value = ""; handleDesign(v); } };
   $("nl").addEventListener("keydown", (e) => { if (e.key === "Enter") $("send").click(); });
   $("btn-undo").onclick = undo;
   $("btn-emit").onclick = exportEmit;
