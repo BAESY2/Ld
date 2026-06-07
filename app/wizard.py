@@ -951,6 +951,26 @@ def _retry_alarm(a: Answers) -> StateMachineSpec:
     )
 
 
+def _index_table(a: Answers) -> StateMachineSpec:
+    """인덱싱 테이블: 회전(인덱스)→드웰(각 스테이션 동시 작업) 순환(타임드 시퀀서).
+
+    N스테이션 로터리/분할 테이블을 '한 칸 회전(INDEX, t_index초) → 정지 드웰 중 작업
+    (STATION_WORK, t_dwell초)' 2상 순환으로 모델링한다. 드웰 중 STATION_WORK 가 모든
+    스테이션의 동시 작업을 인에이블한다(병렬 작업 = 단일 작업 인에이블의 이산 근사).
+    회전/작업은 시퀀서 all_off 가드로 one-hot(동시 구동 금지)이 구조적으로 보장된다.
+    """
+    start, stop = _val(a, "start", "IDX_START"), _val(a, "stop", "IDX_STOP")
+    index = _val(a, "index", "INDEX_DRIVE")
+    work = _val(a, "work", "STATION_WORK")
+    steps = [
+        (index, _pint(a, "t_index", 2, lo=1)),
+        (work, _pint(a, "t_dwell", 5, lo=1)),
+    ]
+    return _build_sequencer(
+        steps, start=start, stop=stop, loop=True, title="인덱싱 테이블(회전→드웰 순환)"
+    )
+
+
 def _multiway_sort(a: Answers) -> StateMachineSpec:
     """다갈래 분류(3구획): 분류신호 A/B/C 에 따라 해당 배출 게이트만 개방(one-hot).
 
@@ -1381,6 +1401,18 @@ RECIPES: dict[str, Recipe] = {
              _f("alarm", "초과 알람", "RETRY_ALARM"), _f("retries", "재시도 횟수", "3", "int")),
             _retry_alarm,
             safety_note="알람은 통지용입니다. 위험 정지는 하드와이어 안전회로로 하세요.",
+        ),
+        Recipe(
+            "index_table", "인덱싱 테이블(회전→드웰)",
+            "기동하면 한 칸 회전→드웰 중 스테이션 동시 작업을 순환(one-hot).", "뿌리산업",
+            (_f("start", "기동", "IDX_START"), _f("stop", "정지", "IDX_STOP"),
+             _f("index", "회전 구동", "INDEX_DRIVE"),
+             _f("t_index", "회전 시간(초)", "2", "time_sec"),
+             _f("work", "스테이션 작업", "STATION_WORK"),
+             _f("t_dwell", "드웰 시간(초)", "5", "time_sec")),
+            _index_table,
+            safety_note="회전부 협착·끼임은 하드와이어 안전회로(가드/풀코드)로 막으세요. "
+            "스테이션별 개별 공정 인터락은 별도로 구성하세요.",
         ),
         Recipe(
             "multiway_sort", "다갈래 분류(3구획)",
