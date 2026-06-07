@@ -38,6 +38,8 @@ BENCH: list[tuple[str, str | None, str]] = [
     ("벨트 모터 켜고 끄는 간단한 회로", "motor_start_stop", ""),
     ("비전검사 NG면 리젝트 분기하고 불량 카운트하고 누적되면 알람", "vision_reject",
      "divert+counter+latch 합성 — 연구로 천장 상승(BOOL 표현 가능)"),
+    ("분류신호 A B C 에 따라 해당 배출 게이트만 열고 동시에 안 열리게", "multiway_sort",
+     "이산 클래스 입력 3갈래 one-hot 라우팅(아날로그 판별은 별도)"),
 
     # ── OUT-OF-TEMPLATE (표현 불가 — 신규/아날로그/모션/PID/레시피) ────
     ("항온조를 PID로 60도 ±0.5도로 유지", None, "아날로그 PID 제어(불리언 명세 밖)"),

@@ -951,6 +951,50 @@ def _retry_alarm(a: Answers) -> StateMachineSpec:
     )
 
 
+def _multiway_sort(a: Answers) -> StateMachineSpec:
+    """다갈래 분류(3구획): 분류신호 A/B/C 에 따라 해당 배출 게이트만 개방(one-hot).
+
+    conveyor_divert(2갈래)를 3갈래로 일반화. 분류신호는 *이미 판별된 이산 클래스 입력*
+    (예: 1-of-N 셀렉터/판별 접점)이라 가정한다 — 색·치수 같은 아날로그 판별 자체는
+    범위 밖이며, 여기서는 그 결과 신호로 라인을 가르는 순수 불리언 라우팅만 다룬다.
+    세 게이트는 상호배제(인터락)되어 동시에 둘 이상 열리지 않는다.
+    """
+    ca = _val(a, "class_a", "CLASS_A")
+    cb = _val(a, "class_b", "CLASS_B")
+    cc = _val(a, "class_c", "CLASS_C")
+    reset = _val(a, "reset", "SORT_HOME")
+    ga = _val(a, "gate_a", "GATE_A")
+    gb = _val(a, "gate_b", "GATE_B")
+    gc = _val(a, "gate_c", "GATE_C")
+    return StateMachineSpec(
+        title="다갈래 분류(3구획 one-hot)",
+        io_points=[
+            _io(ca, _IN, "A 분류신호"), _io(cb, _IN, "B 분류신호"), _io(cc, _IN, "C 분류신호"),
+            _io(reset, _IN, "복귀(직진)"),
+            _io(ga, _OUT, "A 게이트"), _io(gb, _OUT, "B 게이트"), _io(gc, _OUT, "C 게이트"),
+        ],
+        states=[
+            SfcState(name="HOME", is_initial=True),
+            SfcState(name="LANE_A", on_entry=[f"{ga} := TRUE;"]),
+            SfcState(name="LANE_B", on_entry=[f"{gb} := TRUE;"]),
+            SfcState(name="LANE_C", on_entry=[f"{gc} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("HOME", "LANE_A", f"{ca} AND NOT {cb} AND NOT {cc} AND NOT {reset}"),
+            _tr("HOME", "LANE_B", f"{cb} AND NOT {ca} AND NOT {cc} AND NOT {reset}"),
+            _tr("HOME", "LANE_C", f"{cc} AND NOT {ca} AND NOT {cb} AND NOT {reset}"),
+            _tr("LANE_A", "HOME", f"{reset} OR {cb} OR {cc}"),
+            _tr("LANE_B", "HOME", f"{reset} OR {ca} OR {cc}"),
+            _tr("LANE_C", "HOME", f"{reset} OR {ca} OR {cb}"),
+        ],
+        interlocks=[
+            Interlock(output_a=ga, output_b=gb, reason="분류 게이트 동시 개방 금지"),
+            Interlock(output_a=ga, output_b=gc, reason="분류 게이트 동시 개방 금지"),
+            Interlock(output_a=gb, output_b=gc, reason="분류 게이트 동시 개방 금지"),
+        ],
+    )
+
+
 def _vision_reject(a: Answers) -> StateMachineSpec:
     """비전검사 NG → 리젝트 게이트 + 불량 카운트 + 누적 알람(divert+counter+latch 합성).
 
@@ -1337,6 +1381,17 @@ RECIPES: dict[str, Recipe] = {
              _f("alarm", "초과 알람", "RETRY_ALARM"), _f("retries", "재시도 횟수", "3", "int")),
             _retry_alarm,
             safety_note="알람은 통지용입니다. 위험 정지는 하드와이어 안전회로로 하세요.",
+        ),
+        Recipe(
+            "multiway_sort", "다갈래 분류(3구획)",
+            "분류신호 A/B/C에 따라 해당 배출 게이트만 개방(동시 개방 금지, one-hot).", "뿌리산업",
+            (_f("class_a", "A 분류신호", "CLASS_A"), _f("class_b", "B 분류신호", "CLASS_B"),
+             _f("class_c", "C 분류신호", "CLASS_C"), _f("reset", "복귀(직진)", "SORT_HOME"),
+             _f("gate_a", "A 게이트", "GATE_A"), _f("gate_b", "B 게이트", "GATE_B"),
+             _f("gate_c", "C 게이트", "GATE_C")),
+            _multiway_sort,
+            safety_note="분기부 협착·끼임은 하드와이어 안전회로로 막으세요. 게이트 상호배제는 "
+            "소프트 인터락이며, 색·치수 등 아날로그 판별은 별도 센서/비전이 담당합니다.",
         ),
         Recipe(
             "vision_reject", "비전 NG 리젝트(카운트+누적알람)",
