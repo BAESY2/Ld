@@ -6,6 +6,7 @@ import pytest
 
 from app.nlmatch import (
     RECIPE_KEYWORDS,
+    _match_score,
     analyze,
     detect_multi_intent,
     disambiguation_question,
@@ -13,9 +14,11 @@ from app.nlmatch import (
     is_confident,
     match_recipe,
 )
+from app.rag import _tokenize
 from app.synth import synthesize_st
 from app.verifier import verify
 from app.wizard import RECIPES, build_spec
+from app.wizard import RECIPES as _RECIPES
 
 _CASES = [
     ("버튼 누르면 모터 돌고 정지 누르면 멈추게", "motor_start_stop"),
@@ -44,6 +47,23 @@ def test_extract_seconds_and_count() -> None:
     assert extract_slots("5초 뒤에 켜기", RECIPES["on_delay"]).get("delay_sec") == "5"
     assert extract_slots("부품 10개", RECIPES["count_eject"]).get("count") == "10"
     assert extract_slots("3 초", RECIPES["on_delay"]).get("delay_sec") == "3"
+
+
+@pytest.mark.parametrize("text", [
+    "버튼 누르면 모터 돌고 정지 누르면 멈추게",
+    "라인 기동하면 컨베이어 돌고 부품 50개 차면 배출하고 잼 생기면 상류 정지",
+    "히터 200도까지 올리고 유지한 다음 식혀",
+    "도금 라인에서 탈지하고 수세하고 도금",
+    "안녕하세요 아무 관련 없는 문장",
+])
+def test_inverted_index_scores_match_single_path(text: str) -> None:
+    """BM25 역색인(일괄) 점수가 단건 _match_score 와 일치해야 한다(최적화 정합성)."""
+    q = _tokenize(text)
+    q_joined = " ".join(set(q))
+    fast = dict(match_recipe(text))
+    for rid, recipe in _RECIPES.items():
+        ref = _match_score(q, recipe, q_joined)
+        assert fast[rid] == pytest.approx(ref, abs=1e-9), rid
 
 
 def test_match_is_deterministic() -> None:

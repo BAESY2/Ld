@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import cache, lru_cache
 
 from app.rag import _bm25_lite_score, _tokenize
 from app.wizard import RECIPES, Recipe
@@ -240,40 +241,105 @@ def _has_safety_term(text: str) -> bool:
     return any(term in low for term in _SAFETY_TERMS)
 
 
-def _recipe_doc_tokens(recipe: Recipe) -> list[str]:
+@cache
+def _doc_tokens_for(rid: str) -> tuple[str, ...]:
+    """레시피의 BM25 문서 토큰(제목+설명+분류 + 키워드 2배). RECIPES 불변 → 1회만 계산.
+
+    핫패스(매 NL 쿼리가 35개 레시피를 채점)에서 동일 토큰화를 반복하지 않도록 캐시한다.
+    """
+    recipe = RECIPES[rid]
     toks = _tokenize(f"{recipe.title} {recipe.description} {recipe.category}")
-    for kw in RECIPE_KEYWORDS.get(recipe.id, []):
+    for kw in RECIPE_KEYWORDS.get(rid, []):
         t = _tokenize(kw)
         toks.extend(t)
         toks.extend(t)  # 키워드 2배 가중
-    return toks
+    return tuple(toks)
 
 
-def _recipe_kw_tokens(recipe: Recipe) -> set[str]:
-    """부분포함 채점용 distinct 키워드 토큰(2글자 이상)."""
+@cache
+def _kw_tokens_for(rid: str) -> frozenset[str]:
+    """부분포함 채점용 distinct 키워드 토큰(2글자 이상). 캐시(불변 레시피)."""
+    recipe = RECIPES[rid]
     toks = set(_tokenize(f"{recipe.title} {recipe.description} {recipe.category}"))
-    for kw in RECIPE_KEYWORDS.get(recipe.id, []):
+    for kw in RECIPE_KEYWORDS.get(rid, []):
         toks.update(_tokenize(kw))
-    return {t for t in toks if len(t) >= 2}
+    return frozenset(t for t in toks if len(t) >= 2)
 
 
-def _match_score(q: list[str], recipe: Recipe) -> float:
-    """BM25(정확) + 부분포함(조사/활용형 흡수) 블렌드. 키 불필요·결정론."""
-    bm = _bm25_lite_score(q, _recipe_doc_tokens(recipe)) if q else 0.0
+def _recipe_doc_tokens(recipe: Recipe) -> tuple[str, ...]:
+    return _doc_tokens_for(recipe.id)
+
+
+def _recipe_kw_tokens(recipe: Recipe) -> frozenset[str]:
+    return _kw_tokens_for(recipe.id)
+
+
+# BM25 역색인: token → [(rid, 사전계산 기여도)]. rag._bm25_lite_score 와 *수식 동일*
+# (k1=1.5,b=0.75,avg_dl=60). 쿼리당 35개 문서의 tf맵을 재빌드하는 대신, 쿼리 토큰의
+# 포스팅만 더해 bm25 를 누적한다 — 영(0)점 레시피를 통째로 건너뛰는 구조적 가속.
+_BM25_K1 = 1.5
+_BM25_B = 0.75
+_BM25_AVG_DL = 60.0
+
+
+@lru_cache(maxsize=1)
+def _bm25_postings() -> dict[str, list[tuple[str, float]]]:
+    postings: dict[str, list[tuple[str, float]]] = {}
+    for rid in RECIPES:
+        doc = _doc_tokens_for(rid)
+        dl = len(doc)
+        denom_const = _BM25_K1 * (1 - _BM25_B + _BM25_B * dl / _BM25_AVG_DL)
+        tf: dict[str, int] = {}
+        for t in doc:
+            tf[t] = tf.get(t, 0) + 1
+        for token, freq in tf.items():
+            contrib = freq * (_BM25_K1 + 1) / (freq + denom_const)
+            postings.setdefault(token, []).append((rid, contrib))
+    return postings
+
+
+def _match_score(q: list[str], recipe: Recipe, q_joined: str | None = None) -> float:
+    """BM25(정확) + 부분포함(조사/활용형 흡수) 블렌드. 키 불필요·결정론.
+
+    단건 채점 경로(테스트/외부 호출 호환). 일괄 채점은 match_recipe 가 역색인을 쓴다.
+    """
     qset = set(q)
+    if q_joined is None:
+        q_joined = " ".join(qset)
+    bm = _bm25_lite_score(q, list(_doc_tokens_for(recipe.id))) if q else 0.0
     sub = 0.0
-    for kt in _recipe_kw_tokens(recipe):
+    for kt in _kw_tokens_for(recipe.id):
         if kt in qset:
             continue  # 이미 BM25가 셈
-        if any(kt in qt for qt in qset):  # 키워드가 쿼리 토큰의 부분문자열
+        if kt in q_joined:  # 키워드가 쿼리 토큰의 부분문자열(공백 비포함)
             sub += _SUB_W
     return bm + sub
 
 
 def match_recipe(text: str, k: int | None = None) -> list[tuple[str, float]]:
-    """자연어를 레시피와 비교해 (id, score) 내림차순 반환(BM25+부분포함)."""
+    """자연어를 레시피와 비교해 (id, score) 내림차순 반환(BM25 역색인 + 부분포함).
+
+    부분포함은 '키워드 토큰이 어떤 쿼리 토큰의 부분문자열'인지 본다. 토큰엔 공백이
+    없으므로 쿼리 토큰을 공백으로 이은 q_joined 한 줄의 단일 substring 검색이 토큰별
+    이중 루프와 정확히 동치다. 점수는 단건 _match_score 와 동일(합은 순서 무관·결정론).
+    """
     q = _tokenize(text)
-    scored = [(rid, _match_score(q, r)) for rid, r in RECIPES.items()]
+    qset = set(q)
+    q_joined = " ".join(qset)
+    # BM25: 쿼리 토큰의 포스팅만 더한다(0점 레시피는 dict 에 안 생김).
+    bm: dict[str, float] = {}
+    if qset:
+        postings = _bm25_postings()
+        for token in qset:
+            for rid, contrib in postings.get(token, ()):
+                bm[rid] = bm.get(rid, 0.0) + contrib
+    scored: list[tuple[str, float]] = []
+    for rid in RECIPES:
+        score = bm.get(rid, 0.0)
+        for kt in _kw_tokens_for(rid):
+            if kt not in qset and kt in q_joined:
+                score += _SUB_W
+        scored.append((rid, score))
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:k] if k else scored
 
