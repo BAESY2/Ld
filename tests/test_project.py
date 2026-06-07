@@ -10,9 +10,25 @@ import pytest
 
 from app.memory_map import DeviceAllocator
 from app.models import CrossInterlock, ModuleInstance, Project
-from app.project import ProjectError, compose
+from app.project import ProjectError, compose, scaffold_from_recipes
 from app.synth import covers_all_outputs, synthesize_st
 from app.verifier import verify
+
+
+def test_scaffold_from_recipes_composes_and_verifies() -> None:
+    """감지된 레시피 id 들 → 다중모듈 골격이 compose→synth→verify 를 통과한다."""
+    proj = scaffold_from_recipes(["motor_start_stop", "latch_alarm", "count_eject"])
+    assert [m.recipe for m in proj.modules] == ["motor_start_stop", "latch_alarm", "count_eject"]
+    spec = compose(proj)
+    assert verify(spec, synthesize_st(spec)).passed
+
+
+def test_scaffold_skips_unknown_and_dedups_names() -> None:
+    proj = scaffold_from_recipes(["motor_start_stop", "ghost_recipe", "motor_start_stop"])
+    # 알 수 없는 id 는 건너뛰고, 중복 레시피는 고유 모듈명으로.
+    assert all(m.recipe in {"motor_start_stop"} for m in proj.modules)
+    assert len(proj.modules) == 2
+    assert len({m.name for m in proj.modules}) == 2
 
 
 def _two_motors() -> Project:

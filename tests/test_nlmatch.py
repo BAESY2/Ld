@@ -147,6 +147,27 @@ def test_nl_design_endpoint() -> None:
     assert "하드와이어" in d["safety_notice"]
 
 
+def test_nl_add_builds_verified_scaffold_for_compound() -> None:
+    """다중 서브시스템 요청 → nl-add 가 검증 통과한 다중모듈 골격을 돌려준다(침묵 누락 방지)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    r = c.post("/api/project/nl-add", json={
+        "text": "용접 클램프하고 용접하고 풀어주는데 안전문 열려있으면 시작 안되게",
+        "existing_names": [],
+    })
+    assert r.status_code == 200
+    d = r.json()
+    assert d["multi_intent"]
+    assert len(d["scaffold"]) >= 2
+    assert d["scaffold_verified"] is True  # 골격이 compose→verify 통과
+    # 안전 레시피 모듈은 안전경고를 달고 온다(가드 인터락).
+    assert any("⛔" in m["safety_note"] for m in d["scaffold"])
+
+
 def test_nl_design_surfaces_multi_intent() -> None:
     """다중 서브시스템 요청은 API 에서 multi_intent 안내 + 설계 보류로 나온다."""
     pytest.importorskip("fastapi")

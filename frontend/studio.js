@@ -60,6 +60,14 @@
     catch (e) { addMsg("a", "서버 연결 실패: " + esc(String(e))); return; }
     if (res.safety_warning) addMsg("a", "🛑 " + esc(res.safety_warning));
     if (res.out_of_scope) { addMsg("a", "⚠ " + esc(res.suggestion)); return; }
+    if (res.multi_intent && (res.scaffold || []).length) {
+      // 다중 서브시스템 감지 → 검증 통과 골격을 한 번에 담는다(침묵 부분생성 대신).
+      addMsg("a", esc(res.suggestion));
+      snapshot();
+      (res.scaffold || []).forEach((m) => addModule(m.recipe, m.name, m.recipe_title, {}));
+      recompose();
+      return;
+    }
     if (res.confident) {
       addMsg("a", esc(res.suggestion) + ` <b>(${esc(res.suggested_name)})</b>`);
       addModule(res.recipe, res.suggested_name, res.recipe_title, res.answers || {});

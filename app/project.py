@@ -32,7 +32,7 @@ from app.models import (
     TimerSpec,
     Transition,
 )
-from app.wizard import WizardError, build_spec
+from app.wizard import RECIPES, WizardError, build_spec
 
 _NAME_RE = re.compile(r"^[A-Za-z_]\w*$")
 
@@ -173,6 +173,34 @@ def _resolve_ref(ref: str, mappings: dict[str, dict[str, str]]) -> str:
         return mapping[local]
     # 점이 없으면 공유 전역 심볼로 간주(그대로 사용).
     return ref
+
+
+def scaffold_from_recipes(
+    recipe_ids: list[str],
+    *,
+    title: str = "자동 골격",
+    answers_by_id: dict[str, dict[str, str]] | None = None,
+) -> Project:
+    """감지된 레시피 id 들로 다중모듈 Project 골격을 만든다(각 모듈=레시피 1개).
+
+    다중의도(compound) 요청을 침묵 누락하는 대신, 감지된 서브시스템을 모듈로 담아
+    compose→verify 가능한 *출발점*을 제공한다(키 불필요·결정론). 답변은 기본값이며
+    answers_by_id 로 일부 채울 수 있다 — 사용자가 스튜디오에서 다듬는다. 알 수 없는
+    레시피 id 는 조용히 건너뛴다. 모듈명은 레시피 id(영문 식별자)에서 만들고 중복 제거.
+    """
+    answers_by_id = answers_by_id or {}
+    modules: list[ModuleInstance] = []
+    taken: set[str] = set()
+    for i, rid in enumerate(recipe_ids, start=1):
+        if rid not in RECIPES:
+            continue
+        name = rid if rid not in taken and _NAME_RE.match(rid) else f"m{i}_{rid}"
+        while name in taken or not _NAME_RE.match(name):
+            name = f"m{i}_{rid}"
+            i += 1
+        taken.add(name)
+        modules.append(ModuleInstance(name=name, recipe=rid, answers=answers_by_id.get(rid, {})))
+    return Project(title=title, modules=modules)
 
 
 def compose(project: Project) -> StateMachineSpec:
