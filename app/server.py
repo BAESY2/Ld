@@ -380,6 +380,8 @@ class NLDesignResponse(BaseModel):
     design: WizardResponse | None = None
     safety_warning: str = ""
     out_of_scope: str = ""  # 21개 템플릿 밖(아날로그/모션/통신/PID 등) → 정직 거절
+    multi_intent: str = ""  # 다중 서브시스템 감지 → 침묵 부분생성 대신 개별 합성 안내
+    multi_intent_ids: list[str] = Field(default_factory=list)
     safety_notice: str = SAFETY_NOTICE
 
 
@@ -393,8 +395,15 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         for rid, s in res.scores[:3]
     ]
     out_of_scope = res.extras.get("out_of_scope", "")
+    multi_intent = res.extras.get("multi_intent", "")
+    multi_intent_ids = (
+        res.extras["multi_intent_ids"].split(",") if "multi_intent_ids" in res.extras else []
+    )
     if out_of_scope:
         suggestion = "21개 결정론 템플릿 밖의 요청이에요(아날로그·모션·통신·PID 등)."
+    elif multi_intent:
+        subs = ", ".join(RECIPES[i].title for i in multi_intent_ids)
+        suggestion = f"여러 서브시스템이 보여요({subs}). 하나씩 추가해 합성하길 권해요."
     elif res.confident:
         suggestion = f"'{recipe_obj.title}'(으)로 이해했어요."
     else:
@@ -413,6 +422,7 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         provisional=(design is None and req.autobuild),
         suggestion=suggestion, design=design,
         safety_warning=safety_warning, out_of_scope=out_of_scope,
+        multi_intent=multi_intent, multi_intent_ids=multi_intent_ids,
     )
 
 

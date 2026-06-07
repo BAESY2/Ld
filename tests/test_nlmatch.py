@@ -7,6 +7,7 @@ import pytest
 from app.nlmatch import (
     RECIPE_KEYWORDS,
     analyze,
+    detect_multi_intent,
     disambiguation_question,
     extract_slots,
     is_confident,
@@ -146,6 +147,26 @@ def test_nl_design_endpoint() -> None:
     assert "하드와이어" in d["safety_notice"]
 
 
+def test_nl_design_surfaces_multi_intent() -> None:
+    """다중 서브시스템 요청은 API 에서 multi_intent 안내 + 설계 보류로 나온다."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    r = c.post("/api/nl-design", json={
+        "text": "라인 기동하면 컨베이어 돌고 부품 50개 차면 배출하고 잼 생기면 상류 정지",
+        "autobuild": True,
+    })
+    assert r.status_code == 200
+    d = r.json()
+    assert d["confident"] is False
+    assert d["design"] is None  # 침묵 부분생성 금지
+    assert d["multi_intent"]
+    assert len(d["multi_intent_ids"]) >= 2
+
+
 def test_estop_lowers_confidence_and_warns() -> None:
     """'비상정지' 표현은 자신만만 매칭을 막고 하드와이어 경고를 띄운다(P3 가드)."""
     res = analyze("비상정지 누르면 모터 정지")
@@ -227,6 +248,48 @@ def test_analyze_is_fully_deterministic() -> None:
     a = analyze("모터 운전하기", allow_llm=False)
     b = analyze("모터 운전하기", allow_llm=False)
     assert a == b
+
+
+# --- Part 3: 다중의도(compound) 자각 — 침묵 누락 방지 ---
+_COMPOUND_CASES = [
+    "버튼 누르면 모터 돌고 5초 뒤 두번째 모터도 돌고 고장나면 둘다 정지하고 경광등",
+    "프레스는 양손 동시에 눌러야 동작하고 가드 열리면 멈추고 비상스위치 누르면 전체 정지",
+    "라인 기동하면 컨베이어 돌고 부품 50개 차면 배출하고 잼 생기면 상류 정지",
+    "용접 클램프하고 용접하고 풀어주는데 안전문 열려있으면 시작 안되게",
+]
+
+
+@pytest.mark.parametrize("text", _COMPOUND_CASES)
+def test_compound_request_is_flagged_not_silently_partial(text: str) -> None:
+    """다중 서브시스템 요청은 확신을 강등하고 multi_intent 안내를 띄운다(침묵 누락 방지)."""
+    res = analyze(text, allow_llm=False)
+    assert res.confident is False
+    assert "multi_intent" in res.extras
+    ids = res.extras["multi_intent_ids"].split(",")
+    assert len(ids) >= 2
+
+
+# 단일의도(흔한 패턴)는 compound 로 오인하면 안 된다(precision 우선 — 침묵실패율 0 유지).
+_SINGLE_INTENT_CASES = [
+    "버튼 누르면 모터 돌고 정지 누르면 선다",
+    "기동 버튼 누르면 컨베이어 모터 돌고 정지 누르면 멈추게",  # 단일↔다단 변형(오인 금지)
+    "물탱크 저수위 되면 펌프 켜고 만수위 되면 꺼줘",
+    "셔터 열림 닫힘 버튼으로 올리고 내리는데 끝까지 가면 리밋으로 정지",
+    "여러 고장 중 제일 먼저 난 것만 표시하고 부저 확인하면 소거",  # first-out↔래치 변형(오인 금지)
+    "세차기 비누 뿌리고 헹구고 건조까지 순서대로",
+]
+
+
+@pytest.mark.parametrize("text", _SINGLE_INTENT_CASES)
+def test_single_intent_not_flagged_compound(text: str) -> None:
+    res = analyze(text, allow_llm=False)
+    assert "multi_intent" not in res.extras
+    assert detect_multi_intent(text, match_recipe(text)) == []
+
+
+def test_detect_multi_intent_deterministic() -> None:
+    t = "버튼 누르면 모터 돌고 고장나면 경광등 켜고 알람"
+    assert detect_multi_intent(t, match_recipe(t)) == detect_multi_intent(t, match_recipe(t))
 
 
 def test_new_root_industry_recipes_build_valid_design() -> None:

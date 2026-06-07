@@ -375,6 +375,86 @@ def _out_of_scope(text: str) -> bool:
     return any(cue in low for cue in _OUT_OF_SCOPE_CUES)
 
 
+# ── 다중의도(compound) 감지 — 한 요청에 여러 서브시스템이 섞였는지 정직히 자각 ──
+# 키 없는 매처는 요청당 *한* 레시피만 만든다. 다중 서브시스템 요청을 top-1 으로
+# 자신있게 축약하면 나머지를 *침묵 누락*한다(작업자는 빠진 줄 모름). 이를 막기 위해
+# '서로 다른 서브시스템'이 각자 *희소(near-unique) 키워드*로 강하게 잡힐 때만 compound
+# 로 자각하고 확신을 강등한다. precision 우선 — 단일의도를 compound 로 오인하지 않는다.
+_MULTI_DF_MAX = 2  # 키워드 토큰이 이 이하 레시피에만 등장하면 '특이 증거'로 인정
+_MULTI_SECONDARY_MIN = 2.0  # 2차 이상 의도는 이 점수 이상이어야 채택(약한 잡음 배제)
+
+# 같은 서브시스템의 변형(단일↔다단 컨베이어, 알람 변형 등)은 *별개 의도로 세지 않는다*
+# — '컨베이어 모터 기동/정지'(단일)나 'first-out 알람'(래치 변형)을 compound 로 오인 방지.
+_SAME_SUBSYSTEM_PAIRS: frozenset[frozenset[str]] = frozenset({
+    frozenset({"motor_start_stop", "cascade_conveyor"}),
+    frozenset({"first_out_alarm", "latch_alarm"}),
+})
+
+
+def _kw_df() -> dict[str, int]:
+    """키워드 토큰의 레시피 document-frequency(희소성 척도). RECIPES 고정 → 1회 계산."""
+    df: dict[str, int] = {}
+    for rid in RECIPES:
+        for t in _recipe_kw_tokens(RECIPES[rid]):
+            df[t] = df.get(t, 0) + 1
+    return df
+
+
+_KW_DF: dict[str, int] = _kw_df()
+
+
+def _specific_hits(qset: set[str], recipe_id: str) -> set[str]:
+    """쿼리에 등장한 그 레시피의 *희소* 키워드 토큰(df<=_MULTI_DF_MAX)."""
+    return {
+        t for t in _recipe_kw_tokens(RECIPES[recipe_id])
+        if t in qset and _KW_DF.get(t, 99) <= _MULTI_DF_MAX
+    }
+
+
+def detect_multi_intent(text: str, scores: list[tuple[str, float]]) -> list[str]:
+    """서로 다른 서브시스템이 각자 희소 키워드로 잡히면 그 레시피 id 들을 반환(없으면 []).
+
+    greedy: 점수순으로, (1) 1위는 특이증거가 있으면 채택, (2) 2위 이하는 강한 점수 +
+    아직 다른 의도가 쓰지 않은 *전용* 특이증거 + 헷갈림쌍 아님일 때만 추가. 2개 이상
+    모이면 compound. 단일의도(특이증거 전용 토큰이 1개 의도뿐)는 [] 로 떨어진다.
+    """
+    qset = set(_tokenize(text))
+    collected: list[str] = []
+    claimed: set[str] = set()
+    for rid, sc in scores:
+        if sc < _MIN_SCORE:
+            break
+        hits = _specific_hits(qset, rid)
+        if not hits:
+            continue
+        if not collected:
+            collected.append(rid)
+            claimed |= hits
+            continue
+        if sc < _MULTI_SECONDARY_MIN:
+            continue
+        if not (hits - claimed):  # 전용(아직 안 쓰인) 특이증거가 없으면 동일의도로 간주
+            continue
+        if any(
+            frozenset({rid, c}) in CONFUSABLE_QUESTIONS
+            or frozenset({rid, c}) in _SAME_SUBSYSTEM_PAIRS
+            for c in collected
+        ):
+            continue
+        collected.append(rid)
+        claimed |= hits
+    return collected if len(collected) >= 2 else []
+
+
+def _multi_intent_msg(ids: list[str]) -> str:
+    titles = ", ".join(RECIPES[i].title for i in ids)
+    return (
+        f"여러 서브시스템이 한 요청에 섞여 있습니다 → {titles}. 키 없는 매칭은 요청당 "
+        f"한 레시피만 만들어 나머지를 침묵 누락하므로 자동 생성을 보류합니다. 각 "
+        f"서브시스템을 개별로 추가(프로젝트 합성)하거나 LLM 설계 경로(키 필요)를 쓰세요."
+    )
+
+
 def analyze(text: str, allow_llm: bool = True) -> NLResult:
     """자연어 → 레시피+슬롯+질문. 키 불필요(BM25). LLM 폴백은 미연결(키 없을 때 동일)."""
     scores = match_recipe(text)
@@ -397,6 +477,12 @@ def analyze(text: str, allow_llm: bool = True) -> NLResult:
     if _out_of_scope(text):
         confident = False
         extras["out_of_scope"] = _OUT_OF_SCOPE_MSG
+    # 다중 서브시스템(compound)이 섞였으면 한 조각으로 자신있게 축약하지 않는다.
+    multi = detect_multi_intent(text, scores)
+    if multi:
+        confident = False
+        extras["multi_intent"] = _multi_intent_msg(multi)
+        extras["multi_intent_ids"] = ",".join(multi)
     # 안전필수 표현이 보이면 자신만만한 매칭을 막고 하드와이어 경고를 띄운다.
     if _has_safety_term(text):
         confident = False
