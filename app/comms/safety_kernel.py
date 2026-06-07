@@ -115,8 +115,14 @@ class SafetyKernel:
         # 모든 체크 통과 — 실링크로 전달. 링크 쓰기 자체가 실패해도(소켓 단절 등)
         # fail-safe 로 DENY 를 감사기록하고 WriteRejected 로 올린다(원시 예외 누출·
         # 감사 누락 금지). ALLOW 는 실제 전달이 성공했을 때만 기록한다.
+        #
+        # 방어적 스냅샷: 검증을 *통과한 바로 그 값* 만 하위 링크로 내려보낸다. 호출자가
+        # 같은 dict 참조를 계속 들고 있다가 게이트 통과 후(또는 링크가 참조를 보관 중일
+        # 때) 값을 바꿔치기해도, 검증을 우회한 위험 값이 실링크에 흘러들 수 없다. 안전
+        # 최후 방어선이므로 별칭(aliasing)으로 인한 TOCTOU 누출을 원천 차단한다.
+        snapshot = dict(values)
         try:
-            self._link.write_inputs(values)
+            self._link.write_inputs(snapshot)
         except Exception as exc:  # noqa: BLE001 — fail-safe
             self.audit.append(
                 AuditEntry(
