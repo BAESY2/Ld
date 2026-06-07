@@ -153,6 +153,32 @@ def test_design_project_empty_plan_raises() -> None:
         design_project("뭔가", model=empty)
 
 
+# ── 구조화 피드백(CEGIS 스타일) ──────────────────────────────────────────────
+def test_feedback_carries_counterexample_and_remedy() -> None:
+    from app.design import _feedback_from
+    from app.models import VerificationIssue, VerificationReport
+
+    report = VerificationReport(
+        passed=False,
+        issues=[
+            VerificationIssue(
+                code="DEADLOCK", severity="error",
+                message="상태 RUN 도달 불가", counterexample="초기 상태 없음",
+            ),
+            VerificationIssue(code="DOUBLE_COIL", severity="error", message="MOTOR 이중 코일"),
+            VerificationIssue(code="TIMER_PRESET", severity="warning", message="무시될 경고"),
+        ],
+        suggested_fix="초기 상태를 추가하세요.",
+    )
+    fb = _feedback_from(report)
+    assert "초기 상태를 추가하세요." in fb          # suggested_fix 머리말
+    assert "상태 RUN 도달 불가" in fb               # 원 메시지
+    assert "초기 상태 없음" in fb                   # 반례 동봉
+    assert "is_initial=True" in fb                  # DEADLOCK 코드별 수정 지침
+    assert "이중 코일 금지" in fb                   # DOUBLE_COIL 지침
+    assert "무시될 경고" not in fb                  # warning 은 제외
+
+
 # ── verify→재생성 폐루프(Agents4PLC) ─────────────────────────────────────────
 def test_repair_loop_recovers_after_feedback() -> None:
     # 1차 설계 실패(DEADLOCK) → 피드백 → 2차 정상. 폐루프가 1회 돌고 합격해야 한다.

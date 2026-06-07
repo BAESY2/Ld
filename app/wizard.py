@@ -951,6 +951,45 @@ def _retry_alarm(a: Answers) -> StateMachineSpec:
     )
 
 
+def _vision_reject(a: Answers) -> StateMachineSpec:
+    """비전검사 NG → 리젝트 게이트 + 불량 카운트 + 누적 알람(divert+counter+latch 합성).
+
+    REJECT 는 NG 판정 동안 분기 게이트를 여는 조합(파생) 출력. 불량은 C1 카운터로
+    적산하고 preset N 도달 시 ALARM 을 래치(리셋해야 해제)한다. 아날로그 없이 순수
+    불리언/카운터/래치로 '비전 NG 처리' 의도를 구현한다(연구: BOOL-expressible 합성).
+    """
+    ng = _val(a, "ng", "NG")
+    reset = _val(a, "reset", "VIS_RST")
+    reject = _val(a, "reject", "REJECT")
+    alarm = _val(a, "alarm", "DEFECT_ALARM")
+    n = _pint(a, "count", 5, lo=1)
+    return StateMachineSpec(
+        title=f"비전 NG 리젝트(누적 {n}개 알람)",
+        io_points=[
+            _io(ng, _IN, "비전 NG(불량 판정)"),
+            _io(reset, _IN, "카운터/알람 리셋"),
+            _io(reject, _OUT, "리젝트 분기 게이트"),
+            _io(alarm, _OUT, "누적 불량 알람"),
+        ],
+        counters=[
+            CounterSpec(name="C1", preset=n, count_condition=ng,
+                        reset_condition=reset, description=f"불량 {n}개 누적"),
+        ],
+        derived_outputs=[
+            DerivedOutput(output=reject, expression=f"{ng} AND NOT {reset}",
+                          description="NG 판정 동안 리젝트 게이트 개방"),
+        ],
+        states=[
+            SfcState(name="INSPECT", is_initial=True),
+            SfcState(name="ALARMED", on_entry=[f"{alarm} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("INSPECT", "ALARMED", f"C1.Q AND NOT {reset}"),
+            _tr("ALARMED", "INSPECT", f"{reset}"),
+        ],
+    )
+
+
 def _shutter_gate(a: Answers) -> StateMachineSpec:
     """셔터/게이트 개폐 — 열림/닫힘/정지, 리밋 정지, 개폐 동시금지(인터락)."""
     open_pb = _val(a, "open_pb", "OPEN_PB")
@@ -1298,6 +1337,16 @@ RECIPES: dict[str, Recipe] = {
              _f("alarm", "초과 알람", "RETRY_ALARM"), _f("retries", "재시도 횟수", "3", "int")),
             _retry_alarm,
             safety_note="알람은 통지용입니다. 위험 정지는 하드와이어 안전회로로 하세요.",
+        ),
+        Recipe(
+            "vision_reject", "비전 NG 리젝트(카운트+누적알람)",
+            "비전검사 NG면 리젝트 분기, 불량을 카운트해 누적되면 알람 래치.", "검사",
+            (_f("ng", "비전 NG", "NG"), _f("reset", "리셋", "VIS_RST"),
+             _f("reject", "리젝트 게이트", "REJECT"), _f("alarm", "누적 알람", "DEFECT_ALARM"),
+             _f("count", "누적 알람 개수", "5", "int")),
+            _vision_reject,
+            safety_note="리젝트 액추에이터(에어실린더 등) 협착은 하드와이어 가드로 막으세요. "
+            "알람은 통지용입니다.",
         ),
         Recipe(
             "shutter_gate", "셔터/게이트 개폐", "열림/닫힘/정지, 리밋 정지, 동시 구동 금지.",

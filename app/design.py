@@ -92,10 +92,35 @@ class DesignResult:
     error: str | None = None
 
 
+# 검증 코드별 구체 수정 지침 — 같은 실패를 반복하지 않도록 재생성 LLM 에 정확히 지시.
+_REMEDY: dict[str, str] = {
+    "DEADLOCK": "→ is_initial=True 인 초기 상태와 그 상태로 들어오는 전이를 반드시 두세요.",
+    "UNREACHABLE": "→ 해당 상태로 가는 전이를 추가하거나, 불필요하면 그 상태를 제거하세요.",
+    "DOUBLE_COIL": "→ 한 출력은 한 상태/식에서만 구동하세요(이중 코일 금지).",
+    "INTERLOCK": "→ 동시 금지 출력 쌍을 interlocks 에 넣거나 전이 조건으로 분리하세요.",
+    "INTERLOCK_KIND": "→ 인터락 대상은 OUTPUT 심볼이어야 합니다.",
+}
+
+
 def _feedback_from(report: VerificationReport) -> str:
-    errs = [f"[{i.code}] {i.message}" for i in report.issues if i.severity == "error"]
-    fix = report.suggested_fix
-    return (fix + " " if fix else "") + " / ".join(errs)
+    """검증 반례를 재생성 LLM 이 정확히 고치도록 구조화한 피드백(연구: CEGIS 스타일).
+
+    코드별 구체 수정 지침과 반례를 함께 실어 같은 실패의 반복을 막는다(코드당 지침 1회).
+    """
+    lines: list[str] = []
+    seen: set[str] = set()
+    for i in report.issues:
+        if i.severity != "error":
+            continue
+        line = f"[{i.code}] {i.message}"
+        if i.counterexample:
+            line += f" (반례: {i.counterexample})"
+        if i.code in _REMEDY and i.code not in seen:
+            line += " " + _REMEDY[i.code]
+            seen.add(i.code)
+        lines.append(line)
+    head = (report.suggested_fix + " ") if report.suggested_fix else ""
+    return head + " / ".join(lines)
 
 
 def design_and_verify(

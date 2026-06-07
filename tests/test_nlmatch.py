@@ -23,6 +23,7 @@ _CASES = [
     ("물 차면 펌프 끄고 줄면 켜기", "hi_lo_level"),
     ("부품 10개 세면 배출", "count_eject"),
     ("자동 수동 모드 전환해서 밸브 열기", "auto_manual"),
+    ("비전검사 NG면 리젝트하고 불량 누적되면 알람", "vision_reject"),
 ]
 
 
