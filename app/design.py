@@ -19,6 +19,7 @@ from typing import Any
 
 from app.agents import _llm, _retry
 from app.config import settings
+from app.design_rag import format_examples_for_prompt, retrieve_design_examples
 from app.models import ModuleInstance, Project, ProjectPlan, StateMachineSpec, VerificationReport
 from app.project import ProjectError, compose
 from app.prompts import PROJECT_DESIGNER_SYSTEM
@@ -56,12 +57,19 @@ def plan_to_project(plan: ProjectPlan) -> Project:
     )
 
 
-def design_project(text: str, *, model: Any | None = None, feedback: str | None = None) -> Project:
+def design_project(
+    text: str,
+    *,
+    model: Any | None = None,
+    feedback: str | None = None,
+    use_examples: bool = True,
+) -> Project:
     """자유 한국어 요구 → 다중 서브시스템 Project(LLM).
 
     model 을 주입하면 그 구조화-출력 모델을 그대로 쓴다(테스트의 가짜 모델). 없으면
     단일 ``_llm`` 시드에서 ProjectPlan 구조화 출력 모델을 만든다(키 필요).
     feedback 이 있으면(재생성 루프) 검증 실패 사유를 human 컨텍스트로 덧붙인다.
+    use_examples=True 면 검증예제 RAG 로 유사 설계를 few-shot 으로 grounding 한다.
     """
     if not text.strip():
         raise ValueError("설계 요구 텍스트가 비어 있습니다.")
@@ -69,8 +77,12 @@ def design_project(text: str, *, model: Any | None = None, feedback: str | None 
         settings.analyst_model
     ).with_structured_output(ProjectPlan)
     human = text
+    if use_examples:
+        shots = format_examples_for_prompt(retrieve_design_examples(text))
+        if shots:
+            human = f"{shots}\n\n# 설계 요구\n{text}"
     if feedback:
-        human = f"{text}\n\n[직전 설계의 검증 실패 — 반드시 고칠 것]\n{feedback}"
+        human = f"{human}\n\n[직전 설계의 검증 실패 — 반드시 고칠 것]\n{feedback}"
     result = _retry(
         lambda: structured.invoke([("system", PROJECT_DESIGNER_SYSTEM), ("human", human)])
     )
