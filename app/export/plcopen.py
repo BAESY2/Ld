@@ -86,6 +86,61 @@ def _unescape(text: str) -> str:
     )
 
 
+def _wrap_cdata(text: str) -> str:
+    """텍스트를 CDATA 섹션으로 감싼다. 본문에 ``]]>`` 가 있어도 안전.
+
+    CDATA 안에는 종료 토큰 ``]]>`` 를 그대로 둘 수 없다(파서가 거기서 섹션을
+    닫아 well-formed 가 깨진다 → IDE 임포트 실패). 표준 회피법: ``]]>`` 를
+    ``]]]]><![CDATA[>`` 로 쪼개 두 개의 인접 CDATA 섹션으로 분할한다.
+    """
+    safe = text.replace("]]>", "]]]]><![CDATA[>")
+    return f"<![CDATA[{safe}]]>"
+
+
+def validate_plcopen_xml(xml: str) -> None:
+    """내보낸 XML 이 PLCopen TC6 v2.01 임포트 적합한지 결정론적으로 검증한다.
+
+    외부 IDE(OpenPLC Editor/CODESYS) 임포트가 깨지는 주된 원인을 단정으로
+    잡아낸다. 위반 시 ``ValueError`` 를 던진다(조용한 손상 금지).
+
+    검사 항목:
+      1. ``xml.etree`` 로 파싱되는 well-formed 문서.
+      2. 루트가 ``{tc6_0201}project`` 이고 tc6/xhtml/xsi namespace 선언 존재.
+      3. 필수 구조: types/pous/pou + interface + body/ST + instances 체인.
+      4. ``pouInstance@typeName`` 이 실제 정의된 POU 를 가리킴(dangling 금지).
+    """
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError as exc:  # well-formed 아님 → IDE 가 못 읽음
+        raise ValueError(f"PLCopen XML 이 well-formed 가 아님: {exc}") from exc
+
+    if root.tag != _q("project"):
+        raise ValueError(f"루트가 project 가 아님: {root.tag}")
+    for ns in (_TC6, _XHTML, _XSI):
+        if ns not in xml:
+            raise ValueError(f"namespace 선언 누락: {ns}")
+
+    pous = root.findall(f"./{_q('types')}/{_q('pous')}/{_q('pou')}")
+    if not pous:
+        raise ValueError("types/pous/pou 구조 누락")
+    pou_names = {p.get("name") for p in pous}
+    for pou in pous:
+        if pou.find(_q("interface")) is None:
+            raise ValueError(f"pou '{pou.get('name')}' interface 누락")
+        if pou.find(f"./{_q('body')}/{_q('ST')}") is None:
+            raise ValueError(f"pou '{pou.get('name')}' body/ST 누락")
+
+    if root.find(f"./{_q('instances')}/{_q('configurations')}/{_q('configuration')}") is None:
+        raise ValueError("instances/configurations/configuration 누락")
+
+    for inst in root.iter(_q("pouInstance")):
+        if inst.get("typeName") not in pou_names:
+            raise ValueError(
+                f"pouInstance.typeName 이 미정의 POU 를 참조(dangling): "
+                f"{inst.get('typeName')}"
+            )
+
+
 def _q(tag: str) -> str:
     return f"{{{_TC6}}}{tag}"
 
@@ -207,7 +262,7 @@ def to_plcopen_xml(
     # 마커로 감싼 ST 블록을 실제 CDATA 로 복원한다. 내부 텍스트는 ElementTree 가
     # escape 했으므로 unescape 해 원문 ST 를 그대로 CDATA 안에 넣는다.
     def _to_cdata(m: re.Match[str]) -> str:
-        return "<![CDATA[" + _unescape(m.group(1)) + "]]>"
+        return _wrap_cdata(_unescape(m.group(1)))
 
     xml_str = _CDATA_BLOCK_RE.sub(_to_cdata, xml_str)
     # 안전 경계 고지를 XML 주석으로 파일에 *내장*한다 — JSON 봉투는 PLC 툴체인으로

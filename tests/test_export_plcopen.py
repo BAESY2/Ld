@@ -22,7 +22,9 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 
-from app.export import to_plcopen_xml
+import pytest
+
+from app.export import infer_io_spec, to_plcopen_xml, validate_plcopen_xml
 from app.models import (
     CounterSpec,
     IODirection,
@@ -258,3 +260,128 @@ def test_lxml_structural_if_available() -> None:
     assert root.findall(".//p:configuration", ns)
     assert root.findall(".//p:task", ns)
     assert root.findall(".//p:body/p:ST/x:p", ns)
+
+
+# ---------------------------------------------------------------------------
+# (h) minidom 으로도 파싱 가능(well-formed) — etree 외 두번째 파서로 교차검증
+# ---------------------------------------------------------------------------
+def test_minidom_parses_well_formed() -> None:
+    from xml.dom import minidom
+
+    xml = to_plcopen_xml(_SPEC, _ST)
+    doc = minidom.parseString(xml)  # 깨지면 ExpatError → 테스트 실패
+    assert doc.documentElement.tagName.endswith("project")
+
+
+# ---------------------------------------------------------------------------
+# (i) validate_plcopen_xml 헬퍼 — 정상 출력은 통과, 손상 입력은 ValueError
+# ---------------------------------------------------------------------------
+def test_validate_helper_accepts_export() -> None:
+    validate_plcopen_xml(to_plcopen_xml(_SPEC, _ST))  # 예외 없으면 통과
+
+
+def test_validate_helper_rejects_malformed() -> None:
+    with pytest.raises(ValueError, match="well-formed"):
+        validate_plcopen_xml("<project><unclosed>")
+
+
+def test_validate_helper_rejects_wrong_root() -> None:
+    with pytest.raises(ValueError, match="project 가 아님"):
+        validate_plcopen_xml('<foo xmlns="bar"/>')
+
+
+def test_validate_helper_rejects_dangling_pou_reference() -> None:
+    # 정상 XML 에서 pouInstance.typeName 을 미정의 POU 로 바꾸면 거부돼야 한다.
+    xml = to_plcopen_xml(_SPEC, _ST)
+    broken = xml.replace('typeName="Main"', 'typeName="Ghost"')
+    with pytest.raises(ValueError, match="dangling"):
+        validate_plcopen_xml(broken)
+
+
+# ---------------------------------------------------------------------------
+# (j) ST 본문에 CDATA 종료 토큰 ``]]>`` 가 있어도 well-formed 유지(회귀 방지)
+# ---------------------------------------------------------------------------
+def test_st_with_cdata_terminator_stays_well_formed() -> None:
+    # ``]]>`` 는 CDATA 섹션을 조기 종료시켜 과거 XML 을 깨뜨렸다(버그).
+    st = "X := Y;  (* 주석에 ]]> 종료토큰 포함 *)"
+    xml = to_plcopen_xml(_SPEC, st)
+    # 두 파서 모두 well-formed 로 받아들여야 한다.
+    ET.fromstring(xml)
+    from xml.dom import minidom
+
+    minidom.parseString(xml)
+    validate_plcopen_xml(xml)
+    # 본문 텍스트는 보존(쪼개진 CDATA 너머로 합쳐 읽으면 원문).
+    root = ET.fromstring(xml)
+    p = root.find(f".//{{{_XHTML}}}p")
+    assert p is not None and p.text is not None
+    assert "종료토큰" in p.text
+
+
+# ---------------------------------------------------------------------------
+# (k) infer_io_spec 추론 변수가 interface 에 빠짐없이 선언되는지(라운드트립)
+#     누락되면 IDE 임포트가 "정의되지 않은 변수" 로 깨진다.
+# ---------------------------------------------------------------------------
+def _declared_var_names(root: ET.Element) -> dict[str, set[str]]:
+    iface = root.find(f".//{_q('interface')}")
+    assert iface is not None
+    out: dict[str, set[str]] = {}
+    for vl in iface:
+        kind = vl.tag.rsplit("}", 1)[-1]
+        out[kind] = {
+            v.get("name") or "" for v in vl.findall(_q("variable"))
+        }
+    return out
+
+
+def test_infer_io_roundtrip_declares_all_vars() -> None:
+    st = (
+        "MOTOR := (START OR MOTOR) AND NOT STOP;\n"
+        "LAMP := MOTOR AND ENABLE;\n"
+    )
+    spec = infer_io_spec(st, title="추론")
+    xml = to_plcopen_xml(spec, st)
+    validate_plcopen_xml(xml)
+    root = ET.fromstring(xml)
+    declared = _declared_var_names(root)
+    all_declared = set().union(*declared.values()) if declared else set()
+
+    inputs = {p.symbol for p in spec.io_points if p.direction == IODirection.INPUT}
+    outputs = {p.symbol for p in spec.io_points if p.direction == IODirection.OUTPUT}
+
+    # 추론된 입력/출력이 정확히 inputVars/outputVars 에 분류돼 선언돼야 한다.
+    assert declared.get("inputVars", set()) == inputs
+    assert declared.get("outputVars", set()) == outputs
+    # 어떤 추론 변수도 XML 에서 누락되면 안 된다.
+    inferred = {p.symbol for p in spec.io_points}
+    assert inferred <= all_declared, f"interface 에 누락된 변수: {inferred - all_declared}"
+
+
+def test_infer_io_selfheld_output_not_duplicated_as_input() -> None:
+    # 자기유지: MOTOR 가 RHS 에도 있지만 출력일 뿐 입력으로 중복 선언되면 안 됨.
+    st = "MOTOR := (START OR MOTOR) AND NOT STOP;"
+    spec = infer_io_spec(st)
+    xml = to_plcopen_xml(spec, st)
+    root = ET.fromstring(xml)
+    declared = _declared_var_names(root)
+    assert "MOTOR" in declared.get("outputVars", set())
+    assert "MOTOR" not in declared.get("inputVars", set())
+
+
+def test_special_chars_escaped_and_well_formed() -> None:
+    # ST 에 < > & 가 있어도 (CDATA 로) 깨지지 않고 원문 보존 + 두 파서 모두 통과.
+    st = "Y := A < B AND C > D;  (* x & y && z *)"
+    spec = StateMachineSpec(
+        title="특수문자",
+        io_points=[
+            IOPoint(symbol="A", direction=IODirection.INPUT),
+            IOPoint(symbol="Y", direction=IODirection.OUTPUT),
+        ],
+    )
+    xml = to_plcopen_xml(spec, st)
+    ET.fromstring(xml)
+    from xml.dom import minidom
+
+    minidom.parseString(xml)
+    assert "A < B AND C > D" in xml
+    assert "x & y && z" in xml

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
-from app.export.plcopen import infer_io_spec, to_plcopen_xml
+from app.export.plcopen import (
+    infer_io_spec,
+    to_plcopen_xml,
+    validate_plcopen_xml,
+)
 
-__all__ = ["infer_io_spec", "to_plcopen_xml"]
+__all__ = ["infer_io_spec", "to_plcopen_xml", "validate_plcopen_xml"]
