@@ -491,6 +491,7 @@ class ProjectModuleSummary(BaseModel):
     recipe_title: str = ""
     inputs: list[str] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
+    safety_note: str = ""  # 이 모듈(레시피) 특유의 안전 주의 — 합성해도 사라지지 않게 노출
 
 
 class AddrEntry(BaseModel):
@@ -516,10 +517,13 @@ def _module_summaries(req: ProjectComposeRequest) -> list[ProjectModuleSummary]:
     out: list[ProjectModuleSummary] = []
     for m in req.modules:
         title = RECIPES[m.recipe].title if m.recipe in RECIPES else ""
+        note = RECIPES[m.recipe].safety_note if m.recipe in RECIPES else ""
         try:
             sub = build_spec(m.recipe, m.answers)
         except (KeyError, WizardError):
-            out.append(ProjectModuleSummary(name=m.name, recipe=m.recipe, recipe_title=title))
+            out.append(ProjectModuleSummary(
+                name=m.name, recipe=m.recipe, recipe_title=title, safety_note=note
+            ))
             continue
 
         def render(sym: str, mod: ModuleInstance = m) -> str:
@@ -529,7 +533,8 @@ def _module_summaries(req: ProjectComposeRequest) -> list[ProjectModuleSummary]:
         outs = [render(p.symbol) for p in sub.io_points if p.direction == IODirection.OUTPUT]
         out.append(
             ProjectModuleSummary(
-                name=m.name, recipe=m.recipe, recipe_title=title, inputs=ins, outputs=outs
+                name=m.name, recipe=m.recipe, recipe_title=title,
+                inputs=ins, outputs=outs, safety_note=note,
             )
         )
     return out

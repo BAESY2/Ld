@@ -176,6 +176,7 @@
         <button class="x" data-rm="${i}" title="삭제">×</button></div>
         <div class="io">IN ${(s.inputs || []).map(pretty).join(", ") || "—"}</div>
         <div class="io">OUT ${(s.outputs || []).map(pretty).join(", ") || "—"}</div>
+        ${s.safety_note ? `<div class="sn">⚠ ${esc(s.safety_note)}</div>` : ""}
         ${editingIdx === i ? editorHTML(m, i) : ""}</div>`;
     });
     // 교차 인터락

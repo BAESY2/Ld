@@ -59,6 +59,21 @@ def test_compose_two_modules_distinct_addresses() -> None:
     assert names == {"conv1", "conv2"}
 
 
+def test_compose_surfaces_per_module_safety_note() -> None:
+    # 다중 서브시스템을 개별 합성해도 각 모듈(레시피)의 안전 주의가 사라지면 안 된다.
+    body = {
+        "modules": [
+            {"name": "m1", "recipe": "motor_start_stop"},
+            {"name": "guard", "recipe": "guard_interlock"},
+        ],
+    }
+    j = client.post("/api/project/compose", json=body).json()
+    assert j["ok"] is True
+    notes = {m["name"]: m["safety_note"] for m in j["modules"]}
+    assert "비상정지" in notes["m1"]
+    assert "⛔" in notes["guard"]  # 안전 강경고가 모듈 단위로 노출
+
+
 def test_compose_cross_interlock_enforced_and_passes() -> None:
     # 교차 인터락을 선언하면 합성식이 상대를 가드하고 검증을 통과해야 한다(거짓양성 없음).
     body = {
