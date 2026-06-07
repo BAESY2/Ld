@@ -22,8 +22,10 @@ import re
 
 from app.models import (
     CounterSpec,
+    CrossInterlock,
     DerivedOutput,
     Interlock,
+    IODirection,
     IOPoint,
     ModuleInstance,
     Project,
@@ -201,6 +203,36 @@ def scaffold_from_recipes(
         taken.add(name)
         modules.append(ModuleInstance(name=name, recipe=rid, answers=answers_by_id.get(rid, {})))
     return Project(title=title, modules=modules)
+
+
+def scaffold_mutex(
+    recipe_id: str, n: int, *, title: str = "상호배제 골격"
+) -> Project:
+    """동일 레시피 n개 인스턴스 + 출력 쌍마다 교차인터락(동시 구동 금지) Project.
+
+    "모터 두 대를 서로 동시에 못 돌게" 같은 *다중 기계 상호배제*를 결정론으로 표현한다
+    (단일 레시피로는 불가). 각 모듈은 네임스페이스로 분리되고, 대표 출력(첫 OUTPUT)들을
+    모든 쌍에 대해 CrossInterlock 으로 묶어 compose 가 상호배타 가드를 합성한다. n 은
+    2~6 으로 클램프(과도한 조합 폭발 방지). 알 수 없는 레시피는 빈 Project.
+    """
+    if recipe_id not in RECIPES:
+        return Project(title=title)
+    n = max(2, min(6, n))
+    spec = build_spec(recipe_id)
+    outs = [p.symbol for p in spec.io_points if p.direction == IODirection.OUTPUT]
+    out = outs[0] if outs else None
+    modules = [ModuleInstance(name=f"m{i}", recipe=recipe_id) for i in range(1, n + 1)]
+    interlocks: list[CrossInterlock] = []
+    if out is not None:
+        for i in range(n):
+            for j in range(i + 1, n):
+                interlocks.append(
+                    CrossInterlock(
+                        output_a=f"m{i + 1}.{out}", output_b=f"m{j + 1}.{out}",
+                        reason="동시 구동 금지(상호배제)",
+                    )
+                )
+    return Project(title=title, modules=modules, cross_interlocks=interlocks)
 
 
 def compose(project: Project) -> StateMachineSpec:

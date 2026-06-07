@@ -535,6 +535,52 @@ def _multi_intent_msg(ids: list[str]) -> str:
     )
 
 
+# ── 다중 기계 상호배제(교차인터락) 감지 — 단일 레시피로 못 잡는 관계의미 ──
+# "모터 두 대를 서로 동시에 못 돌게" 류는 단일 레시피(예: fwd_rev=한 모터 정역)로 자신있게
+# 매칭하면 침묵 실패다. (1) 기계 *대수* 카운트, (2) 상호배제 표현, (3) 기기→다중인스턴스
+# 안전 레시피의 3중 게이트가 모두 맞을 때만 감지한다. precision 우선 — 단일 기계의 정역
+# (정방향/역방향 동시금지)은 대수 카운트가 없어 발화하지 않는다(easy-03 오발 방지).
+_MUTEX_COUNT_RE = re.compile(
+    r"(두|세|네|여러|[2-9])\s*대|([2-9])\s*개|([1-9])\s*번.{0,15}([1-9])\s*번"
+)
+_MUTEX_REL_RE = re.compile(
+    r"동시.{0,6}(?:못|안|금지|말|없)|(?:못|안|금지).{0,6}동시|인터락|동안.{0,12}(?:못|안)"
+)
+_MUTEX_DEVICE: tuple[tuple[str, str], ...] = (
+    ("전동기", "motor_start_stop"), ("모터", "motor_start_stop"), ("모타", "motor_start_stop"),
+)
+
+
+def _mutex_count(matched: str) -> int:
+    idx = re.findall(r"([1-9])\s*번", matched)
+    if len(idx) >= 2:
+        return min(6, max(int(x) for x in idx))
+    for tok, val in (("두", 2), ("세", 3), ("네", 4), ("여러", 2)):
+        if tok in matched:
+            return val
+    d = re.search(r"([2-9])", matched)
+    return int(d.group(1)) if d else 2
+
+
+def detect_mutex_instances(text: str) -> tuple[str, int] | None:
+    """'기계 N대 + 상호배제' 패턴 → (다중인스턴스 레시피, N). 아니면 None(보수적)."""
+    cm = _MUTEX_COUNT_RE.search(text)
+    if cm is None or _MUTEX_REL_RE.search(text) is None:
+        return None
+    recipe = next((r for kw, r in _MUTEX_DEVICE if kw in text), None)
+    if recipe is None:
+        return None
+    n = _mutex_count(cm.group(0))
+    return (recipe, n) if n >= 2 else None
+
+
+def _mutex_msg(recipe_id: str, n: int) -> str:
+    return (
+        f"독립된 {RECIPES[recipe_id].title} {n}대가 서로 동시에 못 돌도록 상호 인터락이 "
+        f"필요합니다 — 단일 레시피로는 표현할 수 없어, {n}개 모듈 + 교차인터락으로 합성합니다."
+    )
+
+
 def analyze(text: str, allow_llm: bool = True) -> NLResult:
     """자연어 → 레시피+슬롯+질문. 키 불필요(BM25). LLM 폴백은 미연결(키 없을 때 동일)."""
     scores = match_recipe(text)
@@ -557,8 +603,16 @@ def analyze(text: str, allow_llm: bool = True) -> NLResult:
     if _out_of_scope(text):
         confident = False
         extras["out_of_scope"] = _OUT_OF_SCOPE_MSG
+    # 다중 기계 상호배제(N대 + 동시금지)는 단일 레시피로 못 잡는다 — 교차인터락 골격 안내.
+    mutex = detect_mutex_instances(text)
+    if mutex is not None:
+        recipe_id, n = mutex
+        confident = False
+        extras["mutex_recipe"] = recipe_id
+        extras["mutex_count"] = str(n)
+        extras["multi_intent"] = _mutex_msg(recipe_id, n)
     # 다중 서브시스템(compound)이 섞였으면 한 조각으로 자신있게 축약하지 않는다.
-    multi = detect_multi_intent(text, scores)
+    multi = detect_multi_intent(text, scores) if mutex is None else []
     if multi:
         confident = False
         extras["multi_intent"] = _multi_intent_msg(multi)

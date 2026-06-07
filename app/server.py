@@ -57,7 +57,7 @@ from app.models import (
     VerificationReport,
 )
 from app.nlmatch import analyze as nl_analyze
-from app.project import ProjectError, compose, scaffold_from_recipes
+from app.project import ProjectError, compose, scaffold_from_recipes, scaffold_mutex
 from app.safety import SAFETY_NOTICE, safety_payload
 from app.simulator import MAX_SIM_SAMPLES, simulate
 from app.synth import synthesize_st
@@ -391,6 +391,7 @@ class NLDesignResponse(BaseModel):
     multi_intent_ids: list[str] = Field(default_factory=list)
     # 다중의도일 때 감지된 레시피로 만든 *검증 통과* 다중모듈 골격(스튜디오가 바로 채택).
     scaffold: list[ScaffoldModule] = Field(default_factory=list)
+    scaffold_cross_interlocks: list[CrossInterlock] = Field(default_factory=list)
     scaffold_verified: bool = False
     safety_notice: str = SAFETY_NOTICE
 
@@ -409,15 +410,15 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
     multi_intent_ids = (
         res.extras["multi_intent_ids"].split(",") if "multi_intent_ids" in res.extras else []
     )
-    # 다중의도면 감지된 레시피로 검증 통과 다중모듈 골격을 만들어 바로 채택 가능케 한다.
-    scaffold, scaffold_verified = _build_scaffold(multi_intent_ids, req.text[:40])
+    # 다중의도/상호배제면 감지 결과로 검증 통과 골격을 만들어 바로 채택 가능케 한다.
+    scaffold, scaffold_cis, scaffold_verified = _build_scaffold(res.extras, req.text[:40])
     if out_of_scope:
         suggestion = "21개 결정론 템플릿 밖의 요청이에요(아날로그·모션·통신·PID 등)."
     elif multi_intent:
-        subs = ", ".join(RECIPES[i].title for i in multi_intent_ids)
         suggestion = (
-            f"여러 서브시스템이 보여요({subs}). {len(scaffold)}개 모듈 골격을 잡아뒀어요"
-            f"{' (검증 통과)' if scaffold_verified else ''} — 채택해 다듬으세요."
+            f"{multi_intent} {len(scaffold)}개 모듈 골격"
+            f"{'(검증 통과)' if scaffold_verified else ''}을 잡아뒀어요 — 채택해 다듬으세요."
+            if scaffold else multi_intent
         )
     elif res.confident:
         suggestion = f"'{recipe_obj.title}'(으)로 이해했어요."
@@ -438,7 +439,8 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         suggestion=suggestion, design=design,
         safety_warning=safety_warning, out_of_scope=out_of_scope,
         multi_intent=multi_intent, multi_intent_ids=multi_intent_ids,
-        scaffold=scaffold, scaffold_verified=scaffold_verified,
+        scaffold=scaffold, scaffold_cross_interlocks=scaffold_cis,
+        scaffold_verified=scaffold_verified,
     )
 
 
@@ -626,11 +628,27 @@ def _suggest_name(recipe_id: str, taken: set[str]) -> str:
     return f"{base}{i}"
 
 
-def _build_scaffold(recipe_ids: list[str], title: str) -> tuple[list[ScaffoldModule], bool]:
-    """감지된 레시피 id 들 → 검증 시도한 다중모듈 골격(스튜디오가 바로 채택)."""
-    if not recipe_ids:
-        return [], False
-    proj = scaffold_from_recipes(recipe_ids, title=title or "자동 골격")
+def _scaffold_project(extras: dict[str, str], title: str) -> Project | None:
+    """analyze extras → 채택할 Project 골격. mutex(다중 기계 상호배제) 우선, 그다음 compound."""
+    if "mutex_recipe" in extras:
+        return scaffold_mutex(
+            extras["mutex_recipe"], int(extras.get("mutex_count", "2")),
+            title=title or "상호배제 골격",
+        )
+    if "multi_intent_ids" in extras:
+        ids = [i for i in extras["multi_intent_ids"].split(",") if i]
+        if ids:
+            return scaffold_from_recipes(ids, title=title or "자동 골격")
+    return None
+
+
+def _build_scaffold(
+    extras: dict[str, str], title: str
+) -> tuple[list[ScaffoldModule], list[CrossInterlock], bool]:
+    """감지 결과 → 검증 시도한 골격(모듈 + 교차인터락 + 검증여부). 스튜디오가 바로 채택."""
+    proj = _scaffold_project(extras, title)
+    if proj is None or not proj.modules:
+        return [], [], False
     verified = False
     try:
         spec = compose(proj)
@@ -645,7 +663,7 @@ def _build_scaffold(recipe_ids: list[str], title: str) -> tuple[list[ScaffoldMod
         )
         for m in proj.modules
     ]
-    return mods, verified
+    return mods, list(proj.cross_interlocks), verified
 
 
 class ProjectNLAddRequest(BaseModel):
@@ -666,6 +684,7 @@ class ProjectNLAddResponse(BaseModel):
     out_of_scope: str = ""
     multi_intent: str = ""
     scaffold: list[ScaffoldModule] = Field(default_factory=list)
+    scaffold_cross_interlocks: list[CrossInterlock] = Field(default_factory=list)
     scaffold_verified: bool = False
     safety_notice: str = SAFETY_NOTICE
 
@@ -686,17 +705,14 @@ def project_nl_add(req: ProjectNLAddRequest) -> ProjectNLAddResponse:
     out_of_scope = res.extras.get("out_of_scope", "")
     safety_warning = res.extras.get("safety_warning", "")
     multi_intent = res.extras.get("multi_intent", "")
-    multi_ids = (
-        res.extras["multi_intent_ids"].split(",") if "multi_intent_ids" in res.extras else []
-    )
-    scaffold, scaffold_verified = _build_scaffold(multi_ids, req.text[:40])
+    scaffold, scaffold_cis, scaffold_verified = _build_scaffold(res.extras, req.text[:40])
     if out_of_scope:
         suggestion = "21개 결정론 템플릿 밖의 요청이에요(아날로그·모션·통신·PID 등)."
     elif multi_intent:
-        subs = ", ".join(RECIPES[i].title for i in multi_ids if i in RECIPES)
         suggestion = (
-            f"여러 서브시스템이 보여요({subs}). {len(scaffold)}개 모듈 골격으로 한 번에 "
-            f"담을게요{' (검증 통과)' if scaffold_verified else ''} — 채택 후 다듬으세요."
+            f"{multi_intent} {len(scaffold)}개 모듈 골격으로 한 번에 담을게요"
+            f"{'(검증 통과)' if scaffold_verified else ''} — 채택 후 다듬으세요."
+            if scaffold else multi_intent
         )
     elif res.confident:
         suggestion = f"'{recipe_obj.title}' 모듈로 추가할게요."
@@ -717,6 +733,7 @@ def project_nl_add(req: ProjectNLAddRequest) -> ProjectNLAddResponse:
         out_of_scope=out_of_scope,
         multi_intent=multi_intent,
         scaffold=scaffold,
+        scaffold_cross_interlocks=scaffold_cis,
         scaffold_verified=scaffold_verified,
     )
 

@@ -10,7 +10,7 @@ import pytest
 
 from app.memory_map import DeviceAllocator
 from app.models import CrossInterlock, ModuleInstance, Project
-from app.project import ProjectError, compose, scaffold_from_recipes
+from app.project import ProjectError, compose, scaffold_from_recipes, scaffold_mutex
 from app.synth import covers_all_outputs, synthesize_st
 from app.verifier import verify
 
@@ -21,6 +21,22 @@ def test_scaffold_from_recipes_composes_and_verifies() -> None:
     assert [m.recipe for m in proj.modules] == ["motor_start_stop", "latch_alarm", "count_eject"]
     spec = compose(proj)
     assert verify(spec, synthesize_st(spec)).passed
+
+
+def test_scaffold_mutex_composes_with_cross_interlocks() -> None:
+    """동일 레시피 N개 + 출력 쌍별 교차인터락 골격이 compose→verify 통과(상호배제)."""
+    proj = scaffold_mutex("motor_start_stop", 2)
+    assert len(proj.modules) == 2
+    assert len(proj.cross_interlocks) == 1  # 2개 → 쌍 1개
+    spec = compose(proj)
+    rep = verify(spec, synthesize_st(spec))
+    assert rep.passed
+    assert spec.interlocks  # 상호배타 가드가 실제로 합성됨
+
+
+def test_scaffold_mutex_n3_all_pairs_and_clamped() -> None:
+    assert len(scaffold_mutex("motor_start_stop", 3).cross_interlocks) == 3  # C(3,2)
+    assert len(scaffold_mutex("motor_start_stop", 99).modules) == 6  # 6으로 클램프
 
 
 def test_scaffold_skips_unknown_and_dedups_names() -> None:

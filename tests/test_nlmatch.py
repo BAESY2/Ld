@@ -360,6 +360,47 @@ def test_alternating_pumps_match_duty_standby() -> None:
     assert res.recipe_id == "duty_standby"
 
 
+# --- Part 5: 다중 기계 상호배제(교차인터락) 자각 ---
+def test_mutex_instances_detected_and_degrades_confidence() -> None:
+    """'모터 두 대 동시 금지'는 단일 레시피로 자신있게 안 만들고 상호배제 골격을 안내."""
+    res = analyze(
+        "모터 두대가 있는데 1번 도는 동안엔 2번 절대 못 돌게 인터락 걸어", allow_llm=False
+    )
+    assert res.confident is False
+    assert res.extras.get("mutex_recipe") == "motor_start_stop"
+    assert res.extras.get("mutex_count") == "2"
+    assert "multi_intent" in res.extras
+
+
+@pytest.mark.parametrize("text", [
+    "모타 정역 운전 시키고 싶은데 정방향 역방향 동시에 못 돌게",  # 단일 모터 정역(대수 없음)
+    "버튼 누르면 모터 돌고 정지 누르면 선다",                    # 단일 기동/정지
+    "정방향 역방향 버튼으로 모터 돌리고 동시에 못 돌게",          # fwd_rev 단일
+])
+def test_single_machine_not_flagged_mutex(text: str) -> None:
+    """대수 카운트가 없는 단일 기계 상호배제(정역 등)는 mutex 로 오인하지 않는다(precision)."""
+    from app.nlmatch import detect_mutex_instances
+    assert detect_mutex_instances(text) is None
+
+
+def test_nl_add_mutex_returns_verified_interlock_scaffold() -> None:
+    """다중 기계 상호배제 요청 → nl-add 가 교차인터락 포함 검증 골격을 돌려준다."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.server import app
+
+    c = TestClient(app)
+    r = c.post("/api/project/nl-add", json={
+        "text": "모터 두대 중 1번 도는 동안 2번 절대 못 돌게 인터락", "existing_names": [],
+    })
+    d = r.json()
+    assert d["multi_intent"]
+    assert len(d["scaffold"]) == 2
+    assert len(d["scaffold_cross_interlocks"]) == 1
+    assert d["scaffold_verified"] is True
+
+
 def test_detect_multi_intent_deterministic() -> None:
     t = "버튼 누르면 모터 돌고 고장나면 경광등 켜고 알람"
     assert detect_multi_intent(t, match_recipe(t)) == detect_multi_intent(t, match_recipe(t))
