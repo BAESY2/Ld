@@ -12,7 +12,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.models import (
+    Comparator,
+    CompareOp,
     CounterSpec,
+    DataType,
     DerivedOutput,
     Interlock,
     IODirection,
@@ -82,6 +85,14 @@ def _val(a: Answers, key: str, default: str) -> str:
 def _pint(a: Answers, key: str, default: int, lo: int = 0) -> int:
     try:
         return max(lo, int(float(a.get(key) or default)))  # '3.5' → 3 (NL 경로와 일치)
+    except (ValueError, TypeError):
+        return default
+
+
+def _pfloat(a: Answers, key: str, default: float) -> float:
+    """아날로그 임계값(실수) 답변. 잘못되면 기본값."""
+    try:
+        return float(a.get(key) or default)
     except (ValueError, TypeError):
         return default
 
@@ -951,6 +962,70 @@ def _retry_alarm(a: Answers) -> StateMachineSpec:
     )
 
 
+def _pressure_band(a: Answers) -> StateMachineSpec:
+    """아날로그 압력 히스테리시스: 신호 ≥ hi 면 출력 ON, lo 밑으로 떨어지면 OFF.
+
+    아날로그 설정값(예: 5바 ON / 3바 OFF)을 IEC 비교기 + 밴드 SR 로 표현한다. 비교기
+    플래그 P_HI 를 상태머신이 받아 출력을 자기유지로 구동한다(이중코일 0·검증 통과).
+    """
+    sig = _val(a, "signal", "PRESSURE")
+    out = _val(a, "out", "PUMP")
+    hi = _pfloat(a, "hi", 5.0)
+    lo = _pfloat(a, "lo", 3.0)
+    if lo >= hi:  # 히스테리시스가 성립하도록 보정(하한<상한)
+        lo = hi - 1.0
+    return StateMachineSpec(
+        title="압력 히스테리시스 제어",
+        io_points=[
+            IOPoint(symbol=sig, direction=_IN, data_type=DataType.REAL, description="압력 신호"),
+            _io(out, _OUT, "출력(펌프/밸브)"),
+        ],
+        comparators=[
+            Comparator(flag="P_HI", signal=sig, op=CompareOp.GE, threshold=hi,
+                       hysteresis=hi - lo, description=f"{hi} ON / {lo} OFF"),
+        ],
+        states=[
+            SfcState(name="LOW", is_initial=True),
+            SfcState(name="HIGH", on_entry=[f"{out} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("LOW", "HIGH", "P_HI"),
+            _tr("HIGH", "LOW", "NOT P_HI"),
+        ],
+    )
+
+
+def _temp_setpoint(a: Answers) -> StateMachineSpec:
+    """아날로그 목표온도: 히터를 목표(target)까지 가열, 도달하면 OFF(히스테리시스 밴드).
+
+    온도 ≥ target 이면 도달 플래그 ON(target-band 까지 유지) → 히터는 도달 전에만 ON.
+    아날로그 온도 설정값 제어를 IEC 비교기로 표현(불리언 밖→안).
+    """
+    sig = _val(a, "signal", "TEMP")
+    heater = _val(a, "heater", "HEATER")
+    target = _pfloat(a, "target", 200.0)
+    band = _pfloat(a, "band", 5.0)
+    return StateMachineSpec(
+        title="목표온도 히터 제어",
+        io_points=[
+            IOPoint(symbol=sig, direction=_IN, data_type=DataType.REAL, description="온도 신호"),
+            _io(heater, _OUT, "히터"),
+        ],
+        comparators=[
+            Comparator(flag="T_REACHED", signal=sig, op=CompareOp.GE, threshold=target,
+                       hysteresis=band, description=f"목표 {target} (밴드 {band})"),
+        ],
+        states=[
+            SfcState(name="HEATING", is_initial=True, on_entry=[f"{heater} := TRUE;"]),
+            SfcState(name="AT_TEMP"),
+        ],
+        transitions=[
+            _tr("HEATING", "AT_TEMP", "T_REACHED"),
+            _tr("AT_TEMP", "HEATING", "NOT T_REACHED"),
+        ],
+    )
+
+
 def _index_table(a: Answers) -> StateMachineSpec:
     """인덱싱 테이블: 회전(인덱스)→드웰(각 스테이션 동시 작업) 순환(타임드 시퀀서).
 
@@ -1401,6 +1476,28 @@ RECIPES: dict[str, Recipe] = {
              _f("alarm", "초과 알람", "RETRY_ALARM"), _f("retries", "재시도 횟수", "3", "int")),
             _retry_alarm,
             safety_note="알람은 통지용입니다. 위험 정지는 하드와이어 안전회로로 하세요.",
+        ),
+        Recipe(
+            "pressure_band", "압력 히스테리시스 제어",
+            "아날로그 압력이 상한 이상이면 출력 ON, 하한 밑으로 떨어지면 OFF.", "아날로그",
+            (_f("signal", "압력 신호(아날로그)", "PRESSURE"),
+             _f("hi", "상한(ON) 임계", "5", "real"),
+             _f("lo", "하한(OFF) 임계", "3", "real"),
+             _f("out", "출력(펌프/밸브)", "PUMP")),
+            _pressure_band,
+            safety_note="아날로그 입력은 스케일링(공학단위 변환)과 센서 단선/범위 감시가 "
+            "별도로 필요합니다. 과압 보호는 하드와이어 압력스위치로 이중화하세요.",
+        ),
+        Recipe(
+            "temp_setpoint", "목표온도 히터 제어",
+            "아날로그 온도를 목표값까지 가열, 도달하면 OFF(히스테리시스 밴드).", "아날로그",
+            (_f("signal", "온도 신호(아날로그)", "TEMP"),
+             _f("target", "목표 온도", "200", "real"),
+             _f("band", "히스테리시스 밴드", "5", "real"),
+             _f("heater", "히터 출력", "HEATER")),
+            _temp_setpoint,
+            safety_note="과열 보호(독립 과온 차단기)는 하드와이어로 이중화하세요. "
+            "아날로그 센서 단선 시 안전측(히터 OFF) 동작을 별도 설계해야 합니다.",
         ),
         Recipe(
             "index_table", "인덱싱 테이블(회전→드웰)",

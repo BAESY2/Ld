@@ -88,6 +88,38 @@ def test_comparator_renders_compare_contacts_in_ladder() -> None:
     assert any(o.symbol == "P_HI" for r in prog.rungs for o in r.outputs)
 
 
+def test_pressure_band_recipe_custom_thresholds() -> None:
+    """pressure_band 레시피가 사용자 임계로 검증 통과 히스테리시스 래더를 만든다."""
+    from app.wizard import build_spec
+
+    spec = build_spec("pressure_band", {"signal": "P1", "hi": "8", "lo": "6", "out": "RELIEF"})
+    st = synthesize_st(spec)
+    assert "P_HI := (P1 >= 8) OR (P_HI AND P1 >= 6);" in st
+    assert detect_double_coils(st) == {}
+    assert verify(spec, st).passed
+    assert "RELIEF" in st
+
+
+def test_temp_setpoint_recipe_heats_until_target() -> None:
+    from app.wizard import build_spec
+
+    spec = build_spec("temp_setpoint", {"signal": "T1", "target": "180", "band": "4"})
+    st = synthesize_st(spec)
+    assert "T_REACHED := (T1 >= 180) OR (T_REACHED AND T1 >= 176);" in st
+    # 히터는 목표 도달 전(NOT T_REACHED)에만 ON
+    assert "HEATER := ((NOT T_REACHED) OR HEATER) AND NOT ((T_REACHED));" in st
+    assert verify(spec, st).passed
+
+
+def test_pressure_band_lo_ge_hi_is_corrected() -> None:
+    """하한 ≥ 상한이면 히스테리시스가 성립하도록 보정(밴드>0)."""
+    from app.wizard import build_spec
+
+    spec = build_spec("pressure_band", {"hi": "5", "lo": "9"})
+    assert spec.comparators[0].hysteresis is not None
+    assert spec.comparators[0].hysteresis > 0
+
+
 def test_comparator_flag_collision_with_output_raises() -> None:
     spec = StateMachineSpec(
         comparators=[Comparator(flag="VALVE", signal="P", op=CompareOp.GE, threshold=1)],

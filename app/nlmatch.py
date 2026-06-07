@@ -96,6 +96,11 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
                      "올림내림", "셔터문", "shutter", "gate", "개폐기"],
     "runtime_maint": ["운전시간", "적산", "정비", "정비알람", "가동시간", "메인터넌스",
                       "누적시간", "점검주기", "runtime", "maintenance", "hour"],
+    # 아날로그 비교기 레시피(설정값 제어). 기존 레시피와 안 겹치는 고유어 위주.
+    "pressure_band": ["압력", "가압", "과압", "압력제어", "압력스위치", "기압",
+                      "bar", "pressure", "압력밴드", "히스테리시스"],
+    "temp_setpoint": ["목표온도", "설정온도", "항온", "정온", "목표값", "온도설정",
+                      "setpoint", "셋포인트", "온도제어"],
 }
 
 _SEC_RE = re.compile(r"(\d+(?:\.\d+)?)\s*초")
