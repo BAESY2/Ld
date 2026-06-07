@@ -157,6 +157,39 @@ class DerivedOutput(BaseModel):
     description: str = ""
 
 
+class CompareOp(StrEnum):
+    """아날로그 비교 연산자(IEC 61131-3 ST 표기)."""
+
+    GT = ">"
+    GE = ">="
+    LT = "<"
+    LE = "<="
+    EQ = "="
+    NE = "<>"
+
+
+class Comparator(BaseModel):
+    """아날로그 신호(REAL/INT) 비교로 BOOL 플래그를 만드는 비교기.
+
+    ``flag := signal op threshold`` 의 불리언 플래그를 산출한다. 정형검증(Z3)은 플래그를
+    *원자 불리언* 으로 취급한다 — 산술을 모델링하지 않으므로 인터락 증명은 보수적·건전하다.
+    hysteresis 가 있으면 밴드 SR 래치로 합성한다(예: 5바에서 ON, 3바에서 OFF). 이로써
+    압력/온도/수위 *설정값* 같은 아날로그 임계를 IEC 표준으로 표현한다(불리언 밖→안).
+    """
+
+    flag: str = Field(..., description="산출 BOOL 플래그 심볼")
+    signal: str = Field(..., description="비교 대상 아날로그 입력 심볼(REAL/INT)")
+    op: CompareOp = CompareOp.GE
+    threshold: float = Field(..., description="비교 임계값(리터럴)")
+    hysteresis: float | None = Field(
+        default=None,
+        description="밴드 폭(있으면 SR 히스테리시스). GT/GE 는 threshold-h 에서, "
+        "LT/LE 는 threshold+h 에서 해제된다. 0 또는 None 이면 단순 비교.",
+    )
+    description: str = ""
+
+
+
 class StateMachineSpec(BaseModel):
     """analyst(A1) 산출물 — 전체 상태머신 명세."""
 
@@ -170,6 +203,11 @@ class StateMachineSpec(BaseModel):
     derived_outputs: list[DerivedOutput] = Field(
         default_factory=list,
         description="상태구동이 아닌 조합 출력(예: 알람 경음기)을 불리언식으로 정의",
+    )
+    comparators: list[Comparator] = Field(
+        default_factory=list,
+        description="아날로그 신호 비교 → BOOL 플래그(압력/온도/수위 설정값). "
+        "플래그는 transitions/derived/interlocks 에서 원자 불리언으로 참조된다.",
     )
 
 

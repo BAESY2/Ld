@@ -46,7 +46,13 @@ Node = Var | Const | Not | And | Or
 # 파서 (우선순위 NOT > AND > OR)
 # ---------------------------------------------------------------------------
 # 식별자는 점표기 멤버 접근(예: T1.Q, C1.CV)을 단일 토큰으로 허용한다.
-_TOKEN_RE = re.compile(r"\s*(\(|\)|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+# 비교 연산자(>=,<=,<>,>,<,=)와 수치 리터럴도 토큰으로 인식한다 — 아날로그 비교기
+# (예: SIG >= 5.0)를 *원자 불리언 리터럴*로 파싱하기 위함. 비교 문자는 기존 불리언식에
+# 전혀 등장하지 않으므로 100% 하위호환(기존 입력은 토큰화 결과가 동일하다).
+_TOKEN_RE = re.compile(
+    r"\s*(\(|\)|>=|<=|<>|>|<|=|\d+(?:\.\d+)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)"
+)
+_CMP_OPS = (">=", "<=", "<>", ">", "<", "=")
 
 
 def _tokenize(expr: str) -> list[str]:
@@ -112,6 +118,15 @@ def parse(expr: str) -> Node:
             return Const(True)
         if upper == "FALSE":
             return Const(False)
+        # 비교: IDENT op (NUMBER|IDENT) → 원자 불리언 리터럴(예: 'SIG>=5.0').
+        # 산술은 모델링하지 않는다 — 비교 결과를 하나의 접점(원자)으로 본다.
+        if peek() in _CMP_OPS:
+            op = advance()
+            rhs = peek()
+            if rhs is None or rhs in _CMP_OPS or rhs in ("(", ")"):
+                raise ValueError(f"비교 우변 누락: {expr!r}")
+            advance()
+            return Var(f"{sym}{op}{rhs}")
         return Var(sym)
 
     node = parse_or()

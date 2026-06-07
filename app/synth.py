@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 
 from app.boolexpr import parse
-from app.models import CounterSpec, IODirection, StateMachineSpec, TimerSpec
+from app.models import Comparator, CounterSpec, IODirection, StateMachineSpec, TimerSpec
 
 
 def _ms_to_iec_time(ms: int) -> str:
@@ -45,6 +45,46 @@ def _counter_call(c: CounterSpec) -> str:
     # IEC 61131-3 표준 CTU 입력은 R(리셋)이다 — 'RESET' 은 비표준이라 표준 런타임
     # (OpenPLC/CODESYS)에서 로드 실패한다(실 OpenPLC 차등검증이 잡은 이식성 버그).
     return f"{c.name}(CU := {cu}, R := {r}, PV := {c.preset});"
+
+
+def _fmt_num(v: float) -> str:
+    """비교 임계값을 ST 리터럴로(정수값은 5, 소수는 3.2). REAL 비교도 허용된다."""
+    return str(int(v)) if v == int(v) else repr(v)
+
+
+def _comparator_line(c: Comparator) -> str:
+    """비교기 1개 → BOOL 플래그 대입식. hysteresis 면 밴드 SR 래치로 합성."""
+    thr = _fmt_num(c.threshold)
+    base = f"{c.signal} {c.op.value} {thr}"
+    if not c.hysteresis:
+        rhs = base
+    else:
+        # 밴드 유지: GT/GE 는 threshold-h 까지, LT/LE 는 threshold+h 까지 ON 유지.
+        if c.op.value in (">", ">="):
+            hold = f"{c.signal} >= {_fmt_num(c.threshold - c.hysteresis)}"
+        else:
+            hold = f"{c.signal} <= {_fmt_num(c.threshold + c.hysteresis)}"
+        rhs = f"({base}) OR ({c.flag} AND {hold})"
+    return f"{c.flag} := {rhs};"
+
+
+def synthesize_comparators(spec: StateMachineSpec) -> list[str]:
+    """아날로그 비교기 플래그 라인(코일·전이보다 먼저 — 스캔 순서상 입력 가공).
+
+    플래그가 출력/파생/상태구동과 충돌(이중 정의)하면 ValueError. 산출 식은 boolexpr 가
+    원자 비교 리터럴로 파싱 가능하다(다운스트림 래더는 비교 접점으로 렌더).
+    """
+    lines: list[str] = []
+    derived = {d.output for d in spec.derived_outputs}
+    for c in spec.comparators:
+        if _on_states(spec, c.flag) or c.flag in derived:
+            raise ValueError(f"비교기 플래그 '{c.flag}' 가 다른 곳에서도 구동됩니다(이중 정의).")
+        line = _comparator_line(c)
+        parse(line.split(":=", 1)[1].rstrip(";").strip())  # RHS 파싱 검증
+        hyst = f" (히스테리시스 {c.hysteresis})" if c.hysteresis else ""
+        lines.append(f"// 비교기 {c.flag} := {c.signal} {c.op.value} {_fmt_num(c.threshold)}{hyst}")
+        lines.append(line)
+    return lines
 
 
 def synthesize_fb_calls(spec: StateMachineSpec) -> list[str]:
@@ -163,9 +203,12 @@ def synthesize_st(spec: StateMachineSpec) -> str:
         if line is not None:
             coil_lines.append(line)
     fb_lines = synthesize_fb_calls(spec)
+    cmp_lines = synthesize_comparators(spec)
     blocks: list[str] = []
     if fb_lines:
         blocks.append("\n".join(fb_lines))  # FB 호출이 코일보다 먼저(스캔 순서)
+    if cmp_lines:
+        blocks.append("\n".join(cmp_lines))  # 비교기 플래그도 코일보다 먼저
     if coil_lines:
         blocks.append("\n".join(coil_lines))
     return "\n\n".join(blocks)
