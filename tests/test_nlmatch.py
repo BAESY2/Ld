@@ -287,6 +287,38 @@ def test_single_intent_not_flagged_compound(text: str) -> None:
     assert detect_multi_intent(text, match_recipe(text)) == []
 
 
+# --- Part 4: 아날로그 설정값(숫자+물리단위)은 정직히 범위밖 거절 ---
+@pytest.mark.parametrize("text", [
+    "탱크 수위 80%면 펌프1 끄고 펌프2 켜",      # 백분율
+    "히터 200도까지 올리고 그 온도 유지",        # 온도 설정값
+    "컨베이어 속도 30Hz로 돌리다가 10Hz로 줄여",  # 주파수(VFD)
+    "압력 5바 넘으면 밸브 닫고 3바 밑이면 열어",  # 압력 설정값
+])
+def test_analog_setpoint_is_out_of_scope(text: str) -> None:
+    """숫자+물리단위(도/바/Hz/%) 설정값은 불리언 템플릿 밖 → 확신 강등 + 범위밖 안내."""
+    res = analyze(text, allow_llm=False)
+    assert res.confident is False
+    assert "out_of_scope" in res.extras
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("기동하고 5초 뒤에 램프 켜기", "on_delay"),       # 초는 아날로그 아님
+    ("부품 100개마다 검사 게이트 열어", "count_eject"),  # 개는 아날로그 아님
+    ("8시간 가동하면 자동 정지하고 정비 알람", "runtime_maint"),  # 시간(누적)은 아날로그 아님
+])
+def test_count_time_slots_not_flagged_analog(text: str, expected: str) -> None:
+    """초/개/시간 슬롯은 아날로그 설정값으로 오인되면 안 된다(in-template 보호)."""
+    res = analyze(text, allow_llm=False)
+    assert "out_of_scope" not in res.extras
+    assert res.recipe_id == expected
+
+
+def test_alternating_pumps_match_duty_standby() -> None:
+    """'번갈아 돌리는' 펌프는 duty_standby(교번/리드-래그)로 — fwd_rev 침묵실패 방지."""
+    res = analyze("펌프 두대 번갈아 돌리고 동시기동은 금지", allow_llm=False)
+    assert res.recipe_id == "duty_standby"
+
+
 def test_detect_multi_intent_deterministic() -> None:
     t = "버튼 누르면 모터 돌고 고장나면 경광등 켜고 알람"
     assert detect_multi_intent(t, match_recipe(t)) == detect_multi_intent(t, match_recipe(t))

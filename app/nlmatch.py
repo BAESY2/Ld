@@ -38,8 +38,8 @@ RECIPE_KEYWORDS: dict[str, list[str]] = {
                     "경광등", "점등", "표시등", "비상등", "에러", "error", "유지"],
     "first_out_alarm": ["최초", "퍼스트아웃", "first", "최초고장", "선행", "경음기", "혼",
                         "어느", "먼저", "원인"],
-    "duty_standby": ["리드", "래그", "예비", "교번", "주펌프", "듀티", "스탠바이", "펌프",
-                     "lead", "lag", "standby"],
+    "duty_standby": ["리드", "래그", "예비", "교번", "번갈아", "번갈아가며", "주펌프",
+                     "듀티", "스탠바이", "펌프", "lead", "lag", "standby"],
     "two_hand_safety": ["양수", "양손", "두손", "프레스", "가드", "안전", "허가", "two",
                         "hand", "press"],
     "car_wash": ["세차", "세척", "비누", "헹굼", "건조", "단계", "순차", "carwash", "wash"],
@@ -370,9 +370,23 @@ _OUT_OF_SCOPE_MSG = (
 )
 
 
+# 아날로그 *설정값*(숫자+물리단위)은 불리언 템플릿으로 표현 불가 — 정직히 거절한다.
+# 온도(도/℃)·압력(바/bar)·주파수(Hz)·백분율(%)·회전수(rpm) 등. 단위가 *명시*된
+# 숫자만 잡으므로 in-template 의 초(시간)·개(개수)·시간(누적) 슬롯은 건드리지 않는다.
+# '바'는 뒤에 한글이 더 붙으면(바닥/바이트 등) 제외해 오탐을 막는다.
+# '도'는 숫자 바로 앞이면 항상 온도/각도다(도금/도어/정도는 숫자가 안 붙음) → lookahead 불필요.
+# '바'만 뒤 한글을 배제한다(3바퀴/5바이트 오탐 방지). '초/개/시간/분'은 의도적으로 제외.
+_ANALOG_QTY_RE = re.compile(
+    r"\d+\s*(?:℃|°|도|바(?![가-힣])|bar|%|퍼센트|hz|헤르츠|rpm|rps)",
+    re.IGNORECASE,
+)
+
+
 def _out_of_scope(text: str) -> bool:
     low = text.lower()
-    return any(cue in low for cue in _OUT_OF_SCOPE_CUES)
+    if any(cue in low for cue in _OUT_OF_SCOPE_CUES):
+        return True
+    return _ANALOG_QTY_RE.search(text) is not None
 
 
 # ── 다중의도(compound) 감지 — 한 요청에 여러 서브시스템이 섞였는지 정직히 자각 ──
