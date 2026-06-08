@@ -66,13 +66,18 @@ class _Builder:
         self.inputs.setdefault(sym, dt)
         return sym
 
-    def analog_flag(self, signal: str, value: float) -> str:
+    def analog_flag(self, signal: str, value: float, op: CompareOp = CompareOp.GE) -> str:
+        """비교기 플래그 — (신호·연산·임계)별로 *고유* 이름(같은 신호 다중 임계의 이중코일 방지).
+
+        같은 (신호,연산,임계) 재요청이면 기존 플래그를 재사용(중복 비교기 생성 안 함).
+        """
         self.add_input(signal, DataType.REAL)
-        self._cmp_n += 1
-        flag = f"{signal}_HI"
-        self.comparators.append(
-            Comparator(flag=flag, signal=signal, op=CompareOp.GE, threshold=value)
-        )
+        tag = "GE" if op in (CompareOp.GE, CompareOp.GT) else "LE"
+        flag = f"{signal}_{tag}{int(value) if value == int(value) else value}"
+        if not any(c.flag == flag for c in self.comparators):
+            self.comparators.append(
+                Comparator(flag=flag, signal=signal, op=op, threshold=value)
+            )
         return flag
 
     def counter_q(self, preset: int) -> str:
@@ -94,7 +99,8 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
     if c.device in _DEV_TRIG:
         return b.add_input(_DEV_TRIG[c.device])
     if c.device in _ANALOG and c.value is not None:
-        return b.analog_flag(_ANALOG[c.device], float(c.value))
+        op = CompareOp.LE if c.predicate == "DROP" else CompareOp.GE
+        return b.analog_flag(_ANALOG[c.device], float(c.value), op)
     if c.predicate in ("COUNT", "FILL") and c.value is not None:
         return b.counter_q(c.value)
     if c.device == "PART" and c.value is not None:

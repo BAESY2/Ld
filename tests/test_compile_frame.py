@@ -40,7 +40,7 @@ def test_dual_analog_compound_compiles() -> None:
     r = frame_to_spec("압력 5바 넘으면 밸브 닫고 온도 200도 되면 히터 꺼")
     assert r.confident is True
     flags = {c.flag for c in r.spec.comparators}
-    assert {"PRESSURE_HI", "TEMP_HI"} <= flags
+    assert {"PRESSURE_GE5", "TEMP_GE200"} <= flags
     st = synthesize_st(r.spec)
     assert detect_double_coils(st) == {}
     assert verify(r.spec, st).passed
@@ -76,3 +76,24 @@ def test_various_intents_compile_and_verify(text: str) -> None:
     st = synthesize_st(r.spec)
     assert detect_double_coils(st) == {}
     assert verify(r.spec, st).passed
+
+
+def test_same_signal_multiple_thresholds_no_double_coil() -> None:
+    """회귀(Track B 발견): 같은 신호 다중 임계가 비교기 플래그 충돌→이중코일 내던 버그."""
+    r = frame_to_spec("온도 75도 되면 히터 켜고 온도 85도 넘으면 히터 꺼")
+    st = synthesize_st(r.spec)
+    assert detect_double_coils(st) == {}  # 핵심: 이중코일 0
+    flags = {c.flag for c in r.spec.comparators}
+    assert flags == {"TEMP_GE75", "TEMP_GE85"}  # 임계별 고유 플래그
+    assert "HEATER := (TEMP_GE75 OR HEATER) AND NOT (TEMP_GE85);" in st
+    assert verify(r.spec, st).passed and r.confident
+
+
+def test_below_threshold_hysteresis_pump() -> None:
+    """'밑으로 떨어지면'(LE) + '넘으면'(GE) = 올바른 히스테리시스 펌프 제어."""
+    r = frame_to_spec("압력 3바 밑으로 떨어지면 펌프 켜고 압력 5바 넘으면 펌프 꺼")
+    st = synthesize_st(r.spec)
+    ops = {(c.flag, c.op.value) for c in r.spec.comparators}
+    assert ("PRESSURE_LE3", "<=") in ops and ("PRESSURE_GE5", ">=") in ops
+    assert "PUMP := (PRESSURE_LE3 OR PUMP) AND NOT (PRESSURE_GE5);" in st
+    assert detect_double_coils(st) == {} and verify(r.spec, st).passed
