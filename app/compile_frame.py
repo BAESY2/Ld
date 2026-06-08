@@ -172,6 +172,12 @@ def _compile_sequence(frame: IntentFrame) -> CompileResult:
         steps, start="START", stop="STOP", loop=False,
         title=(frame.text[:40] or "순차 제어"),
     )
+    # 단계 출력을 상호배제 그룹으로 선언 → verify 가 'at-most-one 단계 활성'(one-hot)을
+    # k-귀납으로 *증명*한다(시퀀스 안전성을 형식 보장으로 격상; 구조적 보장의 기계검증).
+    spec.interlocks = [
+        Interlock(output_a=outs[i], output_b=outs[j])
+        for i in range(len(outs)) for j in range(i + 1, len(outs))
+    ]
     return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
 
 

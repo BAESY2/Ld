@@ -119,6 +119,17 @@ def test_sequence_compiles_to_timed_sequencer() -> None:
     assert verify(r.spec, st).passed
 
 
+def test_sequencer_one_hot_is_formally_proven() -> None:
+    """시퀀서 단계 출력의 at-most-one(one-hot)이 k-귀납으로 *증명*된다(시퀀스 안전 형식보장)."""
+    from app.verifier import proven_safe_groups
+
+    r = frame_to_spec("모터 돌리고 다음 펌프 켜고 다음 밸브 열어")
+    st = synthesize_st(r.spec)
+    groups = [set(g) for g in proven_safe_groups(r.spec, st)]
+    assert {"MOTOR", "PUMP", "VALVE"} in groups  # 세 단계가 동시활성 불가로 증명됨
+    assert verify(r.spec, st).passed
+
+
 def test_sequence_delay_from_n_seconds() -> None:
     """'N초 후/뒤'의 지연이 해당 단계 타이머 프리셋이 된다."""
     r = frame_to_spec("펌프 켜고 3초 후 모터 돌리고")
