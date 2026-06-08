@@ -66,7 +66,7 @@ def test_interlock_pair_is_machine_proven() -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "5초 뒤에 모터를 돌려라",  # 비확신(coverage 낮음)
+        "데이터를 통신으로 모아서 리포트 만들어",  # 도메인 밖(통신/리포트)
         "오늘 점심 뭐 먹지",       # 도메인 밖
     ],
 )
