@@ -110,6 +110,16 @@ DEVICES: dict[str, str] = {
     "실린더": "CYLINDER", "히터": "HEATER", "탱크": "TANK", "게이트": "GATE",
     "셔터": "SHUTTER", "부품": "PART", "압력": "PRESSURE", "온도": "TEMP",
     "수위": "LEVEL", "타이머": "TIMER", "카운터": "COUNTER", "알람": "ALARM",
+    # 확장 어휘(G1) — 더 많은 액추에이터/기기
+    "부저": "BUZZER", "버저": "BUZZER", "사이렌": "SIREN", "혼": "HORN",
+    "팬": "FAN", "송풍기": "FAN", "블로워": "BLOWER", "진공": "VACUUM",
+    "클램프": "CLAMP", "척": "CHUCK", "지그": "JIG", "도어": "DOOR", "문": "DOOR",
+    "호퍼": "HOPPER", "피더": "FEEDER", "공급기": "FEEDER", "노즐": "NOZZLE",
+    "스프레이": "SPRAY", "분사기": "SPRAY", "드릴": "DRILL", "로봇": "ROBOT",
+    "솔레노이드": "SOLENOID", "솔밸브": "SOLENOID",
+    "쿨러": "COOLER", "냉각기": "COOLER", "컴프레서": "COMPRESSOR",
+    "리밋": "LIMIT", "리미트": "LIMIT", "근접센서": "PROX", "광센서": "PHOTO",
+    "적색등": "LAMP_R", "녹색등": "LAMP_G", "황색등": "LAMP_Y", "경보": "ALARM",
     "저수위": "LEVEL_LO", "하한": "LEVEL_LO", "만수위": "LEVEL_HI",
     "고수위": "LEVEL_HI", "상한": "LEVEL_HI", "고장": "FAULT", "이상": "FAULT",
     # 방향(정/역) — fwd_rev 의 구조 변별자
@@ -148,6 +158,15 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "됐": ("되다", "BECOME"), "나면": ("나다", "BECOME"), "났": ("나다", "BECOME"),
     "나서": ("나다", "BECOME"), "생기": ("생기다", "BECOME"), "생겨": ("생기다", "BECOME"),
     "발생": ("발생하다", "BECOME"),
+    # 확장 동작·조건 용언(G1)
+    "도착": ("도착하다", "ARRIVE"), "완료": ("완료하다", "DONE"), "끝나": ("끝나다", "DONE"),
+    "비": ("비다", "EMPTY"), "막히": ("막히다", "JAM"), "걸리": ("걸리다", "JAM"),
+    "클램프": ("클램프하다", "CLAMP_ON"), "고정": ("고정하다", "CLAMP_ON"),
+    "해제": ("해제하다", "CLAMP_OFF"), "풀": ("풀다", "CLAMP_OFF"),
+    "올리": ("올리다", "UP"), "올려": ("올리다", "UP"), "상승": ("상승하다", "UP"),
+    "내리": ("내리다", "DOWN"), "내려": ("내리다", "DOWN"), "하강": ("하강하다", "DOWN"),
+    "분사": ("분사하다", "SPRAY_ON"), "흡착": ("흡착하다", "VAC_ON"),
+    "울리": ("울리다", "TURN_ON"), "울려": ("울리다", "TURN_ON"), "이동": ("이동하다", "RUN"),
 }
 
 # 용언 어미(긴 것 우선). is_cond=조건절('-면'류) 표지.

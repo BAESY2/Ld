@@ -29,18 +29,28 @@ from app.models import (
     StateMachineSpec,
 )
 
-_ON = {"RUN", "TURN_ON", "OPEN", "EJECT"}
-_OFF = {"STOP", "TURN_OFF", "CLOSE"}
+_ON = {"RUN", "TURN_ON", "OPEN", "EJECT", "CLAMP_ON", "UP", "SPRAY_ON", "VAC_ON"}
+_OFF = {"STOP", "TURN_OFF", "CLOSE", "CLAMP_OFF", "DOWN"}
+# 출력 액추에이터 기기 → 출력 심볼.
 _DEV_OUT = {
     "MOTOR": "MOTOR", "PUMP": "PUMP", "VALVE": "VALVE", "LAMP": "LAMP",
     "BEACON": "BEACON", "HEATER": "HEATER", "CONVEYOR": "CONVEYOR",
-    "GATE": "GATE", "SHUTTER": "SHUTTER",
+    "GATE": "GATE", "SHUTTER": "SHUTTER", "BUZZER": "BUZZER", "SIREN": "SIREN",
+    "HORN": "HORN", "FAN": "FAN", "BLOWER": "BLOWER", "VACUUM": "VACUUM",
+    "CLAMP": "CLAMP", "CHUCK": "CHUCK", "DOOR": "DOOR", "HOPPER": "HOPPER",
+    "FEEDER": "FEEDER", "NOZZLE": "NOZZLE", "SPRAY": "SPRAY", "DRILL": "DRILL",
+    "ROBOT": "ROBOT", "SOLENOID": "SOLENOID", "CYLINDER": "CYLINDER",
+    "COOLER": "COOLER", "COMPRESSOR": "COMPRESSOR",
+    "LAMP_R": "LAMP_R", "LAMP_G": "LAMP_G", "LAMP_Y": "LAMP_Y",
 }
 # 조건 기기 → (트리거 입력 심볼). 아날로그/계수는 별도(비교기/카운터)로 푼다.
 _DEV_TRIG = {
     "LEVEL_LO": "LO_LS", "LEVEL_HI": "HI_LS", "LEVEL": "LEVEL_SW",
     "FAULT": "FAULT", "SENSOR": "SENSOR", "SWITCH": "SWITCH",
+    "LIMIT": "LIMIT_SW", "PROX": "PROX_SW", "PHOTO": "PHOTO_SW",
 }
+# 센서/상태 조건 술어(기기 없이도 입력 신호로 푼다).
+_SENSOR_PRED = {"ARRIVE", "DONE", "EMPTY", "JAM", "DETECT"}
 _ANALOG = {"PRESSURE": "PRESSURE", "TEMP": "TEMP"}
 
 
@@ -89,6 +99,10 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
         return b.counter_q(c.value)
     if c.device == "PART" and c.value is not None:
         return b.counter_q(c.value)
+    if c.device:  # 일반 기기 → 입력 신호(피드백/센서). 커버리지 확장.
+        return b.add_input(f"{c.device}_SIG")
+    if c.predicate in _SENSOR_PRED:
+        return b.add_input(f"{c.predicate}_SIG")
     return None
 
 
