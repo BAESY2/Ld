@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -157,9 +158,6 @@ _ENDINGS: tuple[tuple[str, bool], ...] = (
     ("어", False), ("아", False), ("여", False),
 )
 
-_NEGATIONS = ("안", "못")
-_NEG_ENDINGS = ("지 않", "지않", "지 마", "지마", "지 말")
-
 # 분류사(수량 단위) — 이산 단위 + 아날로그 공학단위(바/도/% 등; 상위에서 아날로그로 라우팅)
 _CLASSIFIERS = (
     "개", "대", "번", "회", "초", "분", "시간", "매", "장", "본", "사이클",
@@ -228,78 +226,98 @@ def strip_particle(word: str) -> tuple[str, Role, str]:
     return word, Role.NONE, ""
 
 
-def _strip_ending(word: str) -> tuple[str, bool]:
-    """용언 어미 제거 → (스템후보, 조건절여부). 어미 없으면 (word, False)."""
-    for end, is_cond in _ENDINGS:
-        if len(word) > len(end) and word.endswith(end):
-            return word[: -len(end)], is_cond
-    return word, False
+# ── 띄어쓰기-무관 최장일치 분절 (한국어 NLP 1순위 난점: 띄어쓰기 오류/STT/현장메모) ──
+_DEVICE_SORTED = sorted(DEVICES, key=len, reverse=True)
+_ACTION_SORTED = sorted(ACTIONS, key=len, reverse=True)
+_PARTICLE_SORTED = sorted(_PARTICLES, key=lambda p: len(p[0]), reverse=True)
+_ENDING_SORTED = sorted(_ENDINGS, key=lambda e: len(e[0]), reverse=True)
+_PASSIVE = ("되", "돼", "된", "됐", "하", "해")
+_QTY_RE = re.compile(r"(\d+)\s*(" + "|".join(map(re.escape, _CLASSIFIERS)) + r")")
 
 
-def _lookup_action(stem: str) -> tuple[str, str] | None:
-    """스템(또는 부분)을 동작 어휘에서 찾는다. 정확 일치 우선, 없으면 최장 접두 일치."""
-    if stem in ACTIONS:
-        return ACTIONS[stem]
-    # '-하-'(감지하면→감지) / '-되-'(감지되면→감지, 피동) 접미 흡수 후 재시도
-    if stem and stem[-1] in ("하", "되", "돼") and stem[:-1] in ACTIONS:
-        return ACTIONS[stem[:-1]]
+def _m_quantity(s: str) -> tuple[int, Morpheme] | None:
+    m = _QTY_RE.match(s)
+    if m:
+        return m.end(), Morpheme(surface=m.group(0), pos=Pos.NUM,
+                                 value=int(m.group(1)), category=m.group(2))
+    for ko, val in _KO_NUM.items():
+        for cls in ("개", "대", "번", "회"):
+            if s.startswith(ko + cls):
+                return len(ko + cls), Morpheme(surface=ko + cls, pos=Pos.NUM,
+                                               value=val, category=cls)
     return None
 
 
-def _lookup_device(word: str) -> tuple[str, str] | None:
-    """어절을 기기 어휘에서 찾는다(정확 일치 → 최장 접두 일치)."""
-    if word in DEVICES:
-        return word, DEVICES[word]
-    best: str | None = None
-    for surf in DEVICES:
-        if word.startswith(surf) and (best is None or len(surf) > len(best)):
-            best = surf
-    return (best, DEVICES[best]) if best else None
-
-
-def _parse_quantity(word: str) -> tuple[int, str] | None:
-    """수량 어절(숫자/한글수사 + 분류사) → (값, 분류사). 아니면 None."""
-    for cls in sorted(_CLASSIFIERS, key=len, reverse=True):
-        if cls in word:
-            head = word.split(cls)[0]
-            digits = "".join(c for c in head if c.isdigit())
-            if digits:
-                return int(digits), cls
-            for ko, val in _KO_NUM.items():
-                if head.endswith(ko):
-                    return val, cls
+def _m_device(s: str) -> tuple[int, Morpheme] | None:
+    for dev in _DEVICE_SORTED:
+        if s.startswith(dev):
+            rest = s[len(dev):]
+            for surf, role, need_final in _PARTICLE_SORTED:
+                if rest.startswith(surf) and (
+                    need_final is None or has_batchim(dev) == need_final
+                ):
+                    return len(dev) + len(surf), Morpheme(
+                        surface=dev + surf, pos=Pos.NOUN, lemma=dev,
+                        category=DEVICES[dev], role=role, particle=surf)
+            return len(dev), Morpheme(surface=dev, pos=Pos.NOUN, lemma=dev,
+                                      category=DEVICES[dev])
     return None
 
 
-def _analyze_eojeol(word: str) -> Morpheme:
-    """한 어절을 형태소 분석한다(수량→기기+조사→용언 순으로 시도)."""
-    qty = _parse_quantity(word)
-    if qty is not None:
-        return Morpheme(surface=word, pos=Pos.NUM, value=qty[0], category=qty[1])
+def _m_verb(s: str) -> tuple[int, Morpheme] | None:
+    best: tuple[int, Morpheme] | None = None
+    for surf in _ACTION_SORTED:
+        if not s.startswith(surf):
+            continue
+        lemma, cat = ACTIONS[surf]
+        rest = s[len(surf):]
+        consumed = len(surf)
+        # 피동/'하' 접미 흡수(감지되면→감지, 단 '되' 자체 동사는 BECOME 으로 이미 처리)
+        if surf not in ("되", "돼", "된", "됐") and rest[:1] in _PASSIVE:
+            rest = rest[1:]
+            consumed += 1
+        is_cond = False
+        for end, cond in _ENDING_SORTED:
+            if rest.startswith(end):
+                consumed += len(end)
+                is_cond = cond
+                break
+        if best is None or consumed > best[0]:
+            best = (consumed, Morpheme(surface=s[:consumed], pos=Pos.VERB,
+                                       lemma=lemma, category=cat, is_condition=is_cond))
+    return best
 
-    if word in _NEGATIONS:
-        return Morpheme(surface=word, pos=Pos.NEG, category="NEG")
 
-    # 기기 체언(+조사)
-    stem, role, particle = strip_particle(word)
-    dev = _lookup_device(stem)
-    if dev is not None:
-        return Morpheme(
-            surface=word, pos=Pos.NOUN, lemma=dev[0], category=dev[1],
-            role=role, particle=particle,
-        )
+def _m_neg(s: str) -> tuple[int, Morpheme] | None:
+    for neg in ("안", "못"):
+        if s == neg or s.startswith(neg + " "):
+            return len(neg), Morpheme(surface=neg, pos=Pos.NEG, category="NEG")
+    if s.startswith(("않", "말")):
+        return 1, Morpheme(surface=s[0], pos=Pos.NEG, category="NEG")
+    return None
 
-    # 용언(활용)
-    vstem, is_cond = _strip_ending(word)
-    act = _lookup_action(vstem) or _lookup_action(word)
-    if act is not None:
-        negated = word.endswith(_NEG_ENDINGS) or any(n in word for n in _NEG_ENDINGS)
-        return Morpheme(
-            surface=word, pos=Pos.VERB, lemma=act[0], category=act[1],
-            is_condition=is_cond, negated=negated,
-        )
 
-    return Morpheme(surface=word, pos=Pos.UNKNOWN)
+def _segment(token: str) -> list[Morpheme]:
+    """한 어절(또는 붙여쓴 run-on)을 최장일치로 형태소 열로 분절(띄어쓰기 무관)."""
+    out: list[Morpheme] = []
+    i, n = 0, len(token)
+    unknown = ""
+    while i < n:
+        s = token[i:]
+        cand = [m for m in (_m_quantity(s), _m_device(s), _m_verb(s), _m_neg(s)) if m]
+        if cand:
+            if unknown:
+                out.append(Morpheme(surface=unknown, pos=Pos.UNKNOWN))
+                unknown = ""
+            consumed, morph = max(cand, key=lambda c: c[0])
+            out.append(morph)
+            i += consumed
+        else:
+            unknown += token[i]
+            i += 1
+    if unknown:
+        out.append(Morpheme(surface=unknown, pos=Pos.UNKNOWN))
+    return out
 
 
 def analyze(text: str) -> Analysis:
@@ -307,8 +325,9 @@ def analyze(text: str) -> Analysis:
 
     어절 단위로 분석하되, 부정 부사(안/못)는 바로 뒤 용언에 부정 자질을 전파한다.
     """
-    eojeols = text.replace(",", " ").split()
-    morphs = [_analyze_eojeol(w) for w in eojeols]
+    morphs: list[Morpheme] = []
+    for token in text.replace(",", " ").split():
+        morphs.extend(_segment(token))
 
     def _set_negated(idx: int) -> None:
         nm = morphs[idx]
@@ -319,17 +338,12 @@ def analyze(text: str) -> Analysis:
         )
 
     for i, m in enumerate(morphs):
-        # (1) 부정 부사 '안/못' → 뒤의 첫 용언에 전파.
-        if m.pos == Pos.NEG:
-            for j in range(i + 1, len(morphs)):
-                if morphs[j].pos == Pos.VERB:
-                    _set_negated(j)
-                    break
-        # (2) 보조용언 부정 '-지 않-/-지 말-'(별도 어절: 않게/않으면/말고…) → 앞 용언에 전파.
-        elif m.pos == Pos.UNKNOWN and (m.surface.startswith(("않", "말"))):
-            morphs[i] = Morpheme(surface=m.surface, pos=Pos.NEG, category="NEG")
-            for j in range(i - 1, -1, -1):
-                if morphs[j].pos == Pos.VERB:
-                    _set_negated(j)
-                    break
+        if m.pos != Pos.NEG:
+            continue
+        # 부정 부사 '안/못'은 *뒤* 용언, 보조용언 '않/말'은 *앞* 용언에 부정을 전파.
+        rng = range(i + 1, len(morphs)) if m.surface in ("안", "못") else range(i - 1, -1, -1)
+        for j in rng:
+            if morphs[j].pos == Pos.VERB:
+                _set_negated(j)
+                break
     return Analysis(text=text, morphemes=morphs)

@@ -129,6 +129,33 @@ def test_coverage_full_vs_partial() -> None:
     assert partial.coverage < 0.5
 
 
+# ── 6. 띄어쓰기-무관 분절 (한국어 NLP 1순위 난점 — 현장메모/STT/붙여쓰기) ──
+def test_runon_no_space_is_segmented() -> None:
+    """띄어쓰기 전혀 없는 입력도 형태소 열로 정확히 분절된다."""
+    a = analyze("버튼누르면모터돌고정지누르면멈추게")
+    cats = [(m.lemma or m.category) for m in a.morphemes]
+    assert [m.category for m in a.morphemes] == [
+        "BUTTON", "PRESS", "MOTOR", "RUN", "STOP", "PRESS", "STOP"
+    ]
+    assert a.coverage == 1.0
+    assert len(a.morphemes) == 7  # 통째로 안 삼킴
+    assert cats  # 형태소 추출됨
+
+
+def test_runon_does_not_swallow_into_single_token() -> None:
+    """회귀: 긴 붙임 어절을 기기 하나로 삼키고 거짓 100% 확신하던 버그 방지."""
+    a = analyze("모터돌려")
+    assert [m.category for m in a.morphemes] == ["MOTOR", "RUN"]
+
+
+def test_partial_spacing_and_dropped_particle() -> None:
+    a = analyze("부품10개차면 모터돌려")
+    cats = [m.category for m in a.morphemes]
+    assert "PART" in cats and "RUN" in cats and "FILL" in cats
+    nums = [m for m in a.morphemes if m.pos == Pos.NUM]
+    assert nums and nums[0].value == 10
+
+
 def test_analysis_is_deterministic() -> None:
     t = "압력 5바 넘으면 밸브 닫아"
     assert [m.surface for m in analyze(t).morphemes] == [
