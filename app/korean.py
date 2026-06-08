@@ -346,6 +346,16 @@ _SEQ_MARKERS = (
 )
 
 
+def _m_copula_cond(s: str) -> tuple[int, Morpheme] | None:
+    """체언+'(이)면' 조건(예: '저수위면'·'고수위면'). 앞 체언이 소비된 뒤의 '면/이면'을
+    상태도달(BECOME) 조건절로 본다 — '되면' 없이도 'X면'을 조건으로 잡는다."""
+    for mk in ("이면", "면"):
+        if s.startswith(mk):
+            return len(mk), Morpheme(surface=mk, pos=Pos.VERB, category="BECOME",
+                                     is_condition=True)
+    return None
+
+
 def _m_seq(s: str) -> tuple[int, Morpheme] | None:
     for mk in sorted(_SEQ_MARKERS, key=len, reverse=True):
         if s.startswith(mk):
@@ -361,7 +371,8 @@ def _segment(token: str) -> list[Morpheme]:
     while i < n:
         s = token[i:]
         cand = [
-            m for m in (_m_quantity(s), _m_device(s), _m_verb(s), _m_seq(s), _m_neg(s)) if m
+            m for m in (_m_quantity(s), _m_device(s), _m_verb(s), _m_seq(s),
+                        _m_copula_cond(s), _m_neg(s)) if m
         ]
         if cand:
             if unknown:

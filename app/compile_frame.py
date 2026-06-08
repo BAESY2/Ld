@@ -112,6 +112,23 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
     return None
 
 
+# 측정/신호/용기·소재 — 구동(켜기/돌리기/열기) 대상이 아니다(센서·물리량은 액추에이터가 아님).
+# 이들이 ACTION 의 대상이면 의미 난센스("온도 올려"·"탱크 켜"·"압력 켜")로 보고 정직 거절한다.
+_NON_ACTUATABLE = {
+    "PRESSURE", "TEMP", "LEVEL", "LEVEL_LO", "LEVEL_HI", "FAULT", "BUTTON",
+    "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK",
+}
+# 물리 구동을 뜻하는 동작 술어(이것이 비액추에이터에 걸리면 부적합).
+_ACTUATION_PREDS = _ON | _OFF
+
+
+def _action_valid(c: IntentClause) -> bool:
+    """ACTION 절의 (기기, 동작)이 물리적으로 말이 되는가(측정/신호 기기 구동 거절)."""
+    if c.device in _NON_ACTUATABLE and c.predicate in _ACTUATION_PREDS:
+        return False
+    return True
+
+
 def _out_symbol(c: IntentClause) -> str:
     base = _DEV_OUT.get(c.device or "", "EJECT" if c.predicate == "EJECT" else "OUT")
     # 인스턴스 마커가 있으면 고유 심볼(PUMP1/PUMP2/GATE_A) — 인스턴스별로 분리된다.
@@ -185,6 +202,12 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
             pending.append(_resolve_cond(c, b))
             last_action = False
         else:  # ACTION
+            if not _action_valid(c):
+                # 의미 부적합(예: '온도 올려'·'탱크 켜') — 측정/신호 기기는 구동 대상이 아니다.
+                dev_ko = c.device or "?"
+                unresolved.append(f"'{dev_ko}'는 구동할 수 없는 대상(센서/측정/용기)")
+                last_action = True
+                continue
             out = _out_symbol(c)
             if out not in order:
                 order.append(out)

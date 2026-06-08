@@ -89,6 +89,24 @@ def test_same_signal_multiple_thresholds_no_double_coil() -> None:
     assert verify(r.spec, st).passed and r.confident
 
 
+@pytest.mark.parametrize("text", [
+    "온도 올려", "압력 켜", "탱크 켜", "부품 켜", "수위 돌려",
+])
+def test_nonsense_action_on_sensor_is_rejected(text: str) -> None:
+    """의미 부적합(측정/신호/용기 구동)은 confident=False 로 정직 거절(literal 난센스 차단)."""
+    assert frame_to_spec(text).confident is False
+
+
+@pytest.mark.parametrize("text", [
+    "펌프 켜", "밸브 열어", "모터 돌려", "히터 켜",
+    "저수위면 펌프 켜고 고수위면 펌프 꺼",  # 명사+'면' 조건 파싱(되 없이도)
+])
+def test_legitimate_actions_still_compile(text: str) -> None:
+    r = frame_to_spec(text)
+    assert r.confident is True
+    assert verify(r.spec, synthesize_st(r.spec)).passed
+
+
 def test_sequence_compiles_to_timed_sequencer() -> None:
     """'A 켜고 다음 B 하고 다음 C' → 검증된 one-hot 타임드 시퀀서(천장: 순차/타이밍)."""
     r = frame_to_spec("모터 돌리고 다음 펌프 켜고 다음 밸브 열어")
