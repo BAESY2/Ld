@@ -91,6 +91,42 @@ class IntentFrame:
         return " / ".join(c.explain() for c in self.clauses)
 
 
+def match_by_frame(source: IntentFrame | Analysis | str) -> tuple[str | None, float]:
+    """의도 프레임 → 레시피 id (구조적·의미 기반 매칭, 키워드 겹침 아님).
+
+    조건/동작의 (predicate, device, 단위)라는 *구조 특징*으로 레시피를 고른다. 띄어쓰기·
+    조사·활용 변형에 강하다(형태소 분석이 구조를 복원하므로). 점수 미달이면 (None, 0).
+    """
+    f = source if isinstance(source, IntentFrame) else extract(source)
+    devs = {c.device for c in f.clauses if c.device}
+    preds = {c.predicate for c in f.clauses}
+    acts = {c.predicate for c in f.actions}
+    units = {c.unit for c in f.clauses if c.unit}
+    has_time = bool(units & {"초", "분", "시간"})
+    level = bool(devs & {"LEVEL_LO", "LEVEL_HI", "LEVEL"})
+    s: dict[str, float] = {}
+    if level and (acts & {"TURN_ON", "TURN_OFF", "RUN"}):
+        s["hi_lo_level"] = 3.0
+    if "PRESSURE" in devs and ("EXCEED" in preds or "바" in units):
+        s["pressure_band"] = 3.0
+    if "TEMP" in devs and ("HEATER" in devs or "도" in units or "BECOME" in preds):
+        s["temp_setpoint"] = 3.0
+    if "EJECT" in acts or ("PART" in devs and any(c.value for c in f.clauses)):
+        s["count_eject"] = 2.5
+    if {"OPEN", "CLOSE"} <= acts or ({"OPEN", "CLOSE"} & acts and {"SHUTTER", "GATE"} & devs):
+        s["shutter_gate"] = 3.0
+    if has_time and (acts & {"TURN_ON", "RUN"}) and not level:
+        s["on_delay"] = 2.0
+    if "FAULT" in devs and (acts & {"TURN_ON"}):
+        s["latch_alarm"] = 2.5
+    if acts & {"RUN", "STOP"}:  # 기본: 모터 기동/정지(다른 강한 특징 없을 때)
+        s["motor_start_stop"] = 1.5
+    if not s:
+        return None, 0.0
+    best = max(s, key=lambda k: s[k])
+    return best, s[best]
+
+
 def extract(source: Analysis | str) -> IntentFrame:
     """형태소 분석(또는 원문) → 의도 프레임. 한국어 SOV·조건절 문법으로 절을 나눈다.
 

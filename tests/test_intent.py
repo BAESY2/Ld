@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.intent import ClauseKind, extract
+from app.intent import ClauseKind, extract, match_by_frame
 
 
 def test_condition_action_structure() -> None:
@@ -82,3 +82,37 @@ def test_extract_is_deterministic() -> None:
 ])
 def test_clear_commands_are_confident(text: str) -> None:
     assert extract(text).confident is True
+
+
+# ── 의도 프레임 → 레시피 매핑 (구조 기반) ──────────────────────────────────
+@pytest.mark.parametrize("text,recipe", [
+    ("저수위 되면 펌프 켜고 만수위 되면 꺼", "hi_lo_level"),
+    ("압력 5바 넘으면 밸브 닫아", "pressure_band"),
+    ("온도 200도 되면 히터 꺼", "temp_setpoint"),
+    ("부품 10개 차면 배출", "count_eject"),
+    ("버튼 누르면 모터 돌고 정지 누르면 멈추게", "motor_start_stop"),
+])
+def test_frame_maps_to_recipe(text: str, recipe: str) -> None:
+    assert match_by_frame(text)[0] == recipe
+
+
+def test_frame_mapping_robust_to_spacing_removal() -> None:
+    """발명 핵심: 띄어쓰기를 없애도 구조 매핑은 동일하게 맞는다(BM25는 무너지는 지점)."""
+    for text, recipe in [
+        ("저수위 되면 펌프 켜고 만수위 되면 꺼", "hi_lo_level"),
+        ("압력 5바 넘으면 밸브 닫아", "pressure_band"),
+        ("부품 10개 차면 배출", "count_eject"),
+    ]:
+        assert match_by_frame(text.replace(" ", ""))[0] == recipe
+
+
+def test_ablation_grammar_beats_bm25_under_perturbation() -> None:
+    """회귀 가드: 띄어쓰기 제거 교란에서 문법엔진 정확도 ≥ BM25(그리고 우월)."""
+    from scripts.intent_ablation import _acc, _drop_spaces
+
+    g_clean, b_clean = _acc(lambda t: t)
+    g_pert, b_pert = _acc(_drop_spaces)
+    assert g_clean >= b_clean
+    assert g_pert >= b_pert
+    assert g_pert > b_pert  # 교란에서 격차가 벌어진다(발명의 가치)
+    assert g_pert >= 0.9    # 문법엔진은 교란에도 견고
