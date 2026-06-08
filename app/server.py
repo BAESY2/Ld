@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field, model_validator
 from app import __version__
 from app.comms.protocols import WriteRejected
 from app.comms.safety_kernel import SafetyKernel
+from app.compile_frame import frame_to_spec
 from app.config import settings
 from app.design import design_and_verify
 from app.emit import emit as emit_ladder
@@ -45,6 +46,7 @@ from app.explain import explain_all
 from app.export import infer_io_spec, to_plcopen_xml
 from app.generate import GenEvent, _safe_join, generate_project
 from app.graph import run_pipeline
+from app.intent import extract as extract_intent
 from app.memory_map import DeviceAllocator
 from app.models import (
     CrossInterlock,
@@ -441,6 +443,78 @@ def nl_design(req: NLDesignRequest) -> NLDesignResponse:
         multi_intent=multi_intent, multi_intent_ids=multi_intent_ids,
         scaffold=scaffold, scaffold_cross_interlocks=scaffold_cis,
         scaffold_verified=scaffold_verified,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 컴파일러 경로 — 한국어 → 의도 프레임 → *컴파일* → 검증된 래더(레시피 비의존, 主엔진)
+# ---------------------------------------------------------------------------
+class CompileRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=settings.max_request_chars)
+
+
+class CompileResponse(BaseModel):
+    ok: bool
+    understood: str = ""          # IntentFrame.explain() — 사람이 읽는 '이해 내용'
+    confident: bool = False       # 전 절 컴파일+coverage 충분 → 래더 채택 가능
+    structured_text: str = ""     # 합성된 ST(confident 일 때만)
+    ladder: LadderProgram | None = None
+    verification: VerificationReport | None = None
+    double_coil_free: bool = False
+    unresolved: list[str] = Field(default_factory=list)  # 컴파일 못한 절(정직 강등)
+    explanation: str = ""
+    error: str | None = None
+    safety_notice: str = SAFETY_NOTICE
+
+
+@app.post("/api/compile", response_model=CompileResponse)
+def compile_nl(req: CompileRequest) -> CompileResponse:
+    """한국어 → 의도 프레임 → *컴파일* → 검증된 래더(레시피 매칭 아님, 결정론·키 불필요).
+
+    제품의 기본 합성 경로: ``frame_to_spec`` 컴파일러가 (조건 × 동작 × 기기) 조합을
+    직접 검증 가능한 명세로 컴파일한다. confident 면 synth→verify→transpile 로 래더를
+    만들어 채택 가능케 하고, 비확신/미해결이면 ladder 를 보류해 거짓 생성을 막는다
+    (ok=True 여도 confident=False 로 정직 표기). 레시피 매칭은 폴백으로 남긴다.
+    """
+    frame = extract_intent(req.text)
+    understood = frame.explain()
+    result = frame_to_spec(frame)
+    # 비확신: 거짓 래더를 만들지 않는다 — 이해 내용·미해결만 정직히 보고한다.
+    if not result.confident:
+        return CompileResponse(
+            ok=True,
+            understood=understood,
+            confident=False,
+            unresolved=result.unresolved,
+        )
+    try:
+        st = synthesize_st(result.spec)
+        ladder = transpile_st(st, title=result.spec.title)
+    except ValueError as exc:
+        return CompileResponse(
+            ok=False, understood=understood, confident=False,
+            unresolved=result.unresolved, error=f"합성 실패: {exc}",
+        )
+    if not ladder.rungs:
+        return CompileResponse(
+            ok=False, understood=understood, confident=False,
+            unresolved=result.unresolved,
+            error="유효한 래더 로직이 만들어지지 않았어요(상태구동 출력이 없을 수 있음).",
+        )
+    report = verify(result.spec, st)
+    double_coil_free = not any(
+        i.code == "DOUBLE_COIL" for i in report.issues
+    )
+    return CompileResponse(
+        ok=report.passed,
+        understood=understood,
+        confident=True,
+        structured_text=st,
+        ladder=ladder,
+        verification=report,
+        double_coil_free=double_coil_free,
+        unresolved=result.unresolved,
+        explanation=explain_all(result.spec, ladder, report),
     )
 
 

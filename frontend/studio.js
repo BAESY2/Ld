@@ -108,6 +108,54 @@
     }
   }
 
+  // 컴파일러 경로 — 한국어를 레시피 매칭이 아니라 *컴파일러*로 검증된 래더로 합성.
+  // 레시피 흐름과 공존: 컴파일 결과는 중앙/우측 뷰에 직접 그리고, confident 면 채택 가능.
+  async function handleCompile(text) {
+    addMsg("u", esc(text));
+    const m = addMsg("a", "⚙ 컴파일 중…");
+    const bubble = m.querySelector(".b");
+    let res;
+    try { res = await api("/api/compile", { text }); }
+    catch (e) { bubble.textContent = "서버 연결 실패: " + String(e); return; }
+    showUnderstood(res);
+    if (!res.confident) {
+      const why = (res.unresolved && res.unresolved.length)
+        ? " — 미해결: " + esc(res.unresolved.join("; "))
+        : " — 도메인 밖이거나 이해가 불확실해 래더 생성을 보류했어요.";
+      bubble.innerHTML = "🤔 확신하지 못했어요" + why + " (레시피 매칭/AI 설계를 시도해 보세요)";
+      return;
+    }
+    const verdict = res.ok ? "✅ 검증 통과" : "⚠️ 검증 이슈 있음";
+    const dc = res.double_coil_free ? " · 이중코일 0" : "";
+    bubble.innerHTML = `컴파일러로 검증된 래더를 만들었어요 — ${verdict}${dc}`;
+    renderCompiled(res);
+  }
+
+  // 컴파일러 응답을 중앙(래더/ST/검증)·우측(시뮬) 뷰에 직접 반영(프로젝트 모듈과 별개 경로).
+  function renderCompiled(res) {
+    last = { structured_text: res.structured_text, ladder: res.ladder,
+      verification: res.verification, modules: [], address_map: [],
+      explanation: res.explanation, ok: res.ok };
+    renderLadder(res.ladder);
+    $("st").textContent = res.structured_text || "(없음)";
+    renderAddr([]);
+    renderVerify(res.verification, res.ok ? "" : null);
+    $("explain").innerHTML = esc(res.explanation || "—").replace(/\n/g, "<br>");
+    rebuildSimInputs(res);
+    setStatus(res.ok ? "✓ 컴파일·검증 통과" : "컴파일됨 · 검증 이슈", res.ok ? "ok" : "err");
+  }
+
+  // '이해 내용' 표시줄 — 컴파일러가 한국어를 무엇으로 이해했는지(설명가능) 보여준다.
+  function showUnderstood(res) {
+    const bar = $("understood");
+    if (!res || !res.understood) { bar.style.display = "none"; return; }
+    const tag = res.confident
+      ? '<b>✓ 확신</b>'
+      : '<span class="warn">⚠ 비확신(보류)</span>';
+    bar.innerHTML = `${tag} 이해: ${esc(res.understood)}`;
+    bar.style.display = "block";
+  }
+
   function adoptProject(proj) {
     project.title = proj.title || project.title;
     project.modules = (proj.modules || []).map((mod) => ({
@@ -435,8 +483,10 @@
 
   // ── 이벤트 ────────────────────────────────────────────────────────────────────
   $("send").onclick = () => { const v = $("nl").value.trim(); if (v) { $("nl").value = ""; handleNL(v); } };
+  $("compile-btn").onclick = () => { const v = $("nl").value.trim(); if (v) { $("nl").value = ""; handleCompile(v); } };
   $("design-btn").onclick = () => { const v = $("nl").value.trim(); if (v) { $("nl").value = ""; handleDesign(v); } };
-  $("nl").addEventListener("keydown", (e) => { if (e.key === "Enter") $("send").click(); });
+  // Enter 는 *컴파일러*를 기본 합성 경로로(레시피 매칭은 'run' 버튼 폴백).
+  $("nl").addEventListener("keydown", (e) => { if (e.key === "Enter") $("compile-btn").click(); });
   $("btn-undo").onclick = undo;
   $("btn-emit").onclick = exportEmit;
   $("btn-xml").onclick = exportXml;

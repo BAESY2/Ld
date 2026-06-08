@@ -93,6 +93,12 @@
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
   .chip::before { content: "↳ "; color: var(--dim); }
+  /* '이해 내용' 표시줄 — 컴파일러가 무엇으로 이해했는지(설명가능) */
+  .understood { margin: 0 12px 6px; padding: 5px 8px; font-size: 11.5px; line-height: 1.5;
+    border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: 5px;
+    background: #0c1018; color: #aeb4bd; word-break: break-word; }
+  .understood b { color: var(--accent); }
+  .understood .warn { color: var(--warn); }
   .inrow { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
   .inrow::before { content: "❯"; color: var(--prompt); font-weight: 700; }
   .inrow input {
@@ -187,10 +193,12 @@
     <div class="chat">
       <h2>console</h2>
       <div id="chat-log"></div>
+      <div id="understood" class="understood" style="display:none"></div>
       <div class="inrow">
-        <input id="nl" placeholder="버튼 누르면 모터 돌고 정지하면 선다…" autocomplete="off" spellcheck="false" />
+        <input id="nl" placeholder="저수위 되면 펌프 켜고 고수위 되면 끄고 고장 나면 경광등 켜…" autocomplete="off" spellcheck="false" />
+        <button id="compile-btn" title="컴파일러로 한국어를 직접 검증된 래더로 합성(레시피 매칭 아님, 키 불필요)">⚙ 컴파일</button>
         <button id="design-btn" title="자유 문장 전체를 AI로 설계(여러 서브시스템 자동 분해, ANTHROPIC_API_KEY 필요)">🤖 설계</button>
-        <button id="send">run</button>
+        <button id="send" title="레시피 매칭으로 모듈 추가(폴백)">run</button>
       </div>
     </div>
   </div>
