@@ -14,7 +14,12 @@ import pytest
 
 from app.models import Interlock, IODirection, IOPoint, StateMachineSpec
 from app.synth import synthesize_st
-from app.verifier import _HAS_Z3, check_interlocks_kinduction
+from app.verifier import (
+    _HAS_Z3,
+    check_group_mutex_kinduction,
+    check_interlocks_kinduction,
+    derive_mutex_groups,
+)
 from app.wizard import RECIPES, build_spec
 
 z3_only = pytest.mark.skipif(not _HAS_Z3, reason="z3 미설치")
@@ -72,3 +77,41 @@ def test_kinduction_regression_broken_st_detected() -> None:
     assert errs[0].counterexample != ""
     # 결정론: 반례는 정렬되어 누출 위험 없음
     assert errs[0].counterexample == ", ".join(sorted(errs[0].counterexample.split(", ")))
+
+
+@z3_only
+def test_group_mutex_no_violation_over_recipe_corpus() -> None:
+    """≥3 출력 one-hot 그룹을 가진 모든 레시피 합성 ST 에서 GROUP_MUTEX error 가 0 이다.
+
+    인터락 clique 가 ≥3 인 레시피(multiway_sort 의 GATE_A/B/C 등)를 합성해, 그룹
+    at-most-one 증명이 안전 샘플에서 거짓 양성을 내지 않음을 확인한다(최소 1개 그룹 검사).
+    """
+    checked_groups = 0
+    for rid in RECIPES:
+        spec = build_spec(rid)
+        groups = derive_mutex_groups(spec)
+        if not groups:
+            continue
+        st = synthesize_st(spec)
+        issues = check_group_mutex_kinduction(spec, st, k=3)
+        errs = [i for i in issues if i.code == "GROUP_MUTEX" and i.severity == "error"]
+        assert errs == [], f"{rid} 그룹 상호배제 거짓 위반: {[e.message for e in errs]}"
+        checked_groups += len(groups)
+    assert checked_groups > 0, "≥3 출력 one-hot 그룹을 가진 레시피가 하나도 검사되지 않음"
+
+
+@z3_only
+def test_group_mutex_regression_broken_group_detected() -> None:
+    """one-hot 가드가 모두 빠진 3출력 ST 는 그룹 검사가 동시 ON 집합 반례로 잡는다."""
+    spec = StateMachineSpec(
+        interlocks=[
+            Interlock(output_a="A", output_b="B"),
+            Interlock(output_a="A", output_b="C"),
+            Interlock(output_a="B", output_b="C"),
+        ]
+    )
+    broken = "A := X1 OR A;\nB := X2 OR B;\nC := X3 OR C;"
+    issues = check_group_mutex_kinduction(spec, broken, k=3)
+    errs = [i for i in issues if i.code == "GROUP_MUTEX" and i.severity == "error"]
+    assert len(errs) == 1
+    assert "동시 ON" in errs[0].counterexample

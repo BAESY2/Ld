@@ -459,6 +459,227 @@ def _kinduction_pair(
     )
 
 
+def _at_most_one(group_vars: list[z3.BoolRef]) -> z3.BoolRef:
+    """그룹 내 ON 변수가 ≤1 (at-most-one / one-hot 상한) 임을 나타내는 z3 식.
+
+    어떤 두 변수도 동시에 True 가 아님 = 모든 쌍에 대해 ¬(vi ∧ vj). 빈/단일 그룹은 항진.
+    """
+    if len(group_vars) < 2:
+        return z3.BoolVal(True)
+    pair_constraints = [
+        z3.Not(z3.And(group_vars[i], group_vars[j]))
+        for i in range(len(group_vars))
+        for j in range(i + 1, len(group_vars))
+    ]
+    return z3.And(*pair_constraints)
+
+
+def derive_mutex_groups(spec: StateMachineSpec) -> list[list[str]]:
+    """인터락 쌍들의 합집합(연결요소)에서 ≥3개 출력의 상호배제 그룹을 유도한다.
+
+    인터락 그래프의 *연결요소* 가 크기 3 이상이고 그 요소가 *완전그래프(clique)* —
+    즉 요소 안 모든 쌍이 명시 인터락 — 일 때만 한 그룹으로 채택한다. 일부 쌍만
+    인터락된 요소를 전원-배타로 격상하면 명세에 없는 성질을 강요해 거짓 양성이 되므로,
+    설계자가 분명히 one-hot 의도를 선언한(모든 쌍 인터락) 경우로 한정한다. 크기 2 요소는
+    기존 쌍 검사가 담당하므로 제외한다. 출력 순서는 결정론(정렬)을 따른다.
+    """
+    if not spec.interlocks:
+        return []
+    order: list[str] = []
+    seen: set[str] = set()
+    adj: dict[str, set[str]] = {}
+    pairset: set[frozenset[str]] = set()
+    for lock in spec.interlocks:
+        a, b = lock.output_a, lock.output_b
+        if a == b:
+            continue
+        for s in (a, b):
+            if s not in seen:
+                seen.add(s)
+                order.append(s)
+                adj[s] = set()
+        adj[a].add(b)
+        adj[b].add(a)
+        pairset.add(frozenset((a, b)))
+
+    visited: set[str] = set()
+    groups: list[list[str]] = []
+    for start in order:
+        if start in visited:
+            continue
+        comp: list[str] = []
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            comp.append(node)
+            for nbr in adj[node]:
+                if nbr not in visited:
+                    stack.append(nbr)
+        if len(comp) < 3:
+            continue  # 크기 2 는 쌍 검사가 담당
+        is_clique = all(
+            frozenset((comp[i], comp[j])) in pairset
+            for i in range(len(comp))
+            for j in range(i + 1, len(comp))
+        )
+        if is_clique:
+            groups.append(sorted(comp))  # 결정론적 순서
+    return groups
+
+
+def _kinduction_group(
+    eqs: dict[str, str],
+    outputs: list[str],
+    out_set: set[str],
+    group: list[str],
+    k: int,
+) -> VerificationIssue | None:
+    """단일 상호배제 그룹(≥2 출력)에 대한 at-most-one k-귀납.
+
+    위반(error, 동시 ON 출력 집합을 반례로)/증명불가(warning)/증명(None).
+    전이계·스캔 의미론은 ``_kinduction_pair`` 와 동일(같은 ``_trans_at``) 이므로,
+    쌍 검사가 건전하면 그룹 검사도 동일 추상화 위에서 건전하다.
+    """
+    present = [g for g in group if g in eqs]
+    if len(present) < 2:
+        return None  # 검사할 게 없음
+    frames = [_frame(outputs, i) for i in range(k + 1)]
+
+    def prop_ok(fr: dict[str, z3.BoolRef]) -> z3.BoolRef:
+        return _at_most_one([fr[g] for g in present])
+
+    def viol(fr: dict[str, z3.BoolRef]) -> z3.BoolRef:
+        return z3.Not(prop_ok(fr))
+
+    # ── BASE: init(전부 OFF) → k 스텝. 어느 스텝에서든 둘 이상 ON 이면 도달가능 위반.
+    base = z3.Solver()
+    base.add(*[z3.Not(frames[0][o]) for o in outputs])
+    for step in range(k):
+        base.add(*_trans_at(eqs, outputs, out_set, frames[step], frames[step + 1], step))
+    base.push()
+    base.add(z3.Or(*[viol(fr) for fr in frames]))
+    if base.check() == z3.sat:
+        model = base.model()
+        ce = _group_counterexample(model, frames, present)
+        return VerificationIssue(
+            code="GROUP_MUTEX",
+            severity="error",
+            message=(
+                f"그룹 상호배제 위반(k-귀납, k={k}): 출력 {{{', '.join(present)}}} 중 "
+                f"둘 이상이 초기상태에서 {k}스캔 내 동시에 켜질 수 있습니다."
+            ),
+            counterexample=ce,
+        )
+    base.pop()
+
+    # ── STEP: 서로 다른 연속 k 상태에서 P 성립 가정 → k 에서 P 깨짐 가능?
+    step_solver = z3.Solver()
+    for step in range(k):
+        step_solver.add(
+            *_trans_at(eqs, outputs, out_set, frames[step], frames[step + 1], step + 200)
+        )
+    for i in range(k):
+        step_solver.add(prop_ok(frames[i]))
+    step_solver.add(*_distinct_states(frames[:k], outputs))
+    step_solver.add(viol(frames[k]))
+    if step_solver.check() == z3.unsat:
+        return None  # 귀납 성공 → 모든 도달 스캔에서 at-most-one 증명
+    return VerificationIssue(
+        code="GROUP_MUTEX_KIND",
+        severity="warning",
+        message=(
+            f"그룹 상호배제 k-귀납 미증명(k={k}): 출력 {{{', '.join(present)}}} 의 "
+            f"at-most-one 을 k={k} 로 증명하지 못했습니다. ⚠ 안전을 보장하지 않습니다 — "
+            f"k 를 높이거나 가상 PLC 시뮬레이션으로 확인하세요(초기 {k}스캔 내 위반은 없음)."
+        ),
+    )
+
+
+def _group_counterexample(
+    model: z3.ModelRef, frames: list[dict[str, z3.BoolRef]], group: list[str]
+) -> str:
+    """반례를 '동시 ON 된 출력 집합' 으로 직렬화한다(결정론: 스텝·이름 정렬).
+
+    base 반례 모델에서 그룹 내 둘 이상이 동시에 True 인 *첫* 스텝을 찾아 그 ON 집합을
+    적는다. 못 찾으면(이론상) 전체 모델 직렬화로 폴백.
+    """
+    for step, fr in enumerate(frames):
+        on = sorted(
+            g for g in group if z3.is_true(model.eval(fr[g], model_completion=True))
+        )
+        if len(on) >= 2:
+            return f"step={step}, 동시 ON={{{', '.join(on)}}}"
+    return _model_str(model)
+
+
+def check_group_mutex_kinduction(
+    spec: StateMachineSpec,
+    st_code: str,
+    *,
+    groups: list[list[str]] | None = None,
+    k: int = 3,
+) -> list[VerificationIssue]:
+    """≥3개 출력 그룹의 at-most-one(one-hot 상한)을 **k-귀납**으로 증명한다.
+
+    ``groups`` 가 None 이면 인터락 쌍들의 합집합(clique 연결요소, ``derive_mutex_groups``)
+    에서 그룹을 유도한다. 명시 그룹을 주면 그대로 검사한다(쌍 인터락이 없어도 됨).
+    전이계는 쌍 인터락 검사와 동일하므로 *쌍 검사가 건전하면 그룹 검사도 건전* 하다
+    (동일 ``_trans_at`` 스캔 의미론 재사용). base 위반은 error(동시 ON 집합 반례),
+    step-only 미증명은 보수적 warning(1-스텝 강도 약화 금지).
+    """
+    if not _HAS_Z3:
+        return []
+    if k < 1:
+        k = 1
+    use_groups = groups if groups is not None else derive_mutex_groups(spec)
+    if not use_groups:
+        return []
+    outputs, eqs = _build_transition_system(st_code)
+    out_set = set(outputs)
+    issues: list[VerificationIssue] = []
+    for group in use_groups:
+        try:
+            issue = _kinduction_group(eqs, outputs, out_set, group, k)
+        except ValueError:
+            continue  # 비불리언 토큰 등 → 이 그룹 건너뜀
+        if issue is not None:
+            issues.append(issue)
+    return issues
+
+
+def proven_safe_groups(
+    spec: StateMachineSpec,
+    st_code: str,
+    *,
+    groups: list[list[str]] | None = None,
+    k: int = 3,
+) -> list[list[str]]:
+    """k-귀납으로 at-most-one 이 *증명된* 그룹만 (결정론 순서로) 반환한다(positive proof only)."""
+    if not _HAS_Z3:
+        return []
+    if k < 1:
+        k = 1
+    use_groups = groups if groups is not None else derive_mutex_groups(spec)
+    if not use_groups:
+        return []
+    outputs, eqs = _build_transition_system(st_code)
+    out_set = set(outputs)
+    proven: list[list[str]] = []
+    for group in use_groups:
+        try:
+            issue = _kinduction_group(eqs, outputs, out_set, group, k)
+        except ValueError:
+            continue
+        if issue is None:
+            present = [g for g in group if g in eqs]
+            if len(present) >= 2:
+                proven.append(sorted(present))
+    return proven
+
+
 def _model_str(model: z3.ModelRef) -> str:
     """z3 모델을 결정론적(이름 정렬) 문자열로 직렬화 — 비결정성 누출 방지."""
     return ", ".join(
@@ -555,6 +776,8 @@ def verify(
     issues.extend(check_interlocks_st(spec, st_code))  # 1-스텝 빠른 경로/폴백
     if kinduction:
         issues.extend(check_interlocks_kinduction(spec, st_code, k=k))
+        # 인터락 쌍의 합집합(clique)이 ≥3 출력 one-hot 그룹이면 at-most-one 도 증명한다.
+        issues.extend(check_group_mutex_kinduction(spec, st_code, k=k))
     issues.extend(check_reachability(spec))
     issues.extend(check_timers_counters(spec))
 
@@ -568,6 +791,11 @@ def verify(
             fixes.append("이중 코일을 M 릴레이로 분리한 뒤 OR 로 병합하세요.")
         if "INTERLOCK" in codes:
             fixes.append("상호배타 출력의 ON 조건에 상대 출력의 NOT 조건을 추가하세요.")
+        if "GROUP_MUTEX" in codes:
+            fixes.append(
+                "one-hot 그룹의 각 출력 ON 조건에 그룹 내 다른 모든 출력의 NOT 조건을 "
+                "추가하세요(동시 ≤1 보장)."
+            )
         if "DEADLOCK" in codes:
             fixes.append("초기 상태를 1개 지정하세요(is_initial=True).")
         report = report.model_copy(update={"suggested_fix": " ".join(fixes)})

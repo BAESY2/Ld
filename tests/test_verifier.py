@@ -9,9 +9,12 @@ from app.synth import synthesize_st
 from app.verifier import (
     _HAS_Z3,
     _to_z3,
+    check_group_mutex_kinduction,
     check_interlocks_kinduction,
     check_interlocks_st,
     check_reachability,
+    derive_mutex_groups,
+    proven_safe_groups,
     proven_safe_pairs,
     verify,
 )
@@ -268,3 +271,136 @@ def test_verify_keeps_interlock_error_when_unguarded() -> None:
     report = verify(_OVERLAP_SPEC, _UNGUARDED_ST)
     assert not report.passed
     assert any(i.code == "INTERLOCK" and i.severity == "error" for i in report.issues)
+
+
+# ── 그룹 상호배제(one-hot / at-most-one) k-귀납 ──────────────────────────────
+# 세 출력 A/B/C 가 동시에 둘 이상 켜지면 안 되는(one-hot) 그룹. 인터락 *쌍* 의
+# 합집합이 clique 면 그룹으로 유도된다.
+_TRIPLE_SPEC = StateMachineSpec(
+    io_points=[
+        IOPoint(symbol="X1", direction=IODirection.INPUT),
+        IOPoint(symbol="X2", direction=IODirection.INPUT),
+        IOPoint(symbol="X3", direction=IODirection.INPUT),
+        IOPoint(symbol="A", direction=IODirection.OUTPUT),
+        IOPoint(symbol="B", direction=IODirection.OUTPUT),
+        IOPoint(symbol="C", direction=IODirection.OUTPUT),
+    ],
+    interlocks=[
+        Interlock(output_a="A", output_b="B"),
+        Interlock(output_a="A", output_b="C"),
+        Interlock(output_a="B", output_b="C"),
+    ],
+)
+_ONEHOT_ST = (
+    "A := (X1 OR A) AND NOT B AND NOT C;\n"
+    "B := (X2 OR B) AND NOT A AND NOT C;\n"
+    "C := (X3 OR C) AND NOT A AND NOT B;"
+)
+_NO_GUARD_ST = "A := X1 OR A;\nB := X2 OR B;\nC := X3 OR C;"
+
+
+@z3_only
+def test_derive_mutex_groups_from_clique() -> None:
+    """A-B, A-C, B-C 가 모두 인터락이면 {A,B,C} 한 그룹으로 유도(결정론 정렬)."""
+    assert derive_mutex_groups(_TRIPLE_SPEC) == [["A", "B", "C"]]
+
+
+@z3_only
+def test_derive_mutex_groups_skips_non_clique_path() -> None:
+    """A-B, B-C 만 인터락(경로, clique 아님)이면 명세에 없는 A-C 배타를 강요하지 않는다."""
+    path_spec = StateMachineSpec(
+        interlocks=[
+            Interlock(output_a="A", output_b="B"),
+            Interlock(output_a="B", output_b="C"),
+        ]
+    )
+    assert derive_mutex_groups(path_spec) == []
+
+
+@z3_only
+def test_derive_mutex_groups_skips_pairs() -> None:
+    """크기 2 요소는 쌍 검사가 담당하므로 그룹으로 격상하지 않는다."""
+    pair_spec = StateMachineSpec(interlocks=[Interlock(output_a="A", output_b="B")])
+    assert derive_mutex_groups(pair_spec) == []
+
+
+@z3_only
+def test_group_mutex_proves_onehot() -> None:
+    """올바른 one-hot ST 는 at-most-one 이 증명되어 이슈 0·proven 집합 포함."""
+    assert check_group_mutex_kinduction(_TRIPLE_SPEC, _ONEHOT_ST, k=3) == []
+    assert proven_safe_groups(_TRIPLE_SPEC, _ONEHOT_ST, k=3) == [["A", "B", "C"]]
+
+
+@z3_only
+def test_group_mutex_catches_violation_with_set_counterexample() -> None:
+    """가드 없는 세 래치는 동시 ON 가능 → GROUP_MUTEX error + 동시 ON 집합 반례."""
+    issues = check_group_mutex_kinduction(_TRIPLE_SPEC, _NO_GUARD_ST, k=3)
+    errs = [i for i in issues if i.code == "GROUP_MUTEX" and i.severity == "error"]
+    assert len(errs) == 1
+    assert "동시 ON" in errs[0].counterexample
+    # 반례는 둘 이상 동시 ON 출력 집합을 담는다.
+    assert errs[0].counterexample.count("A") + errs[0].counterexample.count("B") >= 2
+    assert proven_safe_groups(_TRIPLE_SPEC, _NO_GUARD_ST, k=3) == []
+
+
+@z3_only
+def test_group_mutex_explicit_groups_without_interlocks() -> None:
+    """명시 그룹은 spec.interlocks 가 없어도 검사된다(외부 one-hot 선언 경로)."""
+    spec = StateMachineSpec()
+    issues = check_group_mutex_kinduction(
+        spec, _NO_GUARD_ST, groups=[["A", "B", "C"]], k=3
+    )
+    assert any(i.code == "GROUP_MUTEX" and i.severity == "error" for i in issues)
+
+
+@z3_only
+def test_group_mutex_counterexample_deterministic() -> None:
+    """반례 문자열은 결정론적(스텝·이름 정렬)이라 재실행해도 동일하다."""
+    ce1 = check_group_mutex_kinduction(_TRIPLE_SPEC, _NO_GUARD_ST, k=3)[0].counterexample
+    ce2 = check_group_mutex_kinduction(_TRIPLE_SPEC, _NO_GUARD_ST, k=3)[0].counterexample
+    assert ce1 == ce2
+
+
+@z3_only
+def test_group_mutex_step_only_failure_is_warning_not_error() -> None:
+    """원-핫 회전(A:=C;B:=A;C:=B)은 base 안전이나 작은 k 로 미증명 → error 아닌 warning."""
+    spec = StateMachineSpec(
+        interlocks=[
+            Interlock(output_a="A", output_b="B"),
+            Interlock(output_a="A", output_b="C"),
+            Interlock(output_a="B", output_b="C"),
+        ]
+    )
+    st = "A := C;\nB := A;\nC := B;"
+    small = check_group_mutex_kinduction(spec, st, k=1)
+    assert all(i.severity != "error" for i in small)  # base 안전 → 절대 error 아님
+    assert any(i.code == "GROUP_MUTEX_KIND" and i.severity == "warning" for i in small)
+
+
+@z3_only
+def test_verify_flags_group_mutex_violation() -> None:
+    """verify() 전체 파이프라인이 그룹 one-hot 위반을 error 로 잡고 한글 제안을 채운다."""
+    report = verify(_TRIPLE_SPEC, _NO_GUARD_ST)
+    assert report.passed is False
+    assert any(i.code == "GROUP_MUTEX" and i.severity == "error" for i in report.issues)
+    assert "one-hot" in report.suggested_fix
+
+
+@z3_only
+def test_verify_passes_proven_onehot_group() -> None:
+    """올바른 one-hot 합성은 그룹 검사를 거짓 양성 없이 통과한다."""
+    report = verify(_TRIPLE_SPEC, _ONEHOT_ST)
+    assert not any(i.code == "GROUP_MUTEX" and i.severity == "error" for i in report.issues)
+
+
+@z3_only
+def test_synthesized_multiway_sort_group_proven() -> None:
+    """실레시피 multiway_sort 의 합성 ST 는 GATE_A/B/C one-hot 이 증명된다(거짓양성 0)."""
+    from app.wizard import build_spec
+
+    spec = build_spec("multiway_sort")
+    st = synthesize_st(spec)
+    groups = derive_mutex_groups(spec)
+    assert len(groups) == 1 and len(groups[0]) == 3
+    assert check_group_mutex_kinduction(spec, st, k=3) == []
+    assert proven_safe_groups(spec, st, k=3) == [sorted(groups[0])]
