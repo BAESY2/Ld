@@ -89,6 +89,25 @@ def test_same_signal_multiple_thresholds_no_double_coil() -> None:
     assert verify(r.spec, st).passed and r.confident
 
 
+def test_sequence_compiles_to_timed_sequencer() -> None:
+    """'A 켜고 다음 B 하고 다음 C' → 검증된 one-hot 타임드 시퀀서(천장: 순차/타이밍)."""
+    r = frame_to_spec("모터 돌리고 다음 펌프 켜고 다음 밸브 열어")
+    st = synthesize_st(r.spec)
+    assert r.confident
+    assert [s.name for s in r.spec.states] == ["IDLE", "S0", "S1", "S2"]  # 3단계 시퀀서
+    assert len(r.spec.timers) == 3
+    assert covers_all_outputs(r.spec)
+    assert detect_double_coils(st) == {}
+    assert verify(r.spec, st).passed
+
+
+def test_sequence_delay_from_n_seconds() -> None:
+    """'N초 후/뒤'의 지연이 해당 단계 타이머 프리셋이 된다."""
+    r = frame_to_spec("펌프 켜고 3초 후 모터 돌리고")
+    assert any(t.preset_ms == 3000 for t in r.spec.timers)
+    assert verify(r.spec, synthesize_st(r.spec)).passed
+
+
 def test_multi_instance_distinct_output_symbols() -> None:
     """'1번 모터/2번 모터', '펌프1/펌프2' → 인스턴스별 *고유* 출력 심볼(천장: 다중 인스턴스)."""
     def outs(text: str) -> set[str]:

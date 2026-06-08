@@ -49,6 +49,8 @@ class IntentClause:
     negated: bool = False
     value: int | None = None
     unit: str = ""          # 분류사(개/초/바 ...)
+    seq: bool = False        # 순차 단계(앞 동작 다음에 진행)
+    delay_ms: int = 0        # 이 단계로 넘어가기 전 지연('N초 후')
 
     def explain(self) -> str:
         dev = _DEV_KO.get(self.device or "", self.device or "")
@@ -144,7 +146,17 @@ def extract(source: Analysis | str) -> IntentFrame:
     inst = ""
     val: int | None = None
     unit = ""
+    pending_seq = False
+    pending_delay = 0
+    _SEC = {"초": 1000, "분": 60000, "시간": 3600000}
     for m in a.morphemes:
+        if m.pos == Pos.VERB and m.category == "__SEQ__":
+            # 순차 마커: 다음 동작이 단계가 된다. 직전 'N초'는 그 단계로의 지연.
+            pending_seq = True
+            if val is not None and unit in _SEC:
+                pending_delay = val * _SEC[unit]
+                val, unit = None, ""
+            continue
         if m.pos == Pos.NOUN:
             # 대상은 동사에 가장 가까운 체언(SOV) — 최근 체언이 이긴다(예: '고장 나면 경광등 켜').
             dev = m.category
@@ -159,6 +171,8 @@ def extract(source: Analysis | str) -> IntentFrame:
             clauses.append(IntentClause(
                 kind=kind, predicate=m.category, device=dev, instance=inst,
                 negated=m.negated, value=val, unit=unit,
+                seq=pending_seq, delay_ms=pending_delay,
             ))
             dev, inst, val, unit = None, "", None, ""  # 버퍼 소비
+            pending_seq, pending_delay = False, 0
     return IntentFrame(text=a.text, clauses=clauses, coverage=a.coverage)

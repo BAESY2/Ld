@@ -132,12 +132,43 @@ class CompileResult:
         return "전 절 컴파일됨"
 
 
+def _seq_steps(frame: IntentFrame) -> list[tuple[str, int]]:
+    """순차 동작 단계 [(출력, 드웰초)]. 단계 드웰 = '다음 단계 진입 지연'(없으면 기본 2초)."""
+    acts = [c for c in frame.clauses if c.kind == ClauseKind.ACTION]
+    steps: list[tuple[str, int]] = []
+    for i, c in enumerate(acts):
+        nxt = acts[i + 1] if i + 1 < len(acts) else None
+        sec = (nxt.delay_ms // 1000) if (nxt and nxt.delay_ms) else 2
+        steps.append((_out_symbol(c), max(1, sec)))
+    return steps
+
+
+def _compile_sequence(frame: IntentFrame) -> CompileResult:
+    """순차/타이밍 의도 → 검증된 one-hot 타임드 시퀀서(wizard._build_sequencer 재사용)."""
+    from app.wizard import _build_sequencer
+
+    steps = _seq_steps(frame)
+    outs = [o for o, _ in steps]
+    if len(steps) < 2 or len(set(outs)) != len(outs):  # 단계<2 또는 출력 중복 → 시퀀스 부적합
+        return CompileResult(StateMachineSpec(), unresolved=["시퀀스 부적합"], confident=False)
+    spec = _build_sequencer(
+        steps, start="START", stop="STOP", loop=False,
+        title=(frame.text[:40] or "순차 제어"),
+    )
+    return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
+
+
 def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
-    """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존)."""
+    """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존).
+
+    순차 마커(다음/N초 후)가 있으면 타임드 시퀀서로, 아니면 조건→자기유지로 컴파일한다.
+    """
     frame = (
         source if isinstance(source, IntentFrame)
         else extract(source)
     )
+    if any(c.seq for c in frame.clauses):
+        return _compile_sequence(frame)
     b = _Builder()
     # 출력별 ON/OFF 트리거 수집(삽입순 유지).
     on_trig: dict[str, list[str]] = {}

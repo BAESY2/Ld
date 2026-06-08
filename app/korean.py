@@ -340,6 +340,19 @@ def _m_neg(s: str) -> tuple[int, Morpheme] | None:
     return None
 
 
+# 절 간 순차 마커(다음/그다음/순서대로/후에/뒤에). 동작 사이의 '순서 진행' 신호.
+_SEQ_MARKERS = (
+    "그다음", "다음으로", "다음", "순서대로", "이후에", "이후", "후에", "뒤에", "후", "뒤",
+)
+
+
+def _m_seq(s: str) -> tuple[int, Morpheme] | None:
+    for mk in sorted(_SEQ_MARKERS, key=len, reverse=True):
+        if s.startswith(mk):
+            return len(mk), Morpheme(surface=mk, pos=Pos.VERB, category="__SEQ__")
+    return None
+
+
 def _segment(token: str) -> list[Morpheme]:
     """한 어절(또는 붙여쓴 run-on)을 최장일치로 형태소 열로 분절(띄어쓰기 무관)."""
     out: list[Morpheme] = []
@@ -347,7 +360,9 @@ def _segment(token: str) -> list[Morpheme]:
     unknown = ""
     while i < n:
         s = token[i:]
-        cand = [m for m in (_m_quantity(s), _m_device(s), _m_verb(s), _m_neg(s)) if m]
+        cand = [
+            m for m in (_m_quantity(s), _m_device(s), _m_verb(s), _m_seq(s), _m_neg(s)) if m
+        ]
         if cand:
             if unknown:
                 out.append(Morpheme(surface=unknown, pos=Pos.UNKNOWN))
