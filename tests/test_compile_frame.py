@@ -89,6 +89,37 @@ def test_same_signal_multiple_thresholds_no_double_coil() -> None:
     assert verify(r.spec, st).passed and r.confident
 
 
+def test_multi_instance_distinct_output_symbols() -> None:
+    """'1번 모터/2번 모터', '펌프1/펌프2' → 인스턴스별 *고유* 출력 심볼(천장: 다중 인스턴스)."""
+    def outs(text: str) -> set[str]:
+        r = frame_to_spec(text)
+        st = synthesize_st(r.spec)
+        assert detect_double_coils(st) == {} and verify(r.spec, st).passed
+        return {p.symbol for p in r.spec.io_points if p.direction.value == "OUTPUT"}
+
+    assert {"MOTOR1", "MOTOR2"} <= outs("1번 모터 돌리고 2번 모터 멈춰")
+    assert {"PUMP1", "PUMP2"} <= outs("펌프1 켜고 펌프2 끄고")
+    assert {"GATEA", "GATEB"} <= outs("게이트A 열고 게이트B 닫아")
+
+
+def test_multi_instance_mutex_proven() -> None:
+    """'1번 도는 동안 2번 못' 류 인스턴스 상호배제가 k-귀납으로 증명된다."""
+    from app.verifier import proven_safe_pairs
+
+    r = frame_to_spec("1번 모터 돌리고 2번 모터 도는데 동시에 못 돌게")
+    st = synthesize_st(r.spec)
+    pairs = {tuple(sorted(p)) for p in proven_safe_pairs(r.spec, st)}
+    assert ("MOTOR1", "MOTOR2") in pairs
+    assert verify(r.spec, st).passed
+
+
+def test_count_not_confused_with_instance() -> None:
+    """'부품 10개'의 10은 개수(인스턴스 아님) — 회귀."""
+    r = frame_to_spec("부품 10개 차면 배출")
+    assert any(c.preset == 10 for c in r.spec.counters)
+    assert "EJECT" in {p.symbol for p in r.spec.io_points if p.direction.value == "OUTPUT"}
+
+
 def test_mutex_cue_auto_infers_proven_interlock() -> None:
     """'동시에 안' 단서 → 서로 다른 기기 출력 간 상호배제를 자동 합성하고 k-귀납으로 증명."""
     from app.verifier import proven_safe_pairs

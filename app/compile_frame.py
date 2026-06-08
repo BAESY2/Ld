@@ -113,11 +113,11 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
 
 
 def _out_symbol(c: IntentClause) -> str:
-    if c.device in _DEV_OUT:
-        return _DEV_OUT[c.device]
-    if c.predicate == "EJECT":
-        return "EJECT"
-    return "OUT"
+    base = _DEV_OUT.get(c.device or "", "EJECT" if c.predicate == "EJECT" else "OUT")
+    # 인스턴스 마커가 있으면 고유 심볼(PUMP1/PUMP2/GATE_A) — 인스턴스별로 분리된다.
+    if c.instance and base not in ("EJECT", "OUT"):
+        return f"{base}{c.instance.upper()}"
+    return base
 
 
 @dataclass

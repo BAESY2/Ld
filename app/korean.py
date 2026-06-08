@@ -210,6 +210,7 @@ class Morpheme:
     is_condition: bool = False  # 조건절 표지(-면)
     negated: bool = False
     value: int | None = None    # 수량 값
+    instance_idx: str = ""      # 기기 인스턴스 마커(예: 펌프1→'1', 게이트A→'A')
 
 
 @dataclass
@@ -277,17 +278,31 @@ def _m_quantity(s: str) -> tuple[int, Morpheme] | None:
 
 def _m_device(s: str) -> tuple[int, Morpheme] | None:
     for dev in _DEVICE_SORTED:
-        if s.startswith(dev):
-            rest = s[len(dev):]
-            for surf, role, need_final in _PARTICLE_SORTED:
-                if rest.startswith(surf) and (
-                    need_final is None or has_batchim(dev) == need_final
-                ):
-                    return len(dev) + len(surf), Morpheme(
-                        surface=dev + surf, pos=Pos.NOUN, lemma=dev,
-                        category=DEVICES[dev], role=role, particle=surf)
-            return len(dev), Morpheme(surface=dev, pos=Pos.NOUN, lemma=dev,
-                                      category=DEVICES[dev])
+        if not s.startswith(dev):
+            continue
+        rest = s[len(dev):]
+        consumed = len(dev)
+        inst = ""
+        # 인스턴스 마커: 기기 직후 숫자+번/대/호, 또는 뒤에 계수단위가 *없는* 숫자(펌프1),
+        # 또는 단일 대문자(게이트A). '부품10개'의 10 은 계수단위(개)가 뒤따르므로 인스턴스 아님.
+        mi = re.match(r"(\d+)(?:번|대|호)", rest)
+        if mi:
+            inst, consumed, rest = mi.group(1), consumed + mi.end(), rest[mi.end():]
+        elif (md := re.match(r"(\d+)", rest)) and not any(
+            rest[md.end():].startswith(cl) for cl in _CLASSIFIERS
+        ):
+            inst, consumed, rest = md.group(1), consumed + md.end(), rest[md.end():]
+        elif rest[:1].isascii() and rest[:1].isalpha() and rest[:1].isupper():
+            inst, consumed, rest = rest[0], consumed + 1, rest[1:]
+        for surf, role, need_final in _PARTICLE_SORTED:
+            if rest.startswith(surf) and (
+                need_final is None or has_batchim(dev) == need_final
+            ):
+                return consumed + len(surf), Morpheme(
+                    surface=s[:consumed + len(surf)], pos=Pos.NOUN, lemma=dev,
+                    category=DEVICES[dev], role=role, particle=surf, instance_idx=inst)
+        return consumed, Morpheme(surface=s[:consumed], pos=Pos.NOUN, lemma=dev,
+                                  category=DEVICES[dev], instance_idx=inst)
     return None
 
 

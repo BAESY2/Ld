@@ -45,12 +45,15 @@ class IntentClause:
     kind: str               # COND | ACTION
     predicate: str          # 의미범주(RUN/STOP/EXCEED ...)
     device: str | None      # 대상 기기 카테고리
+    instance: str = ""      # 기기 인스턴스 마커(펌프1→'1', 1번 모터→'1')
     negated: bool = False
     value: int | None = None
     unit: str = ""          # 분류사(개/초/바 ...)
 
     def explain(self) -> str:
         dev = _DEV_KO.get(self.device or "", self.device or "")
+        if self.instance:
+            dev = f"{dev}{self.instance}"
         pred = _PRED_KO.get(self.predicate, self.predicate)
         qty = f" {self.value}{self.unit}" if self.value is not None else ""
         neg = "안/못 " if self.negated else ""
@@ -138,19 +141,24 @@ def extract(source: Analysis | str) -> IntentFrame:
     a = source if isinstance(source, Analysis) else analyze(source)
     clauses: list[IntentClause] = []
     dev: str | None = None
+    inst = ""
     val: int | None = None
     unit = ""
     for m in a.morphemes:
         if m.pos == Pos.NOUN:
             # 대상은 동사에 가장 가까운 체언(SOV) — 최근 체언이 이긴다(예: '고장 나면 경광등 켜').
             dev = m.category
+            inst = m.instance_idx
+            # '1번 모터'처럼 앞에 온 수량(번/대)은 인스턴스 마커로 흡수(개수 아님).
+            if not inst and val is not None and unit in ("번", "대", "호"):
+                inst, val, unit = str(val), None, ""
         elif m.pos == Pos.NUM:
             val, unit = m.value, m.category
         elif m.pos == Pos.VERB:
             kind = ClauseKind.COND if m.is_condition else ClauseKind.ACTION
             clauses.append(IntentClause(
-                kind=kind, predicate=m.category, device=dev,
+                kind=kind, predicate=m.category, device=dev, instance=inst,
                 negated=m.negated, value=val, unit=unit,
             ))
-            dev, val, unit = None, None, ""  # 버퍼 소비
+            dev, inst, val, unit = None, "", None, ""  # 버퍼 소비
     return IntentFrame(text=a.text, clauses=clauses, coverage=a.coverage)
