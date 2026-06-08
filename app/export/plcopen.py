@@ -217,13 +217,17 @@ def to_plcopen_xml(
     outputs = [io for io in spec.io_points if io.direction == IODirection.OUTPUT]
 
     # TC6 v2.01 interface 시퀀스 순서: localVars → inputVars → outputVars → ...
-    # (타이머/카운터 등 지역 변수 먼저)
-    if spec.timers or spec.counters:
+    # (타이머/카운터·비교기 플래그 등 지역 변수 먼저)
+    # 비교기 플래그(PRESSURE_GE5 등)는 ST 본문에서 대입·참조되지만 입출력이 아닌
+    # 내부 BOOL 신호다 — 선언하지 않으면 IDE 임포트가 "정의되지 않은 변수"로 깨진다.
+    if spec.timers or spec.counters or spec.comparators:
         local_vars = ET.SubElement(interface, _q("localVars"))
         for t in spec.timers:
             _add_var(local_vars, t.name, DataType.TIME)
         for c in spec.counters:
             _add_var(local_vars, c.name, DataType.INT)
+        for cmp in spec.comparators:
+            _add_var(local_vars, cmp.flag, DataType.BOOL)
     if inputs:
         in_vars = ET.SubElement(interface, _q("inputVars"))
         for io in inputs:

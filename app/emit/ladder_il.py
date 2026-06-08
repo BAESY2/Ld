@@ -13,13 +13,30 @@ L1 ``VendorProfile`` 의 니모닉·주소 표기를 사용해, Sum-of-Products 
 
 from __future__ import annotations
 
+import re
+
 from app.models import ElementType, LadderBranch, LadderElement, LadderProgram
 from app.vendors.profiles import DEFAULT_PROFILE, VendorProfile
 
+# 비교 접점 심볼(예: 'PRESSURE>=5'). boolexpr 가 공백을 제거하고 원자화하므로
+# 트랜스파일 후 'LOAD PRESSURE>=5' 같은 깨진 IL 이 나온다 — 컴파일러의 아날로그
+# 비교기(PRESSURE_GE5 := PRESSURE >= 5)가 트랜스파일을 거치면 이 형태가 된다.
+# 벤더 IL 의 비교 명령은 'OP LHS RHS' 꼴이므로 연산자 둘레에 공백을 복원해 사람이
+# 검토 가능한 비교 접점으로 렌더한다('PRESSURE >= 5'). 가장 긴 연산자 우선 매칭.
+_CMP_RE = re.compile(r"^([A-Za-z_]\w*)\s*(>=|<=|<>|>|<|=)\s*(.+)$")
+
+
+def _format_comparison(text: str) -> str:
+    """비교 연산자가 붙은 심볼이면 연산자 둘레에 공백을 복원한다(없으면 원문)."""
+    m = _CMP_RE.match(text)
+    if not m:
+        return text
+    return f"{m.group(1)} {m.group(2)} {m.group(3)}"
+
 
 def _operand(el: LadderElement) -> str:
-    """주소가 할당돼 있으면 주소, 없으면 심볼명."""
-    return el.address or el.symbol
+    """주소가 할당돼 있으면 주소, 없으면 심볼명(비교 접점은 공백 복원)."""
+    return el.address or _format_comparison(el.symbol)
 
 
 def _coil_mnemonic(profile: VendorProfile, el: LadderElement) -> str:
