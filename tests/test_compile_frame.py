@@ -89,6 +89,24 @@ def test_same_signal_multiple_thresholds_no_double_coil() -> None:
     assert verify(r.spec, st).passed and r.confident
 
 
+def test_mutex_cue_auto_infers_proven_interlock() -> None:
+    """'동시에 안' 단서 → 서로 다른 기기 출력 간 상호배제를 자동 합성하고 k-귀납으로 증명."""
+    from app.verifier import proven_safe_pairs
+
+    r = frame_to_spec("히터 켜고 쿨러 켜는데 동시에 안 켜지게")
+    st = synthesize_st(r.spec)
+    pairs = {tuple(sorted(p)) for p in proven_safe_pairs(r.spec, st)}
+    assert ("COOLER", "HEATER") in pairs  # 상호배제가 *증명*됨
+    assert detect_double_coils(st) == {}
+    assert verify(r.spec, st).passed
+
+
+def test_no_mutex_cue_no_interlock() -> None:
+    """상호배제 단서가 없으면 인터락을 만들지 않는다(거짓 인터락 방지)."""
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 꺼")
+    assert r.spec.interlocks == []
+
+
 def test_below_threshold_hysteresis_pump() -> None:
     """'밑으로 떨어지면'(LE) + '넘으면'(GE) = 올바른 히스테리시스 펌프 제어."""
     r = frame_to_spec("압력 3바 밑으로 떨어지면 펌프 켜고 압력 5바 넘으면 펌프 꺼")

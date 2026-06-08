@@ -178,8 +178,11 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
                 (on_trig if on else off_trig)[out].append(t)
             last_action = True
 
+    # 명시적 '동시 금지' 단서가 있고 출력이 ≥2면 상호배제로 본다(가드를 식에 박아 검증 통과).
+    mutex = _has_mutex_cue(frame.text) and len(order) >= 2
     # 출력별 자기유지 파생식 생성.
     derived: list[DerivedOutput] = []
+    built: list[str] = []
     for out in order:
         ons = list(dict.fromkeys(on_trig[out]))
         offs = list(dict.fromkeys(off_trig[out]))
@@ -192,24 +195,37 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
         else:
             unresolved.append(f"출력 '{out}' 트리거 없음")
             continue
+        built.append(out)
         derived.append(DerivedOutput(output=out, expression=expr))
+    if mutex:  # 각 출력식에 '상대 출력 NOT' 가드를 박는다(상호배제 강제 — 검증 통과 보장).
+        guarded = {o for o in built}
+        for d in derived:
+            others = [o for o in guarded if o != d.output]
+            if others:
+                d.expression = f"({d.expression}) AND NOT ({' OR '.join(others)})"
 
     io: list[IOPoint] = [
         IOPoint(symbol=s, direction=IODirection.INPUT, data_type=dt)
         for s, dt in b.inputs.items()
     ]
     io += [IOPoint(symbol=o, direction=IODirection.OUTPUT) for o in order]
+    interlocks = (
+        [Interlock(output_a=a, output_b=bo) for i, a in enumerate(built) for bo in built[i + 1:]]
+        if mutex else []
+    )
     spec = StateMachineSpec(
         title=(frame.text[:40] or "컴파일된 명세"),
         io_points=io, comparators=b.comparators, counters=b.counters,
-        derived_outputs=derived, interlocks=_infer_interlocks(off_trig, on_trig, order),
+        derived_outputs=derived, interlocks=interlocks,
     )
     confident = frame.confident and not unresolved and bool(derived)
     return CompileResult(spec=spec, unresolved=unresolved, confident=confident)
 
 
-def _infer_interlocks(
-    off_trig: dict[str, list[str]], on_trig: dict[str, list[str]], order: list[str]
-) -> list[Interlock]:
-    """두 출력이 서로의 ON 트리거를 OFF 로 가지면 상호배제로 본다(현재는 보수적 빈 목록)."""
-    return []  # v1: 명시 인터락 추론은 보류(거짓 인터락 방지). 추후 확장.
+# '동시에 못/안/금지', '같이 …안', '인터락' = 상호배제 의도.
+_MUTEX_CUE = ("인터락", "인터록", "동시에 안", "동시에 못", "동시 금지", "동시에 금지", "같이 안")
+
+
+def _has_mutex_cue(text: str) -> bool:
+    t = text.replace(" ", "")
+    return any(cue.replace(" ", "") in t for cue in _MUTEX_CUE)
