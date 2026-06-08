@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.korean import Analysis, Pos, Role, analyze
+from app.korean import Analysis, Pos, analyze
 
 # 동작(액추에이터) vs 트리거(센서/상태) 의미범주 — 설명·매핑 시 역할 구분.
 _ACTUATOR = {"RUN", "STOP", "TURN_ON", "TURN_OFF", "OPEN", "CLOSE", "EJECT"}
@@ -142,9 +142,8 @@ def extract(source: Analysis | str) -> IntentFrame:
     unit = ""
     for m in a.morphemes:
         if m.pos == Pos.NOUN:
-            # 대상 후보(목적격 우선, 아니면 최근 체언). 상태성 체언(저수위 등)도 대상.
-            if dev is None or m.role == Role.OBJ:
-                dev = m.category
+            # 대상은 동사에 가장 가까운 체언(SOV) — 최근 체언이 이긴다(예: '고장 나면 경광등 켜').
+            dev = m.category
         elif m.pos == Pos.NUM:
             val, unit = m.value, m.category
         elif m.pos == Pos.VERB:

@@ -143,9 +143,11 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "넘": ("넘다", "EXCEED"), "넘어": ("넘다", "EXCEED"), "초과": ("초과하다", "EXCEED"),
     "배출": ("배출하다", "EJECT"), "토출": ("토출하다", "EJECT"),
     "세": ("세다", "COUNT"), "카운트": ("카운트하다", "COUNT"),
-    # BECOME(상태 도달) — '저수위 되면', '감지되면' 등 매우 빈번한 상태변화 용언
+    # BECOME(상태 도달/발생) — '저수위 되면', '감지되면', '고장 나면', '이상 생기면'
     "되": ("되다", "BECOME"), "돼": ("되다", "BECOME"), "된": ("되다", "BECOME"),
-    "됐": ("되다", "BECOME"),
+    "됐": ("되다", "BECOME"), "나면": ("나다", "BECOME"), "났": ("나다", "BECOME"),
+    "나서": ("나다", "BECOME"), "생기": ("생기다", "BECOME"), "생겨": ("생기다", "BECOME"),
+    "발생": ("발생하다", "BECOME"),
 }
 
 # 용언 어미(긴 것 우선). is_cond=조건절('-면'류) 표지.
@@ -279,11 +281,12 @@ def _m_verb(s: str) -> tuple[int, Morpheme] | None:
         if surf not in ("되", "돼", "된", "됐") and rest[:1] in _PASSIVE:
             rest = rest[1:]
             consumed += 1
-        is_cond = False
+        # 표면 자체가 '-면'으로 끝나면(예: '나면') 조건절로 본다(어미가 lemma 에 흡수된 경우).
+        is_cond = surf.endswith("면")
         for end, cond in _ENDING_SORTED:
             if rest.startswith(end):
                 consumed += len(end)
-                is_cond = cond
+                is_cond = is_cond or cond
                 break
         if best is None or consumed > best[0]:
             best = (consumed, Morpheme(surface=s[:consumed], pos=Pos.VERB,
