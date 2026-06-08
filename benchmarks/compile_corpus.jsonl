@@ -1,0 +1,52 @@
+{"text": "버튼 누르면 모터 돌고 정지 누르면 선다", "difficulty": "easy", "compile": true, "note": "3선식 기동/정지 자기유지"}
+{"text": "기동 누르면 컨베이어 돌려", "difficulty": "easy", "compile": true, "note": "자기유지 운전"}
+{"text": "저수위 되면 펌프 켜고 고수위 되면 꺼", "difficulty": "easy", "compile": true, "note": "수위 펌프 ON/OFF"}
+{"text": "고장 나면 경광등 켜", "difficulty": "easy", "compile": true, "note": "고장 래치 알람"}
+{"text": "압력 5바 넘으면 밸브 닫아", "difficulty": "quantified", "compile": true, "note": "아날로그 비교기(압력)"}
+{"text": "온도 80도 되면 히터 꺼", "difficulty": "quantified", "compile": true, "note": "아날로그 비교기(온도)"}
+{"text": "부품 10개 차면 배출해", "difficulty": "quantified", "compile": true, "note": "카운터 프리셋 + 배출"}
+{"text": "센서 감지되면 모터 멈춰", "difficulty": "easy", "compile": true, "note": "센서 트리거 정지"}
+{"text": "스위치 켜지면 펌프 돌려", "difficulty": "easy", "compile": true, "note": "스위치 트리거 가동"}
+{"text": "버튼 누르면 밸브 열고 다시 누르면 닫아", "difficulty": "easy", "compile": true, "note": "밸브 개폐"}
+{"text": "고수위 되면 펌프 멈춰", "difficulty": "easy", "compile": true, "note": "고수위 정지"}
+{"text": "저수위되면펌프켜고고수위되면꺼", "difficulty": "easy", "compile": true, "note": "띄어쓰기 전부 붙임"}
+{"text": "버튼누르면모터돌려", "difficulty": "easy", "compile": true, "note": "띄어쓰기 없음 run-on"}
+{"text": "고장나면경광등켜", "difficulty": "easy", "compile": true, "note": "붙여쓴 고장 알람"}
+{"text": "압력5바넘으면밸브닫아", "difficulty": "quantified", "compile": true, "note": "수량 붙여쓰기"}
+{"text": "온도 80도 되면 히터 꺼줘", "difficulty": "quantified", "compile": true, "note": "수량 + 종결어미(꺼줘)"}
+{"text": "부품 50개 차면 컨베이어 멈춰", "difficulty": "quantified", "compile": true, "note": "카운터 프리셋 50"}
+{"text": "센서가 감지하면 램프를 켜라", "difficulty": "easy", "compile": true, "note": "조사 변형(가/를) + 명령형"}
+{"text": "탱크 저수위 되면 펌프 켜줘", "difficulty": "easy", "compile": true, "note": "탱크 체언 + 종결(켜줘)"}
+{"text": "압력 3바 넘으면 펌프 멈추고 저수위 되면 펌프 켜", "difficulty": "compound", "compile": true, "note": "복합: 압력 + 수위 → 펌프"}
+{"text": "저수위 되면 펌프 켜고 고장 나면 경광등 켜고 압력 5바 넘으면 밸브 닫아", "difficulty": "compound", "compile": true, "note": "3개 서브시스템"}
+{"text": "기동 누르면 컨베이어 돌고 부품 100개 차면 배출하고 고장 나면 멈춰", "difficulty": "compound", "compile": true, "note": "운전 + 계수배출 + 고장정지"}
+{"text": "버튼 누르면 모터 돌고 온도 90도 되면 모터 멈춰", "difficulty": "compound", "compile": true, "note": "버튼 기동 + 온도 정지(같은 출력)"}
+{"text": "고수위 되면 펌프 끄고 저수위 되면 펌프 켜고 고장 나면 경광등 켜", "difficulty": "compound", "compile": true, "note": "수위 양방향 + 고장 알람"}
+{"text": "센서 감지되면 실린더 배출하고 부품 20개 차면 컨베이어 멈춰", "difficulty": "compound", "compile": true, "note": "감지배출 + 계수정지"}
+{"text": "압력 6바 넘으면 밸브 닫고 온도 70도 되면 히터 꺼", "difficulty": "compound", "compile": true, "note": "압력 + 온도 두 비교기"}
+{"text": "기동 누르면 펌프 돌고 정지 누르면 펌프 서고 고장 나면 경광등 켜", "difficulty": "compound", "compile": true, "note": "기동정지 + 고장 알람"}
+{"text": "저수위 되면 펌프 켜주고 부품 30개 차면 배출해줘", "difficulty": "compound", "compile": true, "note": "수위 + 계수배출 종결변형"}
+{"text": "셔터 열고 센서 감지되면 셔터 닫아", "difficulty": "easy", "compile": true, "note": "셔터 개폐(센서 트리거)"}
+{"text": "버튼 누르면 펌프 켜", "difficulty": "easy", "compile": true, "note": "최소 단일 동작"}
+{"text": "고장나면경광등켜고압력5바넘으면밸브닫아", "difficulty": "compound", "compile": true, "note": "복합 + 띄어쓰기 없음"}
+{"text": "온도 85도 넘으면 히터 끄고 압력 5바 넘으면 밸브 닫아", "difficulty": "compound", "compile": true, "note": "온도 + 압력 두 비교기 두 출력"}
+{"text": "센서 감지되면 모터 돌리고 다른 센서 감지되면 모터 멈춰", "difficulty": "compound", "compile": true, "note": "센서 양방향(같은 심볼로 축약)"}
+{"text": "부품 5개 차면 게이트 열고 배출해", "difficulty": "quantified", "compile": true, "note": "계수 + 게이트 + 배출"}
+{"text": "버튼 누르면 컨베이어 돌고 정지 누르면 컨베이어 서고 부품 200개 차면 배출해", "difficulty": "compound", "compile": true, "note": "운전 + 계수배출 대량"}
+{"text": "오늘 날씨 어때", "difficulty": "out_of_scope", "compile": false, "note": "잡담 — 제어 아님"}
+{"text": "안녕하세요 반갑습니다", "difficulty": "out_of_scope", "compile": false, "note": "인사 잡담"}
+{"text": "PID 제어로 온도 잡아줘", "difficulty": "out_of_scope", "compile": false, "note": "아날로그 PID 루프(미지원)"}
+{"text": "온도 PID 제어해서 히터 켜", "difficulty": "out_of_scope", "compile": false, "note": "PID + 히터(부분 어휘 함정)"}
+{"text": "비례적분으로 압력 맞춰", "difficulty": "out_of_scope", "compile": false, "note": "PI 제어(미지원)"}
+{"text": "서보 모터 정밀하게 돌려", "difficulty": "out_of_scope", "compile": false, "note": "모션 제어 + 모터 어휘 함정"}
+{"text": "모터 토크 제어해줘", "difficulty": "out_of_scope", "compile": false, "note": "토크 제어(미지원)"}
+{"text": "인버터로 모터 속도 조절해", "difficulty": "out_of_scope", "compile": false, "note": "VFD 속도제어 + 모터 함정"}
+{"text": "엔코더 위치값 모니터링해", "difficulty": "out_of_scope", "compile": false, "note": "위치 피드백(미지원)"}
+{"text": "모드버스로 데이터 읽어와", "difficulty": "out_of_scope", "compile": false, "note": "통신(Modbus, 미지원)"}
+{"text": "통신 설정 좀 바꿔줘", "difficulty": "out_of_scope", "compile": false, "note": "통신 설정(미지원)"}
+{"text": "PLC 프로그램 업로드해줘", "difficulty": "out_of_scope", "compile": false, "note": "프로그램 전송(제어 아님)"}
+{"text": "레시피 불러와서 모터 돌려", "difficulty": "out_of_scope", "compile": false, "note": "배치 레시피 + 모터 함정"}
+{"text": "모터 속도를 60헤르츠로 돌려", "difficulty": "out_of_scope", "compile": false, "note": "주파수 setpoint(아날로그)"}
+{"text": "그래프 그려줘", "difficulty": "out_of_scope", "compile": false, "note": "HMI 트렌드(제어 아님)"}
+{"text": "비상정지 누르면 다 꺼", "difficulty": "out_of_scope", "compile": false, "note": "비상정지 어휘 미등록(대상 모호)"}
+{"text": "데이터 로깅 켜줘", "difficulty": "out_of_scope", "compile": false, "note": "로깅(제어 아님)"}
