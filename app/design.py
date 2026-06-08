@@ -23,6 +23,7 @@ from app.design_rag import format_examples_for_prompt, retrieve_design_examples
 from app.models import ModuleInstance, Project, ProjectPlan, StateMachineSpec, VerificationReport
 from app.project import ProjectError, compose
 from app.prompts import PROJECT_DESIGNER_SYSTEM
+from app.repair import repair_iterative
 from app.synth import synthesize_st
 from app.verifier import verify
 
@@ -136,12 +137,15 @@ def _feedback_from(report: VerificationReport) -> str:
 
 
 def design_and_verify(
-    text: str, *, model: Any | None = None, max_revisions: int = 2
+    text: str, *, model: Any | None = None, max_revisions: int = 2, repair: bool = True
 ) -> DesignResult:
-    """설계 → compose → verify 폐루프(Agents4PLC). 실패 시 사유를 LLM 에 되먹여 재생성.
+    """설계 → compose → verify 폐루프(Agents4PLC). 실패 시 *자동 수리*를 먼저 시도하고,
+    그래도 안 되면 사유를 LLM 에 되먹여 재생성.
 
-    합격하면 즉시 반환. max_revisions 까지 못 고치면 마지막 결과를 그대로 반환하되
-    report.passed=False 로 둔다(불량을 합격으로 숨기지 않음 — 결정론 게이트가 최종 판정).
+    수리(M4): LLM 이 이중코일/인터락 위반 같은 *건전하게 고칠 수 있는* 결함을 내면,
+    재요청(비용) 전에 repair_iterative 로 고쳐 게이트를 통과시킨다. 구조적 결함만 피드백
+    재생성으로 넘어간다. 합격하면 즉시 반환. max_revisions 까지 못 고치면 마지막 결과를
+    그대로 반환하되 report.passed=False(불량을 합격으로 숨기지 않음 — 결정론 게이트가 최종).
     """
     feedback: str | None = None
     last: DesignResult | None = None
@@ -155,6 +159,10 @@ def design_and_verify(
             last = DesignResult(project, None, "", None, attempt, error=str(exc))
             continue
         report = verify(spec, st)
+        if not report.passed and repair:
+            outcome = repair_iterative(spec, st)  # 건전한 자동 수리(병합·가드 주입)
+            if outcome.repaired:
+                st, report = outcome.st_code, outcome.report
         last = DesignResult(project, spec, st, report, attempt)
         if report.passed:
             return last

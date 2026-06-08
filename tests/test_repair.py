@@ -65,6 +65,29 @@ def test_structural_defect_is_honestly_rejected() -> None:
     assert is_structurally_unrepairable(o.report)
 
 
+def test_design_loop_auto_repairs_fixable_llm_output() -> None:
+    """LLM(mock) 결함을 design_and_verify 가 재요청 전에 수리해 통과시킨다(M3↔M4)."""
+    from app.design import design_and_verify
+    from app.models import DerivedOutput, PlannedModule, ProjectPlan
+
+    spec = StateMachineSpec(
+        io_points=[_io("A", True), _io("B", True), _io("X", False)],
+        derived_outputs=[DerivedOutput(output="A", expression="X OR A"),
+                         DerivedOutput(output="B", expression="X OR B")],
+        interlocks=[Interlock(output_a="A", output_b="B")],  # 가드 누락 → 위반
+    )
+
+    class _Fake:
+        def invoke(self, _msgs: object) -> ProjectPlan:
+            return ProjectPlan(title="t", modules=[PlannedModule(name="m", spec=spec)])
+
+    repaired = design_and_verify("x", model=_Fake(), repair=True)
+    assert repaired.report is not None and repaired.report.passed
+    assert "AND NOT" in repaired.st_code  # 가드가 주입됨
+    not_repaired = design_and_verify("x", model=_Fake(), repair=False, max_revisions=0)
+    assert not_repaired.report is not None and not not_repaired.report.passed
+
+
 def test_already_passing_is_noop() -> None:
     from app.models import DerivedOutput
     spec = StateMachineSpec(
