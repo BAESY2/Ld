@@ -1,0 +1,110 @@
+{"text": "기동 누르면 모터 돌려", "difficulty": "easy", "expect_compile": true, "note": "자기유지 기동"}
+{"text": "버튼 누르면 펌프 돌고 정지 누르면 선다", "difficulty": "easy", "expect_compile": true, "note": "3선식 펌프"}
+{"text": "스위치 켜면 램프 켜", "difficulty": "easy", "expect_compile": true, "note": "스위치-램프"}
+{"text": "고장 나면 경광등 켜", "difficulty": "easy", "expect_compile": true, "note": "고장 래치"}
+{"text": "이상 생기면 부저 울려", "difficulty": "easy", "expect_compile": true, "note": "이상 알람 부저"}
+{"text": "저수위 되면 펌프 켜고 고수위 되면 꺼", "difficulty": "easy", "expect_compile": true, "note": "수위 펌프"}
+{"text": "센서 감지되면 컨베이어 멈춰", "difficulty": "easy", "expect_compile": true, "note": "센서 정지"}
+{"text": "리밋 감지되면 실린더 멈춰", "difficulty": "easy", "expect_compile": true, "note": "리밋 정지"}
+{"text": "도착하면 클램프 고정", "difficulty": "easy", "expect_compile": true, "note": "도착 클램프"}
+{"text": "부품 감지되면 게이트 열어", "difficulty": "easy", "expect_compile": true, "note": "부품 게이트"}
+{"text": "기동 누르면 송풍기 돌려", "difficulty": "easy", "expect_compile": true, "note": "송풍기 기동"}
+{"text": "정지 누르면 컨베이어 세워", "difficulty": "easy", "expect_compile": true, "note": "정지 컨베이어"}
+{"text": "막히면 피더 멈춰", "difficulty": "easy", "expect_compile": true, "note": "잼 피더 정지"}
+{"text": "완료되면 램프 켜", "difficulty": "easy", "expect_compile": true, "note": "완료 램프"}
+{"text": "버튼 누르면 솔레노이드 켜", "difficulty": "easy", "expect_compile": true, "note": "솔레노이드 ON"}
+{"text": "문 열리면 사이렌 울려", "difficulty": "easy", "expect_compile": true, "note": "도어 사이렌"}
+{"text": "근접센서 감지되면 드릴 내려", "difficulty": "easy", "expect_compile": true, "note": "프록스 드릴"}
+{"text": "광센서 감지되면 분사기 분사", "difficulty": "easy", "expect_compile": true, "note": "광센서 분사"}
+{"text": "녹색등 켜", "difficulty": "easy", "expect_compile": true, "note": "단일 녹색등"}
+{"text": "황색등 켜", "difficulty": "easy", "expect_compile": true, "note": "단일 황색등"}
+{"text": "블로워 돌려", "difficulty": "easy", "expect_compile": true, "note": "블로워 기동"}
+{"text": "압력 5바 넘으면 밸브 닫아", "difficulty": "quantified", "expect_compile": true, "note": "압력 비교기"}
+{"text": "온도 80도 되면 히터 꺼", "difficulty": "quantified", "expect_compile": true, "note": "온도 비교기"}
+{"text": "압력 3바 떨어지면 펌프 켜", "difficulty": "quantified", "expect_compile": true, "note": "하한 비교기"}
+{"text": "부품 10개 차면 배출", "difficulty": "quantified", "expect_compile": true, "note": "계수 배출"}
+{"text": "부품 5개 세면 게이트 닫아", "difficulty": "quantified", "expect_compile": true, "note": "계수 게이트"}
+{"text": "온도 120도 넘으면 팬 켜", "difficulty": "quantified", "expect_compile": true, "note": "온도 팬"}
+{"text": "압력 7바 초과하면 밸브 열어", "difficulty": "quantified", "expect_compile": true, "note": "압력 밸브"}
+{"text": "부품 20개 카운트하면 컨베이어 멈춰", "difficulty": "quantified", "expect_compile": true, "note": "계수 컨베이어"}
+{"text": "온도 60도 떨어지면 히터 켜", "difficulty": "quantified", "expect_compile": true, "note": "하한 히터"}
+{"text": "압력 2바 떨어지면 펌프 돌려", "difficulty": "quantified", "expect_compile": true, "note": "하한 펌프"}
+{"text": "상한 되면 밸브 닫아", "difficulty": "quantified", "expect_compile": true, "note": "상한 밸브"}
+{"text": "저수위면 펌프 켜고 고수위면 끄고 고장나면 경광등 켜", "difficulty": "compound", "expect_compile": true, "note": "수위+알람 복합"}
+{"text": "고장나면 경광등 켜고 부저 울려", "difficulty": "compound", "expect_compile": true, "note": "다중 출력"}
+{"text": "부품 10개 차면 배출하고 카운터 켜", "difficulty": "compound", "expect_compile": true, "note": "계수+카운터"}
+{"text": "버튼 누르면 모터 돌고 정지 누르면 서고 고장나면 경광등 켜", "difficulty": "compound", "expect_compile": true, "note": "기동+알람"}
+{"text": "센서 감지되면 컨베이어 멈추고 경광등 켜", "difficulty": "compound", "expect_compile": true, "note": "센서 복합"}
+{"text": "압력 5바 넘으면 밸브 닫고 부저 울려", "difficulty": "compound", "expect_compile": true, "note": "압력 복합"}
+{"text": "도착하면 클램프 고정하고 드릴 내려", "difficulty": "compound", "expect_compile": true, "note": "도착 복합"}
+{"text": "리밋 감지되면 실린더 멈추고 램프 켜", "difficulty": "compound", "expect_compile": true, "note": "리밋 복합"}
+{"text": "저수위 되면 펌프 돌리고 고수위 되면 펌프 끄고 경광등 켜", "difficulty": "compound", "expect_compile": true, "note": "수위 3절"}
+{"text": "막히면 피더 멈추고 사이렌 울려", "difficulty": "compound", "expect_compile": true, "note": "잼 복합"}
+{"text": "온도 80도 넘으면 히터 끄고 팬 켜", "difficulty": "compound", "expect_compile": true, "note": "온도 다중"}
+{"text": "완료되면 컨베이어 멈추고 램프 켜고 부저 울려", "difficulty": "compound", "expect_compile": true, "note": "완료 3출력"}
+{"text": "척 고정하고 드릴 내려", "difficulty": "compound", "expect_compile": true, "note": "척+드릴"}
+{"text": "진공 흡착하고 로봇 이동", "difficulty": "compound", "expect_compile": true, "note": "진공+로봇"}
+{"text": "적색등 켜고 부저 울려", "difficulty": "compound", "expect_compile": true, "note": "적색등+부저"}
+{"text": "쿨러 켜고 팬 돌려", "difficulty": "compound", "expect_compile": true, "note": "쿨러+팬"}
+{"text": "호퍼 비면 피더 돌려", "difficulty": "compound", "expect_compile": true, "note": "호퍼 피더"}
+{"text": "노즐 분사하고 컨베이어 돌려", "difficulty": "compound", "expect_compile": true, "note": "노즐+컨베이어"}
+{"text": "버튼누르면모터돌고정지누르면슨다", "difficulty": "adversarial_typo", "expect_compile": true, "note": "띄어쓰기 전부 제거"}
+{"text": "기동누르면컨베이어돌려", "difficulty": "adversarial_typo", "expect_compile": true, "note": "공백 제거 기동"}
+{"text": "저수위되면펌프키고고수위되면꺼", "difficulty": "adversarial_typo", "expect_compile": true, "note": "공백제거 수위"}
+{"text": "고장나면경광등켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "공백제거 고장"}
+{"text": "압력5바넘으면밸브닫아", "difficulty": "adversarial_typo", "expect_compile": true, "note": "공백제거 압력"}
+{"text": "부품10개차면배출하고카운터켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "공백제거 계수복합"}
+{"text": "스위치켜면 램프켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "부분 공백"}
+{"text": "센서 감지되면 컨베이어 멈춰", "difficulty": "adversarial_typo", "expect_compile": true, "note": "구어 정지"}
+{"text": "모타 돌리고 정지누르면 세워", "difficulty": "adversarial_typo", "expect_compile": true, "note": "모타 별칭"}
+{"text": "1번모터 돌리고 2번모터 세워", "difficulty": "adversarial_typo", "expect_compile": true, "note": "인스턴스 공백제거"}
+{"text": "펌프1 켜고 펌프2 꺼", "difficulty": "adversarial_typo", "expect_compile": true, "note": "인스턴스 숫자"}
+{"text": "벨트 돌리고 고장나면 경광등켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "벨트=컨베이어"}
+{"text": "냉각기 켜고 온도 80도 넘으면 팬켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "냉각기 별칭"}
+{"text": "표시등 켜", "difficulty": "adversarial_typo", "expect_compile": true, "note": "표시등=램프"}
+{"text": "전동기 돌리고 정지 누르면 멈춰", "difficulty": "adversarial_typo", "expect_compile": true, "note": "전동기 별칭"}
+{"text": "PID로 히터 제어", "difficulty": "oos_invocab", "expect_compile": false, "note": "아날로그 PID — 범위밖"}
+{"text": "서보로 위치 잡아", "difficulty": "oos_invocab", "expect_compile": false, "note": "모션 — 범위밖"}
+{"text": "통신으로 데이터 모아", "difficulty": "oos_invocab", "expect_compile": false, "note": "통신 — 범위밖"}
+{"text": "PID 제어로 온도 맞춰", "difficulty": "oos_invocab", "expect_compile": false, "note": "온도 PID 루프"}
+{"text": "히터 온도 PID 튜닝해", "difficulty": "oos_invocab", "expect_compile": false, "note": "PID 튜닝"}
+{"text": "서보모터로 위치 제어해줘", "difficulty": "oos_invocab", "expect_compile": false, "note": "서보 위치제어"}
+{"text": "모드버스로 데이터 읽어", "difficulty": "oos_invocab", "expect_compile": false, "note": "Modbus"}
+{"text": "토크 제어로 모터 돌려", "difficulty": "oos_invocab", "expect_compile": false, "note": "토크제어(모터 in-vocab)"}
+{"text": "위치 제어로 실린더 움직여", "difficulty": "oos_invocab", "expect_compile": false, "note": "위치제어(실린더 in-vocab)"}
+{"text": "아날로그 출력으로 밸브 50퍼센트 열어", "difficulty": "oos_invocab", "expect_compile": false, "note": "아날로그 출력(밸브 in-vocab)"}
+{"text": "히터 PID 자동튜닝 돌려", "difficulty": "oos_invocab", "expect_compile": false, "note": "PID(히터 in-vocab)"}
+{"text": "컨베이어 속도 인버터로 제어", "difficulty": "oos_invocab", "expect_compile": false, "note": "속도제어(컨베이어 in-vocab)"}
+{"text": "인버터 주파수 60헤르츠로 맞춰", "difficulty": "oos_invocab", "expect_compile": false, "note": "인버터 주파수"}
+{"text": "PID 게인 모터에 적용", "difficulty": "oos_invocab", "expect_compile": false, "note": "PID 게인(모터 in-vocab)"}
+{"text": "서보 위치 모터 제어", "difficulty": "oos_invocab", "expect_compile": false, "note": "서보(모터 in-vocab)"}
+{"text": "통신 모듈로 센서 값 전송", "difficulty": "oos_invocab", "expect_compile": false, "note": "통신(센서 in-vocab)"}
+{"text": "HMI 화면에 온도 그래프 표시", "difficulty": "oos_invocab", "expect_compile": false, "note": "HMI 표시(온도 in-vocab)"}
+{"text": "프로그램 PLC에 다운로드", "difficulty": "oos_invocab", "expect_compile": false, "note": "프로그램 전송"}
+{"text": "레시피 불러와서 밸브 세팅", "difficulty": "oos_invocab", "expect_compile": false, "note": "레시피(밸브 in-vocab)"}
+{"text": "인코더 위치 펄스 카운트", "difficulty": "oos_invocab", "expect_compile": false, "note": "엔코더(카운트 in-vocab)"}
+{"text": "이더넷으로 데이터 수집", "difficulty": "oos_invocab", "expect_compile": false, "note": "이더넷"}
+{"text": "주파수 인버터 가속 시간 설정", "difficulty": "oos_invocab", "expect_compile": false, "note": "가속시간"}
+{"text": "토크 리밋 모터 설정", "difficulty": "oos_invocab", "expect_compile": false, "note": "토크리밋(모터,리밋 in-vocab)"}
+{"text": "PID 오토튜닝 히터 실행", "difficulty": "oos_invocab", "expect_compile": false, "note": "오토튜닝(히터 in-vocab)"}
+{"text": "센서 캘리브레이션 해줘", "difficulty": "oos_invocab", "expect_compile": false, "note": "캘리브레이션(센서 in-vocab)"}
+{"text": "앰비언트 온도 보상 알고리즘", "difficulty": "oos_invocab", "expect_compile": false, "note": "보상 알고리즘(온도 in-vocab)"}
+{"text": "아날로그 입력 스케일링 설정", "difficulty": "oos_invocab", "expect_compile": false, "note": "스케일링"}
+{"text": "모터 베어링 진동 스펙트럼 분석", "difficulty": "oos_invocab", "expect_compile": false, "note": "진동분석(모터 in-vocab)"}
+{"text": "스카다로 데이터 로깅", "difficulty": "oos_invocab", "expect_compile": false, "note": "SCADA 로깅"}
+{"text": "펄스 트레인 출력으로 위치 동기", "difficulty": "oos_invocab", "expect_compile": false, "note": "펄스트레인 모션"}
+{"text": "캠 프로파일 모터 동기", "difficulty": "oos_invocab", "expect_compile": false, "note": "캠동기(모터 in-vocab)"}
+{"text": "전류 피드백 게인 조정", "difficulty": "oos_invocab", "expect_compile": false, "note": "전류루프"}
+{"text": "오늘 점심 뭐 먹지", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "아 오늘 라인 왜이래", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "커피 한잔 하실래요", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "주말에 등산 갈까", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "모터 사양서 출력해줘", "difficulty": "oos_chatter", "expect_compile": false, "note": "문서요청(모터 in-vocab)"}
+{"text": "네트워크 핑 테스트", "difficulty": "oos_chatter", "expect_compile": false, "note": "IT"}
+{"text": "회의실 예약 좀", "difficulty": "oos_chatter", "expect_compile": false, "note": "총무"}
+{"text": "내일 날씨 어때", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "이 설비 견적 얼마야", "difficulty": "oos_chatter", "expect_compile": false, "note": "영업"}
+{"text": "매뉴얼 어디 있어", "difficulty": "oos_chatter", "expect_compile": false, "note": "문서"}
+{"text": "점검 일정 알려줘", "difficulty": "oos_chatter", "expect_compile": false, "note": "일정"}
+{"text": "부장님 어디 계셔", "difficulty": "oos_chatter", "expect_compile": false, "note": "잡담"}
+{"text": "옵션 보드 펌웨어 업데이트", "difficulty": "oos_chatter", "expect_compile": false, "note": "펌웨어"}
