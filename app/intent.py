@@ -31,7 +31,7 @@ _DEV_KO: dict[str, str] = {
     "PART": "부품", "PRESSURE": "압력", "TEMP": "온도", "LEVEL": "수위",
     "LEVEL_LO": "저수위", "LEVEL_HI": "고수위", "FAULT": "고장", "VALVE2": "밸브",
     "ALARM": "알람", "CYLINDER": "실린더", "COUNTER": "카운터", "TIMER": "타이머",
-    "SWITCH": "스위치",
+    "SWITCH": "스위치", "DIR_FWD": "정방향", "DIR_REV": "역방향",
 }
 
 
@@ -119,6 +119,8 @@ def match_by_frame(source: IntentFrame | Analysis | str) -> tuple[str | None, fl
         s["on_delay"] = 2.0
     if "FAULT" in devs and (acts & {"TURN_ON"}):
         s["latch_alarm"] = 2.5
+    if (devs & {"DIR_FWD", "DIR_REV"}) and (acts & {"RUN", "STOP"}):
+        s["fwd_rev"] = 2.5  # 정/역 방향 + 회전 → 정역운전(방향 구조가 변별자)
     if acts & {"RUN", "STOP"}:  # 기본: 모터 기동/정지(다른 강한 특징 없을 때)
         s["motor_start_stop"] = 1.5
     if not s:

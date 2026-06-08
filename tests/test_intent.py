@@ -106,6 +106,18 @@ def test_frame_mapping_robust_to_spacing_removal() -> None:
         assert match_by_frame(text.replace(" ", ""))[0] == recipe
 
 
+def test_grammar_abstains_on_lexical_intents() -> None:
+    """정직성: 어휘 변별형(스타델타/뮤팅/도금)은 문법엔진이 *기권*(거짓매핑 금지)."""
+    for text in ["스타델타로 감압기동", "프레스에 뮤팅 적용", "도금 라인 탈지 수세"]:
+        _, score = match_by_frame(text)
+        assert score < 2.0  # 자신있게 매핑하지 않음 → BM25 폴백
+
+
+def test_fwd_rev_and_latch_alarm_structural_mapping() -> None:
+    assert match_by_frame("정방향으로 돌리다가 역방향으로 돌려")[0] == "fwd_rev"
+    assert match_by_frame("고장 나면 경광등 켜")[0] == "latch_alarm"
+
+
 def test_ablation_grammar_beats_bm25_under_perturbation() -> None:
     """회귀 가드: 띄어쓰기 제거 교란에서 문법엔진 정확도 ≥ BM25(그리고 우월)."""
     from scripts.intent_ablation import _acc, _drop_spaces

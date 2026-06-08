@@ -112,6 +112,9 @@ DEVICES: dict[str, str] = {
     "수위": "LEVEL", "타이머": "TIMER", "카운터": "COUNTER", "알람": "ALARM",
     "저수위": "LEVEL_LO", "하한": "LEVEL_LO", "만수위": "LEVEL_HI",
     "고수위": "LEVEL_HI", "상한": "LEVEL_HI", "고장": "FAULT", "이상": "FAULT",
+    # 방향(정/역) — fwd_rev 의 구조 변별자
+    "정방향": "DIR_FWD", "정회전": "DIR_FWD", "전진": "DIR_FWD",
+    "역방향": "DIR_REV", "역회전": "DIR_REV", "후진": "DIR_REV",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.
