@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang=ko><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>한국어 → 검증된 PLC 제어 (데모)</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0a0a0b;color:#cfd2d6;
+font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;line-height:1.6}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:20px;color:#fff;margin:0 0 4px}.sub{color:#6a6e76;font-size:13px;margin-bottom:18px}
+.warn{background:#16120a;border:1px solid #3a2f12;color:#e3b341;border-radius:8px;
+padding:8px 12px;font-size:12.5px;margin-bottom:18px}
+select,button{font-family:inherit;font-size:14px;background:#15171b;color:#cfd2d6;
+border:1px solid #2a2d33;border-radius:8px;padding:8px 12px;cursor:pointer}
+button.play{background:#82aaff;color:#06101e;border:none;font-weight:700}
+.row{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.card{background:#0f1011;border:1px solid #1e2024;border-radius:12px;
+padding:16px;margin-bottom:14px}
+.lab{color:#6a6e76;font-size:11.5px;letter-spacing:.04em;margin-bottom:6px;text-transform:uppercase}
+.understood{color:#82aaff;font-size:15px}
+pre{white-space:pre-wrap;color:#aeb4bd;font-size:13px;margin:0}
+.badge{display:inline-block;background:#0c2018;border:1px solid #1d4a36;color:#7ee787;
+border-radius:6px;padding:3px 10px;font-size:12px;margin:2px 6px 2px 0}
+.dev{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dotted #181a1e}
+.dev:last-child{border:none}.dev .nm{width:110px;color:#aeb4bd;font-size:13px}
+.gear{font-size:30px;transition:color .15s;color:#2a2d33;display:inline-block}
+.gear.on{color:#7ee787}.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.io{display:flex;gap:6px;flex-wrap:wrap}.pin{font-size:11px;padding:2px 7px;border-radius:5px;
+background:#15171b;border:1px solid #2a2d33;color:#565a62}
+.pin.on{background:#1d3a5e;color:#82aaff;border-color:#82aaff}
+.t{color:#6a6e76;font-size:12px;margin-left:auto}
+</style></head><body><div class=wrap>
+<h1>한국어 한 줄 → 형식 검증된 PLC 제어</h1>
+<div class=sub>AI 없이 결정론으로 이해·합성·검증.
+실제 파이프라인이 만든 결과를 재생합니다.</div>
+<div class=warn>⚠ 이것은 <b>디지털 트윈 시뮬레이션</b>입니다(실물 모터 아님). 생성·검증은 진짜이며,
+화면 속 장치가 검증된 로직대로 동작합니다.</div>
+<div class=row><select id=sel></select><button class=play id=play>▶ 재생</button>
+<span class=t id=tstep></span></div>
+<div class=card><div class=lab>입력(한국어)</div>
+<div id=ko style="color:#fff;font-size:16px"></div></div>
+<div class=card><div class=lab>이해 내용 (결정론 파싱)</div>
+<div class=understood id=und></div></div>
+<div class=card><div class=lab>형식 검증</div><div id=badges></div></div>
+<div class=card><div class=lab>장치 (시뮬레이션)</div><div id=devs></div>
+<div class=io id=ins style="margin-top:10px"></div></div>
+<div class=card><div class=lab>합성된 검증 래더 로직 (ST)</div><pre id=st></pre></div>
+</div><script>
+const DATA=[{"title": "모터 기동/정지", "korean": "버튼 누르면 모터 돌고 정지 누르면 멈춰", "understood": "조건: 버튼 누름 / 동작: 모터 가동 / 동작: 정지 / 조건: 누름 / 동작: 정지", "st": "MOTOR := ((START AND NOT STOP) OR MOTOR) AND NOT ((STOP));", "verified": true, "proven": [], "inputs": ["START", "STOP"], "outputs": ["MOTOR"], "steps": [{"in": {"START": false, "STOP": false}, "out": {"MOTOR": false}}, {"in": {"START": true, "STOP": false}, "out": {"MOTOR": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true}}, {"in": {"START": false, "STOP": true}, "out": {"MOTOR": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false}}]}, {"title": "수위 히스테리시스(펌프)", "korean": "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼", "understood": "조건: 저수위 도달 / 동작: 펌프 켬 / 조건: 고수위 도달 / 동작: 펌프 끔", "st": "PUMP := (LO_LS OR PUMP) AND NOT (HI_LS);", "verified": true, "proven": [], "inputs": ["HI_LS", "LO_LS"], "outputs": ["PUMP"], "steps": [{"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": false}}, {"in": {"HI_LS": false, "LO_LS": true}, "out": {"PUMP": true}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": true}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": true}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": true}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": true}}, {"in": {"HI_LS": true, "LO_LS": false}, "out": {"PUMP": false}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": false}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": false}}, {"in": {"HI_LS": false, "LO_LS": false}, "out": {"PUMP": false}}]}, {"title": "순차 시퀀서(다음·N초)", "korean": "모터 돌리고 다음 펌프 켜고 다음 밸브 열어", "understood": "동작: 모터 가동 / 동작: 펌프 켬 / 동작: 밸브 열기", "st": "// 타이머 T0 (TON, 2000ms)\nT0(IN := MOTOR, PT := T#2s);\n// 타이머 T1 (TON, 2000ms)\nT1(IN := PUMP, PT := T#2s);\n// 타이머 T2 (TON, 2000ms)\nT2(IN := VALVE, PT := T#2s);\n\nMOTOR := ((START AND NOT STOP AND NOT MOTOR AND NOT PUMP AND NOT VALVE) OR MOTOR) AND NOT ((STOP) OR (T0.Q AND NOT STOP)) AND NOT PUMP AND NOT VALVE;\nPUMP := ((T0.Q AND NOT STOP) OR PUMP) AND NOT ((STOP) OR (T1.Q AND NOT STOP)) AND NOT MOTOR AND NOT VALVE;\nVALVE := ((T1.Q AND NOT STOP) OR VALVE) AND NOT ((STOP) OR (T2.Q)) AND NOT MOTOR AND NOT PUMP;", "verified": true, "proven": ["MOTOR ⊥ PUMP", "MOTOR ⊥ VALVE", "PUMP ⊥ VALVE"], "inputs": ["START", "STOP"], "outputs": ["MOTOR", "PUMP", "VALVE"], "steps": [{"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": false}}, {"in": {"START": true, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": true, "PUMP": false, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": true, "VALVE": false}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": true}}, {"in": {"START": false, "STOP": false}, "out": {"MOTOR": false, "PUMP": false, "VALVE": false}}]}];let cur=0,timer=null,k=0;
+const sel=document.getElementById('sel');
+DATA.forEach((d,i)=>{const o=document.createElement('option');
+o.value=i;o.textContent=d.title;sel.appendChild(o)});
+const SPINNERS=['MOTOR','PUMP','FAN','CONVEYOR','BLOWER','VACUUM','COMPRESSOR','DRILL'];
+function isSpin(s){return SPINNERS.some(x=>s.startsWith(x))}
+function render(d){
+ document.getElementById('ko').textContent='"'+d.korean+'"';
+ document.getElementById('und').textContent=d.understood;
+ document.getElementById('st').textContent=d.st;
+ let b='<span class=badge>'+(d.verified?'✓ 검증 통과':'⚠ 미검증')+'</span>';
+ b+='<span class=badge>이중코일 0</span>';
+ d.proven.forEach(p=>b+='<span class=badge>증명: '+p+' 동시금지</span>');
+ document.getElementById('badges').innerHTML=b;
+ const devs=document.getElementById('devs');devs.innerHTML='';
+ d.outputs.forEach(o=>{devs.innerHTML+='<div class=dev><span class=nm>'+o+'</span>'+
+  '<span class="gear" data-o="'+o+'">'+(isSpin(o)?'⚙':'⬤')+'</span></div>'});
+ paint(d,0);
+}
+function paint(d,i){
+ const s=d.steps[i]||d.steps[d.steps.length-1];
+ document.getElementById('tstep').textContent='스텝 '+(i+1)+'/'+d.steps.length;
+ d.outputs.forEach(o=>{const el=document.querySelector('.gear[data-o="'+o+'"]');
+  const on=s.out[o];el.classList.toggle('on',on);el.classList.toggle('spin',on&&isSpin(o))});
+ const ins=document.getElementById('ins');ins.innerHTML='';
+ d.inputs.forEach(x=>{ins.innerHTML+='<span class="pin'+(s.in[x]?' on':'')+'">'+x+'</span>'})
+}
+function play(){const d=DATA[cur];clearInterval(timer);k=0;
+ timer=setInterval(()=>{paint(d,k);k++;if(k>=d.steps.length){clearInterval(timer)}},420)}
+sel.onchange=()=>{cur=+sel.value;clearInterval(timer);render(DATA[cur])};
+document.getElementById('play').onclick=play;
+render(DATA[0]);
+</script></body></html>
