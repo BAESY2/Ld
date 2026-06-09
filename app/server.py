@@ -29,7 +29,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -66,7 +72,12 @@ from app.synth import synthesize_st
 from app.transpiler import transpile_st
 from app.vendors import LS_XGK
 from app.vendors.profiles import DEFAULT_PROFILE, available_profiles, get_profile
-from app.verifier import check_double_coils, verify
+from app.verifier import (
+    check_double_coils,
+    proven_safe_groups,
+    proven_safe_pairs,
+    verify,
+)
 from app.wizard import RECIPES, WizardError, build_spec, list_recipes
 from app.xgk import simulate_xgk
 
@@ -113,6 +124,22 @@ def _no_logic_issue(st_code: str, rung_count: int) -> VerificationIssue | None:
             message="유효한 래더 로직이 생성되지 않았습니다(ST 가 대입문이 아닐 수 있음).",
         )
     return None
+
+
+@app.get("/")
+def landing() -> Response:
+    """첫 화면 — 라이브 페이지(아무 한국어나 → 이해·검증·살아 움직이는 래더·가상가동).
+
+    정적 마운트보다 먼저 등록되어 우선한다. live.html 이 없으면(개발 중) 기존 정적
+    index 로 폴백한다(StaticFiles 가 / 를 처리).
+    """
+    live = _STATIC_DIR / "live.html"
+    if live.is_file():
+        return FileResponse(str(live), media_type="text/html")
+    index = _STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(str(index), media_type="text/html")
+    return PlainTextResponse("frontend not found", status_code=404)
 
 
 @app.get("/healthz")
@@ -461,6 +488,8 @@ class CompileResponse(BaseModel):
     ladder: LadderProgram | None = None
     verification: VerificationReport | None = None
     double_coil_free: bool = False
+    # k-귀납으로 *동시 구동 불가가 증명된* 출력 묶음(쌍·그룹) — 해자(검증)의 가시적 증거.
+    proven_interlocks: list[list[str]] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)  # 컴파일 못한 절(정직 강등)
     explanation: str = ""
     error: str | None = None
@@ -505,6 +534,12 @@ def compile_nl(req: CompileRequest) -> CompileResponse:
     double_coil_free = not any(
         i.code == "DOUBLE_COIL" for i in report.issues
     )
+    # 증명된 동시금지를 사람이 읽을 묶음으로 — 쌍은 정렬·중복제거, 그룹은 그대로.
+    proven = sorted({tuple(sorted(p)) for p in proven_safe_pairs(result.spec, st)})
+    proven_interlocks = [list(p) for p in proven]
+    for g in proven_safe_groups(result.spec, st):
+        if g not in proven_interlocks:
+            proven_interlocks.append(g)
     return CompileResponse(
         ok=report.passed,
         understood=understood,
@@ -513,6 +548,7 @@ def compile_nl(req: CompileRequest) -> CompileResponse:
         ladder=ladder,
         verification=report,
         double_coil_free=double_coil_free,
+        proven_interlocks=proven_interlocks,
         unresolved=result.unresolved,
         explanation=explain_all(result.spec, ladder, report),
     )

@@ -25,11 +25,27 @@ def test_healthz_ok() -> None:
 
 
 def test_root_serves_frontend_index() -> None:
-    """루트가 정적 프론트(웹 마법사 UI)를 서빙한다."""
+    """루트가 정적 프론트(라이브 페이지)를 서빙한다."""
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "<html" in r.text.lower() or "<!doctype" in r.text.lower()
+
+
+def test_root_is_live_landing_page() -> None:
+    """루트가 라이브 입력 페이지(/api/compile 호출 + 시뮬 엔진)를 서빙한다."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "/api/compile" in r.text       # 아무 한국어나 라이브 컴파일
+    assert "sim-engine.js" in r.text      # 브라우저 내 가상 PLC 가동
+    assert "ladder-render.js" in r.text   # 살아 움직이는 래더
+
+
+def test_live_static_assets_served() -> None:
+    """라이브 페이지가 의존하는 정적 JS 가 실제로 서빙된다(404 아님)."""
+    for asset in ("/sim-engine.js", "/ladder-render.js", "/live.html"):
+        r = client.get(asset)
+        assert r.status_code == 200, asset
 
 
 def test_recipes_keyfree_path_nonempty() -> None:

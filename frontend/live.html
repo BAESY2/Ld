@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>한국어 한 줄 → 검증된 PLC · 라이브</title>
+<style>
+:root{
+ --bg:#070b11;--panel:rgba(20,27,36,.78);--bd:#26303d;--fg:#eaf1f8;--mut:#8b98a8;
+ --acc:#58a6ff;--acc2:#7c5cff;--ok:#3fb950;--amber:#d29922;--err:#ff6b6b;
+ --r:14px;--shadow:0 18px 50px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+ font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
+ line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:880px;margin:0 auto;padding:26px 16px 80px}
+.aurora{position:fixed;inset:-30% -10% auto -10%;height:520px;z-index:-1;filter:blur(80px);opacity:.5;
+ background:radial-gradient(40% 40% at 25% 30%,rgba(88,166,255,.5),transparent 60%),
+  radial-gradient(40% 40% at 80% 20%,rgba(124,92,255,.45),transparent 60%),
+  radial-gradient(45% 45% at 60% 75%,rgba(63,185,80,.35),transparent 60%)}
+h1{font-size:clamp(22px,4.5vw,32px);letter-spacing:-.5px;margin:0 0 6px;font-weight:850}
+.g{background:linear-gradient(90deg,#58a6ff,#7c5cff 55%,#3fb950);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:#c4d0dd;margin:0 0 20px;font-size:15px}
+.lead b{color:#fff}
+.trybox{background:var(--panel);border:1px solid var(--bd);border-radius:16px;
+ padding:14px;box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.tryrow{display:flex;gap:10px}
+#nl{flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:inherit;
+ font-size:16px;padding:13px 15px;border-radius:10px;outline:none;min-width:0}
+#nl:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(88,166,255,.18)}
+.btn{border:0;cursor:pointer;font:inherit;font-weight:800;white-space:nowrap;
+ background:linear-gradient(135deg,var(--acc),var(--acc2));color:#06101f;
+ padding:13px 20px;border-radius:10px;transition:transform .15s,box-shadow .15s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(88,166,255,.35)}
+.btn:disabled{opacity:.6;cursor:default;transform:none;box-shadow:none}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.chip{font-size:13px;background:rgba(255,255,255,.04);border:1px solid var(--bd);
+ color:var(--mut);padding:7px 12px;border-radius:16px;cursor:pointer;transition:.15s}
+.chip:hover{color:var(--fg);border-color:var(--acc);background:rgba(88,166,255,.08)}
+.hint{color:var(--mut);font-size:12.5px;margin:10px 2px 0}
+#result{margin-top:18px;display:none}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);
+ padding:16px;margin-bottom:14px;backdrop-filter:blur(8px);animation:fade .35s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lab{color:var(--mut);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+.understood{color:#9cc7ff;font-size:15px}
+.badge{display:inline-block;border-radius:7px;padding:4px 11px;font-size:12.5px;margin:3px 7px 3px 0;
+ background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.5);color:#7ee787}
+.badge.warn{background:rgba(210,153,34,.1);border-color:var(--amber);color:#f0c26b}
+.badge.bad{background:rgba(255,107,107,.1);border-color:var(--err);color:#ff9a9a}
+.devs{display:flex;flex-wrap:wrap;gap:14px}
+.dev{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:78px}
+.glyph{font-size:42px;line-height:1;color:#2f3946;transition:color .15s,filter .15s}
+.glyph.on{color:var(--ok);filter:drop-shadow(0 0 10px rgba(63,185,80,.6))}
+.glyph.spin{animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dev .nm{font-size:12px;color:#b6c0cc}
+.ins{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd)}
+.sw{display:flex;align-items:center;gap:8px;background:#0a0f17;border:1px solid var(--bd);
+ border-radius:20px;padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;transition:.15s}
+.sw .knob{width:30px;height:17px;border-radius:10px;background:#39424f;position:relative;transition:.18s}
+.sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;
+ background:#cdd6e3;transition:.18s}
+.sw.on{border-color:var(--acc);color:#bcd8ff}
+.sw.on .knob{background:var(--acc)}.sw.on .knob::after{left:15px;background:#06101f}
+.simctl{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.simctl button{font:inherit;font-size:13px;background:#0a0f17;color:var(--fg);
+ border:1px solid var(--bd);border-radius:8px;padding:7px 14px;cursor:pointer}
+.simctl button.run{border-color:var(--ok);color:#7ee787}
+.ladder{overflow-x:auto;background:#0a0f17;border-radius:10px;padding:8px}
+pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
+details summary{cursor:pointer;color:var(--mut);font-size:13px}
+.notice{background:rgba(210,153,34,.08);border:1px solid var(--amber);color:#f0c26b;
+ border-radius:10px;padding:10px 13px;font-size:12.5px;margin-top:16px}
+.foot{color:var(--mut);font-size:12px;margin-top:26px;text-align:center}
+</style></head>
+<body><div class="aurora"></div><div class="wrap">
+
+<h1>한국어 한 줄로 <span class="g">공장을 제어</span>한다</h1>
+<p class="lead">평문으로 적으면 — AI 없이 결정론 엔진이 <b>안전 검증된 PLC 래더</b>를 만들고,
+ <b>가상 PLC에서 실시간으로 가동</b>합니다. 아무 문장이나 입력해 보세요.</p>
+
+<div class="trybox">
+ <div class="tryrow">
+  <input id="nl" autocomplete="off" placeholder="예: 버튼 누르면 모터 돌고 정지 누르면 멈춰"/>
+  <button class="btn" id="go" onclick="run()">생성 ▶</button>
+ </div>
+ <div class="chips" id="chips"></div>
+ <div class="hint" id="hint">엔진이 직접 이해·합성·검증·가상가동합니다(키 불필요·결정론).</div>
+</div>
+
+<div id="result">
+ <div class="card"><div class="lab">입력(한국어)</div>
+  <div id="ko" style="color:#fff;font-size:16px"></div></div>
+ <div class="card"><div class="lab">이해 내용 (결정론 파싱)</div>
+  <div class="understood" id="und"></div></div>
+ <div class="card"><div class="lab">형식 검증</div><div id="badges"></div></div>
+ <div class="card" id="simcard"><div class="lab">장치 — 가상 PLC 실시간 가동</div>
+  <div class="simctl"><button id="simtoggle">■ 정지</button>
+   <span class="hint" style="margin:0">아래 스위치를 눌러 입력을 직접 켜보세요.</span></div>
+  <div class="devs" id="devs"></div>
+  <div class="ins" id="ins"></div></div>
+ <div class="card"><div class="lab">합성된 검증 래더 (살아 움직임)</div>
+  <div class="ladder" id="ladder"></div></div>
+ <div class="card"><details><summary>합성된 ST 코드 보기 (IEC 61131-3)</summary>
+  <pre id="st" style="margin-top:10px"></pre></details></div>
+</div>
+
+<div class="notice">⚠ 화면 속 가동은 <b>디지털 트윈 시뮬레이션</b>입니다(실물 모터 아님).
+ 이해·합성·검증은 실제 엔진이 수행하며, 장치는 검증된 로직 그대로 동작합니다.
+ 본 도구는 설계 보조이며 안전 인증이 아닙니다.</div>
+
+<div class="foot">결정론 엔진 · LLM 없이 합성·검증 · 이중코일 0 · 인터락 Z3 증명</div>
+</div>
+
+<script src="/ladder-render.js"></script>
+<script src="/sim-engine.js"></script>
+<script>
+const EXAMPLES=[
+ "버튼 누르면 모터 돌고 정지 누르면 멈춰",
+ "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",
+ "모터 돌리고 다음 펌프 켜고 다음 밸브 열어",
+ "압력 5바 넘으면 밸브 닫고 온도 200도 되면 히터 꺼",
+ "부품 10개 차면 배출하고 고장 나면 경광등 켜",
+];
+const SPIN=["MOTOR","PUMP","FAN","CONVEYOR","BLOWER","VACUUM","COMPRESSOR","DRILL","COOLER"];
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const isSpin=(s)=>SPIN.some((x)=>String(s).toUpperCase().startsWith(x));
+const glyph=(s)=>isSpin(s)?"⚙":"⬤";
+
+let engine=null,timer=null,running=false,lastLadder=null;
+const forced={};
+const STEP=120;
+
+// 예시 칩
+EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
+ c.textContent=t;c.onclick=()=>{$("nl").value=t;run();};$("chips").appendChild(c);});
+
+$("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
+$("simtoggle").onclick=toggleSim;
+
+async function run(){
+ const text=$("nl").value.trim();if(!text)return;
+ $("go").disabled=true;$("hint").textContent="⚙ 컴파일·검증 중…";
+ let res;
+ try{res=await(await fetch("/api/compile",{method:"POST",
+   headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();}
+ catch(e){$("hint").textContent="서버 연결 실패: "+e;$("go").disabled=false;return;}
+ $("go").disabled=false;$("hint").textContent="엔진이 직접 이해·합성·검증·가상가동합니다(키 불필요·결정론).";
+ $("result").style.display="block";
+ $("ko").textContent='"'+text+'"';
+ $("und").textContent=res.understood||"(이해 내용 없음)";
+
+ if(!res.confident){
+  const why=(res.unresolved&&res.unresolved.length)
+   ?" — 미해결: "+esc(res.unresolved.join("; "))
+   :" — 도메인 밖이거나 이해가 불확실해 래더 생성을 보류했어요(정직 거절).";
+  $("badges").innerHTML='<span class="badge warn">🤔 확신하지 못함'+why+'</span>';
+  $("simcard").style.display="none";$("ladder").innerHTML='';$("st").textContent='';
+  stopSim();$("result").scrollIntoView({behavior:"smooth",block:"start"});
+  return;
+ }
+ $("simcard").style.display="block";
+ // 검증 배지
+ let b="";
+ b+='<span class="badge'+(res.ok?'':' bad')+'">'+(res.ok?"✓ 검증 통과":"⚠ 검증 이슈")+'</span>';
+ b+='<span class="badge'+(res.double_coil_free?'':' bad')+'">이중코일 '+(res.double_coil_free?"0":"검출")+'</span>';
+ (res.proven_interlocks||[]).forEach((p)=>{b+='<span class="badge">증명: '+esc(p.join(" ⊥ "))+' 동시금지</span>';});
+ const v=res.verification||{};
+ (v.issues||[]).forEach((i)=>{const cls=i.severity==="error"?"bad":"warn";
+  b+='<span class="badge '+cls+'">['+esc(i.code)+'] '+esc(i.message)+'</span>';});
+ $("badges").innerHTML=b;
+
+ $("st").textContent=res.structured_text||"(없음)";
+ lastLadder=res.ladder;
+ renderLadder(null);
+ buildSim(res.structured_text);
+ $("result").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function renderLadder(state){
+ $("ladder").innerHTML=(window.LadderRender&&lastLadder)
+  ?window.LadderRender.svg(lastLadder,state)
+  :'<div style="color:#8b98a8;padding:14px">래더 없음</div>';
+}
+
+function buildSim(st){
+ engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
+ Object.keys(forced).forEach((k)=>delete forced[k]);
+ const ins=engine?engine.inputs:[];
+ ins.forEach((s)=>forced[s]=false);
+ // 장치(출력) 글리프
+ const outs=engine?engine.outputs:[];
+ $("devs").innerHTML=outs.length
+  ?outs.map((o)=>'<div class="dev"><span class="glyph" data-o="'+esc(o)+'">'+glyph(o)+
+    '</span><span class="nm">'+esc(o)+'</span></div>').join("")
+  :'<div class="hint" style="margin:0">출력 장치가 없습니다.</div>';
+ // 입력 스위치
+ $("ins").innerHTML=ins.length
+  ?ins.map((s)=>'<span class="sw" data-sw="'+esc(s)+'"><span class="knob"></span>'+esc(s)+'</span>').join("")
+  :'<span class="hint" style="margin:0">외부 입력이 없습니다(자동 동작).</span>';
+ $("ins").querySelectorAll("[data-sw]").forEach((el)=>{
+  el.onclick=()=>{const s=el.dataset.sw;forced[s]=!forced[s];
+   el.classList.toggle("on",forced[s]);if(!running)tick();};});
+ startSim();tick();
+}
+
+function tick(){
+ if(!engine)return;
+ const r=engine.step(forced,STEP);
+ for(const o in r.outputs){
+  document.querySelectorAll('[data-o="'+cssesc(o)+'"]').forEach((el)=>{
+   const on=r.outputs[o];el.classList.toggle("on",on);
+   el.classList.toggle("spin",on&&isSpin(o));});
+ }
+ renderLadder(r.table);
+}
+function cssesc(s){return String(s).replace(/["\\]/g,"\\$&");}
+
+function startSim(){running=true;$("simtoggle").textContent="■ 정지";
+ $("simtoggle").classList.remove("run");
+ if(timer)clearInterval(timer);timer=setInterval(tick,STEP);}
+function stopSim(){running=false;if(timer){clearInterval(timer);timer=null;}
+ $("simtoggle").textContent="▶ 가동";$("simtoggle").classList.add("run");}
+function toggleSim(){running?stopSim():startSim();}
+</script>
+</body></html>

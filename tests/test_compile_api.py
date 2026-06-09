@@ -75,3 +75,24 @@ def test_compile_is_deterministic() -> None:
 def test_compile_rejects_empty() -> None:
     r = client.post("/api/compile", json={"text": ""})
     assert r.status_code == 422  # min_length=1 검증
+
+
+def test_compile_exposes_proven_interlocks() -> None:
+    """상호배제 단서가 있는 문장은 *증명된 동시금지* 묶음을 응답에 노출한다(해자 가시화)."""
+    r = client.post(
+        "/api/compile", json={"text": "히터 켜고 쿨러 켜는데 동시에 안 켜지게"}
+    )
+    data = r.json()
+    assert data["confident"] is True
+    proven = {tuple(p) for p in data["proven_interlocks"]}
+    assert ("COOLER", "HEATER") in proven  # k-귀납으로 증명된 쌍이 그대로 실린다
+
+
+def test_compile_no_mutex_no_proven_interlocks() -> None:
+    """상호배제 단서가 없으면 증명 묶음은 비어 있다(거짓 증거 금지)."""
+    r = client.post(
+        "/api/compile", json={"text": "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼"}
+    )
+    data = r.json()
+    assert data["confident"] is True
+    assert data["proven_interlocks"] == []

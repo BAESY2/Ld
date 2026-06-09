@@ -1,0 +1,27 @@
+# Render Blueprint — 원클릭 배포(영구 공개 URL).
+#
+# 사용법(아버지는 아무것도 안 함, 너만 1회):
+#   1) https://render.com 가입 → GitHub 계정 연결(baesy2/ld 접근 허용).
+#   2) New +  ▸  Blueprint  ▸  이 저장소(baesy2/ld) 선택  ▸  Apply.
+#   3) 빌드가 끝나면 https://ld-live.onrender.com 같은 영구 주소가 나온다.
+#      그 링크만 아버지께 보내면 됨 — 열어서 한국어 입력하면 래더+시뮬이 라이브로 뜬다.
+#
+# 무료 플랜 주의: 15분 미사용 시 잠들어, 잠든 뒤 첫 접속은 깨어나는 데 ~50초 걸린다
+#   (그 뒤로는 즉시). 데모 직전에 한 번 미리 열어 깨워두면 바로 보인다.
+#   상시 즉답이 필요하면 플랜을 starter(유료)로 올리면 잠들지 않는다.
+#
+# 자연어 *컴파일* 경로(/api/compile)는 API 키 없이 동작한다 — 키 설정 불필요.
+# (LLM 자유설계 /api/design 만 키가 필요하며, 데모에는 안 쓴다.)
+services:
+  - type: web
+    name: ld-live
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: LOG_LEVEL
+        value: info
