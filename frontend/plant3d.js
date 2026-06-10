@@ -1,10 +1,16 @@
-/* plant3d.js — 3D 가상 공장 렌더러 v3 (Three.js r160, PBR/PMREM 급).
+/* plant3d.js — 3D 가상 공장 렌더러 v4 (Three.js r160, PBR/PMREM 급).
  *
- * v3 렌더링 계층: ACES 톤매핑 + sRGB + PMREM 환경반사(절차 환경맵, 외부 에셋 0)
- * + 절차적 캔버스 텍스처(콘크리트 바닥·체커플레이트 통로·황흑 위험띠) + 부드러운
- * 그림자. 공장 구조: I빔 기둥/트러스 보·파이프랙·케이블트레이·가드레일·PLC 캐비닛.
- * 설비 연결: 플랜지 배관(흐름 입자)·전선관(통전 발광). 기기 모델 정밀화(모터
- * 냉각핀/단자함, 펌프 볼류트, 플랜지 탱크+레벨게이지, 컨베이어 사이드프레임/롤러).
+ * v4: 절차 기기 메시를 "모형(box/cylinder)"에서 격상 — 베벨 ExtrudeGeometry로
+ * 모서리 챔퍼/라운드, LatheGeometry 곡면 바디, CapsuleGeometry 라운드 실린더로
+ * 디테일을 올린다. 외부 CDN 없이 100% 절차 생성(에셋 0). 다만 향후 CC0/공개도메인
+ * glTF 산업 모델을 드롭인할 수 있도록 비동기 에셋 훅(Plant3D.ASSETS + GLTFLoader
+ * 자동 감지)을 둔다 — 에셋/로더가 없으면 즉시 절차 메시로 graceful fallback 하고,
+ * 로더+GLB가 있으면 로드 완료 시 절차 메시를 교체한다(생성 시 throw 금지, 헤드리스
+ * 안전). 동봉 CC0 에셋 없음 — frontend/vendor/ASSETS_LICENSES.md 참조.
+ *
+ * v3 렌더링 계층 유지: ACES 톤매핑 + sRGB + PMREM 환경반사(절차 환경맵) + 절차
+ * 캔버스 텍스처(콘크리트·체커플레이트·위험띠) + 부드러운 그림자. 공장 구조:
+ * I빔 기둥/보·케이블트레이·가드레일·PLC/배전 캐비닛. 연결: 플랜지 배관·전선관.
  *
  * window.Plant3D.create(container, plant, {onToggle}) ->
  *   { update(simResult), resize(), destroy() }
@@ -89,6 +95,55 @@
     x.castShadow = true; return x;
   }
 
+  // ── 고품질 절차 지오메트리 헬퍼 (모서리 챔퍼/라운드·캡슐) ───────────────────
+  // r160 UMD 빌드에 RoundedBoxGeometry(애드온)가 없으므로 베벨 ExtrudeGeometry로
+  // 라운드 박스를 만든다. 모형 같던 직각 모서리에 하이라이트가 생겨 "기성품 케이스"
+  // 느낌이 난다. geo 캐시로 같은 규격은 재사용(메모리·GC 절약).
+  var _geoCache = {};
+  function roundedBoxGeo(w, h, d, r, bevel) {
+    var key = "rb" + [w, h, d, r, bevel].join("_");
+    if (_geoCache[key]) return _geoCache[key];
+    r = Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3);
+    var bw = w - r * 2, bh = h - r * 2;
+    var sh = new T.Shape();
+    sh.moveTo(-bw / 2, -h / 2);
+    sh.lineTo(bw / 2, -h / 2);
+    sh.quadraticCurveTo(w / 2, -h / 2, w / 2, -bh / 2);
+    sh.lineTo(w / 2, bh / 2);
+    sh.quadraticCurveTo(w / 2, h / 2, bw / 2, h / 2);
+    sh.lineTo(-bw / 2, h / 2);
+    sh.quadraticCurveTo(-w / 2, h / 2, -w / 2, bh / 2);
+    sh.lineTo(-w / 2, -bh / 2);
+    sh.quadraticCurveTo(-w / 2, -h / 2, -bw / 2, -h / 2);
+    var bv = bevel != null ? bevel : Math.min(r * .6, .04);
+    var geo = new T.ExtrudeGeometry(sh, {
+      depth: d - bv * 2, bevelEnabled: bv > 0, bevelThickness: bv,
+      bevelSize: bv, bevelSegments: 2, curveSegments: 6,
+    });
+    geo.translate(0, 0, -(d - bv * 2) / 2);
+    geo.computeVertexNormals();
+    _geoCache[key] = geo;
+    return geo;
+  }
+  // 라운드 박스 메시 — 기본 회전 정렬(extrude는 z방향) 후 castShadow.
+  function rbox(w, h, d, m, r) {
+    var x = new T.Mesh(roundedBoxGeo(w, h, d, r != null ? r : Math.min(w, h, d) * .12), m);
+    x.castShadow = true; return x;
+  }
+  // 라운드 실린더(끝이 둥근 바디) — 모터/펌프 몸통에 캡슐감 부여.
+  function capsule(rad, len, m, seg) {
+    var cap = (T.CapsuleGeometry)
+      ? new T.CapsuleGeometry(rad, Math.max(.01, len - rad * 2), 6, seg || 20)
+      : new T.CylinderGeometry(rad, rad, len, seg || 20);
+    var x = new T.Mesh(cap, m); x.castShadow = true; return x;
+  }
+  // Lathe 곡면 바디 — 프로파일(Vector2 배열)을 회전시켜 곡선 케이싱을 만든다.
+  function lathe(profile, m, seg) {
+    var x = new T.Mesh(new T.LatheGeometry(profile, seg || 28), m);
+    x.castShadow = true; return x;
+  }
+  function v2(a, b) { return new T.Vector2(a, b); }
+
   function labelSprite(text, sub) {
     var c = document.createElement("canvas");
     var g = c.getContext("2d");
@@ -146,16 +201,25 @@
   // ── 기기 빌더 — {group, anim(on, t, dt)} ──────────────────────────────────
   function bMotor() {
     var g = new T.Group();
-    var base = box(1.2, .22, .9, mat(0x3a3d44, { rough: .8, metal: .25 })); base.position.y = .11; g.add(base);
-    var body = cyl(.34, .34, .9, mat(COL.blue, { metal: .65, rough: .32 }));
+    // 라운드 챔퍼 베드플레이트 + 마운팅 풋(주물 느낌)
+    var base = rbox(1.2, .22, .9, mat(0x3a3d44, { rough: .8, metal: .25 }), .05); base.position.y = .11; g.add(base);
+    [[-.5, -.36], [.5, -.36], [-.5, .36], [.5, .36]].forEach(function (p) {
+      var foot = cyl(.07, .09, .1, mat(0x2c2f35, { rough: .8, metal: .3 }), 12);
+      foot.position.set(p[0], .05, p[1]); g.add(foot);
+    });
+    // 캡슐 몸통(끝이 둥근 케이싱) — 직각 실린더보다 기성 모터에 가깝다
+    var body = capsule(.34, .96, mat(COL.blue, { metal: .65, rough: .32 }));
     body.rotation.z = Math.PI / 2; body.position.y = .58; g.add(body);
-    for (var i = 0; i < 9; i++) {                                   // 방사 냉각핀
-      var fin = box(.86, .015, .76, mat(COL.blueDeep, { metal: .6, rough: .4 }));
-      fin.position.y = .58; fin.rotation.x = (i / 9) * Math.PI; g.add(fin);
+    for (var i = 0; i < 13; i++) {                                  // 방사 냉각핀(라운드)
+      var fin = rbox(.78, .013, .74, mat(COL.blueDeep, { metal: .6, rough: .4 }), .006);
+      fin.position.y = .58; fin.rotation.x = (i / 13) * Math.PI; g.add(fin);
     }
-    var jbox = box(.26, .2, .3, mat(COL.steelDark, { metal: .5 })); jbox.position.set(0, .95, 0); g.add(jbox);
-    var endb = cyl(.36, .36, .12, mat(COL.steelDark, { metal: .6 }));
-    endb.rotation.z = Math.PI / 2; endb.position.set(-.48, .58, 0); g.add(endb);
+    var jbox = rbox(.28, .22, .32, mat(COL.steelDark, { metal: .5 }), .04); jbox.position.set(0, .96, 0); g.add(jbox);
+    var lid = rbox(.3, .03, .34, mat(0x20262e, { metal: .55, rough: .3 }), .02); lid.position.set(0, 1.08, 0); g.add(lid);
+    // 곡면 엔드벨(Lathe) — 통풍구 커버 곡면
+    var endb = lathe([v2(.01, 0), v2(.3, 0), v2(.36, .04), v2(.34, .12)],
+      mat(COL.steelDark, { metal: .6, rough: .35 }), 22);
+    endb.rotation.z = Math.PI / 2; endb.position.set(-.46, .58, 0); g.add(endb);
     var ring = torus(.3, .035, mat(0x111418, { emissive: COL.on, ei: 0 }));
     ring.rotation.y = Math.PI / 2; ring.position.set(-.55, .58, 0); g.add(ring);
     var shaft = cyl(.05, .05, .34, mat(0xd9e2ec, { metal: .9, rough: .18 }));
@@ -176,20 +240,25 @@
   }
   function bPump() {
     var g = new T.Group();
-    var base = box(1.05, .2, .9, mat(0x3a3d44, { rough: .8, metal: .25 })); base.position.y = .1; g.add(base);
-    var vol = new T.Mesh(new T.LatheGeometry([                      // 볼류트 곡면
-      new T.Vector2(.06, 0), new T.Vector2(.42, .04), new T.Vector2(.46, .22),
-      new T.Vector2(.4, .42), new T.Vector2(.22, .55), new T.Vector2(.07, .58),
-    ], 26), mat(COL.blue, { metal: .6, rough: .3 }));
-    vol.position.y = .22; vol.castShadow = true; g.add(vol);
+    var base = rbox(1.05, .2, .9, mat(0x3a3d44, { rough: .8, metal: .25 }), .05); base.position.y = .1; g.add(base);
+    var vol = lathe([                                               // 볼류트 곡면(나선형 케이싱)
+      v2(.06, 0), v2(.42, .04), v2(.47, .18), v2(.46, .3),
+      v2(.4, .42), v2(.28, .52), v2(.14, .57), v2(.07, .58),
+    ], mat(COL.blue, { metal: .6, rough: .3 }), 30);
+    vol.position.y = .22; g.add(vol);
+    var volRim = torus(.46, .03, mat(COL.blueDeep, { metal: .65, rough: .3 }));
+    volRim.rotation.x = Math.PI / 2; volRim.position.y = .26; g.add(volRim);
     var suct = cyl(.12, .12, .5, mat(COL.pipe, { metal: .7, rough: .3 }));
     suct.rotation.z = Math.PI / 2; suct.position.set(-.6, .42, 0); g.add(suct);
-    var sfl = cyl(.18, .18, .05, mat(COL.pipe, { metal: .7 }));
+    var sfl = lathe([v2(.12, 0), v2(.18, 0), v2(.18, .05), v2(.12, .05)],
+      mat(COL.pipe, { metal: .7, rough: .3 }), 18);
     sfl.rotation.z = Math.PI / 2; sfl.position.set(-.84, .42, 0); g.add(sfl);
     var outp = cyl(.11, .11, .5, mat(COL.pipe, { metal: .7, rough: .3 }));
     outp.position.set(0, .95, 0); g.add(outp);
-    var mot = cyl(.2, .2, .5, mat(COL.steel, { metal: .6, rough: .35 }));
-    mot.rotation.z = Math.PI / 2; mot.position.set(.55, .42, 0); g.add(mot);
+    // 라운드 모터 케이싱(캡슐) + 단자함
+    var mot = capsule(.2, .56, mat(COL.steel, { metal: .6, rough: .35 }));
+    mot.rotation.z = Math.PI / 2; mot.position.set(.58, .42, 0); g.add(mot);
+    var mjb = rbox(.16, .14, .18, mat(COL.steelDark, { metal: .5 }), .03); mjb.position.set(.58, .64, 0); g.add(mjb);
     var lamp = new T.Mesh(new T.SphereGeometry(.07, 14, 10), mat(COL.on, { emissive: COL.on, ei: 0 }));
     lamp.position.set(.55, .72, 0); g.add(lamp);
     return { group: g, anim: function (on, t) {
@@ -207,7 +276,12 @@
     var bodyV = new T.Mesh(new T.SphereGeometry(.24, 18, 14), mat(COL.blueDeep, { metal: .55, rough: .35 }));
     bodyV.position.y = .5; bodyV.castShadow = true; g.add(bodyV);
     var bonnet = cyl(.1, .14, .3, mat(COL.steel, { metal: .6 })); bonnet.position.y = .78; g.add(bonnet);
-    var act = box(.46, .3, .34, mat(COL.safety, { metal: .35, rough: .45 })); act.position.y = 1.08; g.add(act);
+    // 액추에이터(라운드 챔퍼 케이스) + 요크 볼트
+    var act = rbox(.46, .3, .34, mat(COL.safety, { metal: .35, rough: .45 }), .05); act.position.y = 1.08; g.add(act);
+    [[-.16, -.1], [.16, -.1], [-.16, .1], [.16, .1]].forEach(function (p) {
+      var bolt = cyl(.018, .018, .08, mat(0x2a2c30, { metal: .6 }), 8);
+      bolt.position.set(p[0], .94, p[1]); g.add(bolt);
+    });
     var ind = box(.06, .14, .06, mat(COL.red, { emissive: COL.red, ei: .4 }));
     ind.position.y = 1.3; g.add(ind);
     return { group: g, anim: function (on, t, dt) {
@@ -219,7 +293,7 @@
   }
   function bHeater() {
     var g = new T.Group();
-    var body = box(1.05, 1.15, .9, mat(0x6b4a33, { rough: .55, metal: .35 })); body.position.y = .6; g.add(body);
+    var body = rbox(1.05, 1.15, .9, mat(0x6b4a33, { rough: .55, metal: .35 }), .06); body.position.y = .6; g.add(body);
     [-0.3, 0, 0.3].forEach(function (y) {
       var band = box(1.07, .05, .92, mat(COL.steelDark, { metal: .6 }));
       band.position.y = .6 + y; g.add(band);
@@ -303,7 +377,7 @@
   }
   function bEjector() {
     var g = new T.Group();
-    var base = box(.6, .5, .55, mat(COL.steelDark, { metal: .55 })); base.position.y = .3; g.add(base);
+    var base = rbox(.6, .5, .55, mat(COL.steelDark, { metal: .55 }), .05); base.position.y = .3; g.add(base);
     var cylBody = cyl(.11, .11, .55, mat(COL.blue, { metal: .6, rough: .3 }));
     cylBody.rotation.x = Math.PI / 2; cylBody.position.set(0, .5, .35); g.add(cylBody);
     [-0.18, 0.18].forEach(function (dy) {
@@ -351,7 +425,7 @@
   }
   function bActuator() {
     var g = new T.Group();
-    var body = box(.8, .8, .8, mat(COL.steelDark, { metal: .5, emissive: COL.on, ei: 0 }));
+    var body = rbox(.8, .8, .8, mat(COL.steelDark, { metal: .5, emissive: COL.on, ei: 0 }), .08);
     body.position.y = .42; g.add(body);
     var ind = box(.16, .06, .02, mat(COL.on, { emissive: COL.on, ei: .15 }));
     ind.position.set(0, .68, .42); g.add(ind);
@@ -373,9 +447,17 @@
       var weld = torus(.665, .012, mat(COL.steel, { metal: .6 }));
       weld.rotation.x = Math.PI / 2; weld.position.y = 1.4 + y2; g.add(weld);
     });
-    var cap = new T.Mesh(new T.SphereGeometry(.66, 26, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-      mat(COL.steel, { metal: .45, rough: .3 }));
-    cap.position.y = 2.25; cap.castShadow = true; g.add(cap);
+    // 토리스페리컬 상부 헤드(Lathe) — 반구보다 납작한 실제 압력용기 돔
+    var cap = lathe([
+      v2(.66, 0), v2(.66, .04), v2(.6, .26), v2(.42, .46),
+      v2(.22, .56), v2(.0, .58),
+    ], mat(COL.steel, { metal: .45, rough: .3 }), 30);
+    cap.position.y = 2.25; g.add(cap);
+    // 하부 디시드 헤드(역방향)
+    var capB = lathe([
+      v2(.66, 0), v2(.6, -.18), v2(.42, -.32), v2(.22, -.4), v2(.0, -.42),
+    ], mat(COL.steel, { metal: .45, rough: .3 }), 30);
+    capB.position.y = .55; capB.castShadow = false; g.add(capB);
     var manway = cyl(.16, .16, .1, mat(COL.steelDark, { metal: .6 }));
     manway.position.set(.3, 2.42, .2); g.add(manway);
     var water = cyl(.6, .6, 1, mat(COL.water, { alpha: .8, rough: .2, metal: 0 }));
@@ -415,8 +497,8 @@
   }
   function bInput(d) {
     var g = new T.Group();
-    var ped = box(.36, .85, .3, mat(0x222831, { rough: .45, metal: .4 })); ped.position.y = .42; g.add(ped);
-    var face = box(.3, .34, .03, mat(0x10151d, { rough: .35 })); face.position.set(0, .68, .16); g.add(face);
+    var ped = rbox(.36, .85, .3, mat(0x222831, { rough: .45, metal: .4 }), .05); ped.position.y = .42; g.add(ped);
+    var face = rbox(.3, .34, .03, mat(0x10151d, { rough: .35 }), .03); face.position.set(0, .68, .16); g.add(face);
     var capCol = d.kind === "estop" ? COL.red
       : d.kind === "button" ? COL.on
       : d.kind === "fault" ? COL.amber : COL.blue;
@@ -486,13 +568,14 @@
     var base = cyl(.34, .42, .26, mat(COL.safety, { rough: .45, metal: .35 }));
     base.position.y = .13; g.add(base);
     var yaw = new T.Group(); yaw.position.y = .26; g.add(yaw);
-    var turret = cyl(.26, .3, .3, mat(0xd8dde4, { metal: .4, rough: .35 }));
+    var turret = lathe([v2(.01, 0), v2(.28, 0), v2(.3, .08), v2(.26, .24), v2(.18, .3)],
+      mat(0xd8dde4, { metal: .4, rough: .35 }), 24);
     turret.position.y = .15; yaw.add(turret);
     var shoulder = new T.Group(); shoulder.position.y = .32; yaw.add(shoulder);
-    var upper = box(.2, .85, .26, mat(0xe8ebef, { metal: .4, rough: .3 }));
+    var upper = rbox(.2, .85, .26, mat(0xe8ebef, { metal: .4, rough: .3 }), .07);
     upper.position.y = .42; shoulder.add(upper);
     var elbow = new T.Group(); elbow.position.y = .85; shoulder.add(elbow);
-    var fore = box(.16, .7, .2, mat(0xd8dde4, { metal: .4, rough: .3 }));
+    var fore = rbox(.16, .7, .2, mat(0xd8dde4, { metal: .4, rough: .3 }), .06);
     fore.position.y = .35; elbow.add(fore);
     var wrist = new T.Group(); wrist.position.y = .7; elbow.add(wrist);
     var hand = box(.14, .18, .14, mat(COL.steelDark, { metal: .6 }));
@@ -545,6 +628,43 @@
     robot: bRobot, vision: bVision,
     button: bInput, estop: bInput, level: bInput, fault: bInput, sensor: bInput,
   };
+
+  // ── 외부 glTF 에셋 훅 (드롭인) ─────────────────────────────────────────────
+  // 기본은 *빈 매니페스트* → 100% 절차 메시. CC0/공개도메인 GLB를 확보하면 아래
+  // ASSETS 에 { kind: { url, scale?, yaw?, y? } } 를 채우고 GLTFLoader 를 전역
+  // (THREE.GLTFLoader 또는 window.GLTFLoader)으로 노출하면, 생성 직후 절차 메시를
+  // 배치한 뒤 비동기 로드가 끝나면 GLB로 교체한다(로드 실패/로더 없음/헤드리스 →
+  // 절차 메시 유지, throw 없음). 라이선스: frontend/vendor/ASSETS_LICENSES.md.
+  var ASSETS = {};                       // 예: { motor: { url: "assets/motor.glb", scale: 1, y: 0 } }
+  function getLoader() {
+    try {
+      var GL = (T && T.GLTFLoader) || (typeof window !== "undefined" && window.GLTFLoader) || null;
+      return GL ? new GL() : null;
+    } catch (e) { return null; }
+  }
+  // procGroup 의 절차 메시를 GLB 씬으로 교체(라벨 스프라이트는 보존). 실패 시 무동작.
+  function tryLoadAsset(kind, procGroup, loader) {
+    var spec = ASSETS[kind];
+    if (!spec || !spec.url || !loader) return;
+    try {
+      loader.load(spec.url, function (gltf) {
+        try {
+          if (!procGroup || !procGroup.parent) return;     // 이미 destroy 됨
+          var model = gltf && gltf.scene; if (!model) return;
+          var s = spec.scale || 1; model.scale.set(s, s, s);
+          if (spec.yaw) model.rotation.y = spec.yaw;
+          model.position.y = spec.y || 0;
+          model.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          // 라벨(Sprite)만 남기고 절차 메시 제거 → GLB 삽입
+          for (var i = procGroup.children.length - 1; i >= 0; i--) {
+            var c = procGroup.children[i];
+            if (!c.isSprite) procGroup.remove(c);
+          }
+          procGroup.add(model);
+        } catch (e) { /* 교체 실패 — 절차 메시 유지 */ }
+      }, undefined, function () { /* onError — 절차 메시 유지 */ });
+    } catch (e) { /* 로더 예외 — 절차 메시 유지 */ }
+  }
 
   // 공유 이송 라인(스파인) — 스테이션 기기들을 하나의 컨베이어로 물리적으로 잇는다.
   var LINE_KINDS = ["conveyor", "filler", "capper", "labeler", "washer", "packer",
@@ -652,10 +772,11 @@
     });
     // PLC 제어반 캐비닛
     var cab = new T.Group();
-    var bodyC = box(1.1, 2, .6, mat(COL.cabinet, { metal: .4, rough: .35 }));
+    var bodyC = rbox(1.1, 2, .6, mat(COL.cabinet, { metal: .4, rough: .35 }), .04);
     bodyC.position.y = 1; cab.add(bodyC);
-    var door = box(1, 1.8, .04, mat(0x47699c, { metal: .35, rough: .3 }));
-    door.position.set(0, 1, .32); cab.add(door);
+    var plinth = rbox(1.16, .12, .66, mat(0x24323f, { metal: .4, rough: .5 }), .02); plinth.position.y = .06; cab.add(plinth);
+    var door = rbox(1, 1.8, .05, mat(0x47699c, { metal: .35, rough: .3 }), .03);
+    door.position.set(0, 1, .31); cab.add(door);
     var handle = box(.04, .3, .05, mat(0xd9e2ec, { metal: .8, rough: .2 }));
     handle.position.set(.4, 1, .36); cab.add(handle);
     var vent = box(.6, .26, .02, mat(0x2c4368, { rough: .7 }));
@@ -673,10 +794,11 @@
     scene.add(cab);
     // 배전반(MDB) — 수배전 캐비닛: 인입 차단기 + 분기 차단기 핸들 행렬
     var mdb = new T.Group();
-    var mbody = box(1.2, 2.1, .6, mat(0x44505e, { metal: .4, rough: .35 }));
+    var mbody = rbox(1.2, 2.1, .6, mat(0x44505e, { metal: .4, rough: .35 }), .04);
     mbody.position.y = 1.05; mdb.add(mbody);
-    var mdoor = box(1.1, 1.9, .04, mat(0x53616f, { metal: .35, rough: .3 }));
-    mdoor.position.set(0, 1.05, .32); mdb.add(mdoor);
+    var mplinth = rbox(1.26, .12, .66, mat(0x222a31, { metal: .4, rough: .5 }), .02); mplinth.position.y = .06; mdb.add(mplinth);
+    var mdoor = rbox(1.1, 1.9, .05, mat(0x53616f, { metal: .35, rough: .3 }), .03);
+    mdoor.position.set(0, 1.05, .31); mdb.add(mdoor);
     var main = box(.34, .42, .06, mat(0x20262e, { rough: .4 }));
     main.position.set(0, 1.72, .34); mdb.add(main);
     var mhandle = box(.07, .2, .05, mat(0xd6a416, { rough: .4, metal: .3 }));
@@ -801,6 +923,7 @@
     }).sort(function (a, b) { return a.x - b.x; });
     var line = lineDevs.length >= 2 ? buildLine(scene, lineDevs) : null;
     var ctx = { line: !!line };
+    var assetLoader = getLoader();      // null 이면 절차 메시만(에셋/로더 없음)
     (plant.devices || []).forEach(function (d) {
       var build = BUILDERS[d.kind] || bActuator;
       var u = build(d, ctx);
@@ -810,6 +933,8 @@
       sp.position.set(0, d.kind === "tank" ? 3 : 2.05, 0);
       u.group.add(sp);
       scene.add(u.group);
+      // CC0 glTF 에셋이 매니페스트에 있고 로더가 있으면 비동기 교체(없으면 절차 유지)
+      tryLoadAsset(d.kind, u.group, assetLoader);
       units.push(u);
       posOf[d.symbol] = new T.Vector3(d.x, d.kind === "tank" ? 2.5 : 1.05, d.z);
       if (d.role === "input" && onToggle) {
@@ -960,5 +1085,6 @@
     };
   }
 
-  window.Plant3D = { create: create };
+  // ASSETS 는 가변 참조 — 호스트가 create 전에 채우면 GLB 드롭인 활성화.
+  window.Plant3D = { create: create, ASSETS: ASSETS };
 })();
