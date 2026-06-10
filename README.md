@@ -16,6 +16,7 @@
 - **[사용자 매뉴얼 `docs/MANUAL.md`](docs/MANUAL.md)** — 한국어 작성법·표준회로 카탈로그·정밀테스트·내보내기·FAQ.
 - **[에러코드 자료집 `docs/ERRORCODES.md`](docs/ERRORCODES.md)** — LS·미쓰비시·지멘스·오므론+공통 101건(출처 인용).
 - 측정 재현: `python scripts/capability_report.py`
+- 영문 브리프(글로벌 제조사용): [`docs/BRIEF_EN.md`](docs/BRIEF_EN.md)
 
 ## 맥/리눅스에서 바로 실행 (라이브 래더 에디터)
 
