@@ -318,6 +318,10 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
                 unresolved.append(f"'{dev_ko}'는 구동할 수 없는 대상(센서/측정/용기)")
                 last_action = True
                 continue
+            # '동시에 안 *되게*' — 부정 BECOME 은 상호배제 단서 문구의 일부다(동작 아님).
+            if c.predicate == "BECOME" and c.negated and _has_mutex_cue(frame.text):
+                last_action = True
+                continue
             # 무주어 동작('… 꺼'·'멈춰')은 직전 기기를 가리킨다 — 선행 기기가 없으면
             # 유령 출력(OUT)을 지어내지 않고 정직 미해결로 강등한다.
             sym = _out_symbol(c)
