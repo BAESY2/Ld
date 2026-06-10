@@ -223,7 +223,8 @@
     return outs;
   }
 
-  // 종합 — 출력 기기 1대의 정밀 테스트 묶음
+  // 종합 — 출력 기기 1대의 정밀 테스트 묶음.
+  // opts.serverless=true 면 서버 교차엔진 대조를 건너뛴다(정적/브라우저 단독판).
   function testOutput(st, sym, opts) {
     opts = opts || {};
     var dt = opts.stepMs || 100;
@@ -237,12 +238,13 @@
       if (il) out.push(il);
       var tp = testTimerPrecision(st, sym, dt);
       if (tp) out.push(tp);
-      crossCheck(st, dt).then(function (cc) {
-        out.push(cc);
+      function done() {
         resolve(out.map(function (t) {
           return { name: t.name, pass: t.pass, detail: t.detail };
         }));
-      });
+      }
+      if (opts.serverless) { done(); return; }
+      crossCheck(st, dt).then(function (cc) { out.push(cc); done(); });
     });
   }
 

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>자연어 공장 설계 — 브라우저 단독판 (진짜 엔진 · WebAssembly)</title>
+<style>
+:root{--bg:#070b11;--panel:#0e141d;--panel2:#0b1018;--bd:#1f2a38;--fg:#e8f0f9;--mut:#8b98a8;
+ --acc:#58a6ff;--acc2:#7c5cff;--ok:#3fb950;--amber:#d29922;--err:#ff5d5d;--r:12px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+ font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
+ line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1480px;margin:0 auto;padding:18px 18px 60px}
+header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.brand{font-weight:850;font-size:18px;letter-spacing:-.4px}
+.brand .g{background:linear-gradient(90deg,#58a6ff,#7c5cff 55%,#3fb950);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.tagline{color:var(--mut);font-size:12.5px}
+#status{margin-left:auto;font-size:12.5px;color:var(--mut)}
+#status.ok{color:var(--ok)}#status.err{color:var(--err)}
+#boot{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:22px;
+ max-width:560px;margin:8vh auto}
+#boot h2{margin:0 0 6px;font-size:17px}
+#boot .sub{color:var(--mut);font-size:13px;margin-bottom:16px}
+.step{display:flex;gap:10px;font-size:13px;margin:7px 0;color:var(--mut)}
+.step.on{color:var(--fg)}.step.done{color:#7ee787}
+.bar{height:6px;background:#0a0f17;border-radius:4px;margin-top:14px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));
+ transition:width .4s}
+.trybox{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:12px}
+.tryrow{display:flex;gap:10px}
+#nl{flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:inherit;
+ font-size:15.5px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
+#nl:focus{border-color:var(--acc)}
+.btn{border:0;cursor:pointer;font:inherit;font-weight:800;white-space:nowrap;
+ background:linear-gradient(135deg,var(--acc),var(--acc2));color:#06101f;
+ padding:12px 20px;border-radius:10px}
+.btn:disabled{opacity:.55;cursor:default}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.chip{font-size:12.5px;background:rgba(255,255,255,.04);border:1px solid var(--bd);
+ color:var(--mut);padding:6px 11px;border-radius:15px;cursor:pointer}
+.chip:hover{color:var(--fg);border-color:var(--acc)}
+.strip{display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 2px}
+.understood{color:#9cc7ff;font-size:13.5px}
+.badge{display:inline-block;border-radius:7px;padding:3px 10px;font-size:12px;
+ background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.45);color:#7ee787}
+.badge.warn{background:rgba(210,153,34,.08);border-color:var(--amber);color:#f0c26b}
+.badge.bad{background:rgba(255,93,93,.08);border-color:var(--err);color:#ff9a9a}
+#studio{display:none;gap:14px;margin-top:4px;align-items:flex-start}
+.canvasCol{flex:1;min-width:0}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tab{font:inherit;font-size:13px;font-weight:700;background:var(--panel);color:var(--mut);
+ border:1px solid var(--bd);border-radius:9px;padding:8px 16px;cursor:pointer}
+.tab.on{color:#06101f;background:linear-gradient(135deg,var(--acc),var(--acc2));border-color:transparent}
+.view{display:none;background:var(--panel2);border:1px solid var(--bd);border-radius:var(--r);
+ overflow:auto;min-height:430px;max-height:72vh}
+.view.on{display:block}
+#plantwrap{width:100%;height:520px}
+#v-ladder,#v-st{padding:14px}
+pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
+.side{width:368px;flex-shrink:0;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.lab{color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px}
+.simctl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
+ border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+.ins{display:flex;flex-wrap:wrap;gap:8px}
+.sw{display:flex;align-items:center;gap:7px;background:#0a0f17;border:1px solid var(--bd);
+ border-radius:18px;padding:5px 11px;cursor:pointer;font-size:12.5px;user-select:none}
+.sw .knob{width:26px;height:15px;border-radius:9px;background:#39424f;position:relative;transition:.16s}
+.sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+ background:#cdd6e3;transition:.16s}
+.sw.on{border-color:var(--acc);color:#bcd8ff}
+.sw.on .knob{background:var(--acc)}.sw.on .knob::after{left:13px;background:#06101f}
+#detail .tagline2{font-size:16px;font-weight:800;margin-bottom:2px}
+#detail .sub{color:var(--mut);font-size:12px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:84px 1fr;gap:3px 10px;font-size:12.5px;margin-bottom:10px}
+.kv .k{color:var(--mut)}
+.bom{margin:4px 0 10px;padding-left:18px}
+.bom li{font-size:12.5px;color:#c6d2e0;margin:2px 0}
+.testbtn{width:100%;font:inherit;font-weight:800;font-size:13px;border:0;border-radius:9px;
+ padding:10px;cursor:pointer;background:linear-gradient(135deg,#3fb950,#2ea043);color:#03130a}
+.testbtn:disabled{opacity:.55}
+.tres{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.tline{display:flex;gap:8px;font-size:12.5px;background:#0a0f17;border:1px solid var(--bd);
+ border-radius:8px;padding:7px 10px;align-items:flex-start}
+.tline .nm{font-weight:700;white-space:nowrap}
+.tline .dt{color:var(--mut)}
+.tline.ok{border-color:rgba(63,185,80,.4)}.tline.bad{border-color:var(--err)}
+.empty{color:var(--mut);font-size:12.5px}
+.notice{background:rgba(210,153,34,.07);border:1px solid var(--amber);color:#f0c26b;
+ border-radius:10px;padding:9px 12px;font-size:12px;margin-top:14px}
+#main{display:none}
+@media(max-width:1020px){#studio{flex-direction:column}.side{width:100%}}
+</style></head>
+<body><div class="wrap">
+
+<div id="boot">
+ <h2>⚙ 엔진을 브라우저로 불러오는 중…</h2>
+ <div class="sub">서버 없이 <b>진짜 컴파일러 엔진(Python)</b>을 WebAssembly 로 그대로 실행합니다.
+  처음 한 번만 내려받습니다(이후 캐시).</div>
+ <div class="step" id="s1">1. 렌더러·시뮬레이터 모듈</div>
+ <div class="step" id="s2">2. Python 런타임 (Pyodide/WASM)</div>
+ <div class="step" id="s3">3. pydantic 패키지</div>
+ <div class="step" id="s4">4. 엔진 소스 (app/*.py — 저장소 그대로)</div>
+ <div class="step" id="s5">5. 엔진 기동·예열</div>
+ <div class="bar"><i id="prog"></i></div>
+ <div class="sub" id="bootmsg" style="margin-top:10px"></div>
+</div>
+
+<div id="main">
+<header class="top">
+ <span class="brand">자연어 <span class="g">공장 설계</span> 스튜디오</span>
+ <span class="tagline">브라우저 단독판 — 진짜 엔진(WASM) · 키·서버 불필요</span>
+ <span id="status"></span>
+</header>
+
+<div class="trybox">
+ <div class="tryrow">
+  <input id="nl" autocomplete="off" placeholder="예: 저수위 되면 펌프 켜고 고수위 되면 펌프 꺼"/>
+  <button class="btn" id="go">설계 생성 ▶</button>
+ </div>
+ <div class="chips" id="chips"></div>
+</div>
+
+<div class="strip" id="strip">
+ <span class="understood" id="und"></span>
+ <span id="badges"></span>
+</div>
+
+<div id="studio">
+ <div class="canvasCol">
+  <div class="tabs">
+   <button class="tab on" data-v="cad">공장 도면 (P&ID)</button>
+   <button class="tab" data-v="3d">3D 가동</button>
+   <button class="tab" data-v="ladder">래더</button>
+   <button class="tab" data-v="st">ST 코드</button>
+  </div>
+  <div class="view on" id="v-cad"><div id="cadwrap"></div></div>
+  <div class="view" id="v-3d"><div id="plantwrap"></div></div>
+  <div class="view" id="v-ladder"><div id="ladder"></div></div>
+  <div class="view" id="v-st"><pre id="st"></pre></div>
+ </div>
+ <div class="side">
+  <div class="card">
+   <div class="lab">가상 PLC — 실시간 스캔</div>
+   <div class="simctl"><button id="simtoggle">■ 정지</button>
+    <span class="empty">도면의 기기를 클릭하면 상세·정밀테스트</span></div>
+   <div class="ins" id="ins"></div>
+  </div>
+  <div class="card" id="detail">
+   <div class="lab">기기 상세 · 정밀 테스트</div>
+   <div id="detailbody" class="empty">도면(P&ID)에서 기기 심볼을 클릭하세요.</div>
+  </div>
+ </div>
+</div>
+
+<div class="notice">⚠ 디지털 트윈 <b>시뮬레이션</b>입니다(실물 아님). 이해·합성·구조검증·테스트는 실제
+ 엔진이 브라우저 안에서 수행합니다. Z3 형식증명·교차엔진 대조는 서버판에서 제공됩니다.
+ 본 도구는 설계 보조이며 안전 인증이 아닙니다.</div>
+</div>
+</div>
+
+<script>
+"use strict";
+// ── 소스 출처: 이 저장소의 브랜치 그대로(엔진 = 커밋된 코드 자체) ──────────────
+const RAW="https://raw.githubusercontent.com/baesy2/ld/claude/nlang-plc-design-8oYP1";
+const PYODIDE_CDN="https://cdn.jsdelivr.net/pyodide/v314.0.0/full/";
+const APP_MODULES=["__init__","models","korean","intent","compile_frame","synth",
+ "verifier","transpiler","plant","memory_map","wizard","boolexpr"];
+const VENDOR_MODULES=["__init__","profiles"];
+const JS_MODULES=["ladder-render.js","sim-engine.js","blueprint.js","precision.js"];
+const EXAMPLES=[
+ "버튼 누르면 모터 돌고 정지 누르면 멈춰",
+ "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",
+ "모터 돌리고 다음 펌프 켜고 다음 밸브 열어",
+ "압력 5바 넘으면 밸브 닫고 온도 200도 되면 히터 꺼",
+ "부품 10개 차면 배출하고 고장 나면 경광등 켜",
+];
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cssesc=(s)=>String(s).replace(/["\\]/g,"\\$&");
+
+let PY=null,COMPILE=null,RES=null,engine=null,bp=null,p3d=null,timer=null,running=false,selected=null;
+const forced={};const STEP=120;
+
+// raw 는 text/plain(nosniff)이라 <script src> 가 막힌다 → fetch 후 blob 으로 주입.
+async function loadScriptRaw(path){
+ const txt=await(await fetch(RAW+"/"+path)).text();
+ const url=URL.createObjectURL(new Blob([txt],{type:"text/javascript"}));
+ await new Promise((ok,bad)=>{const s=document.createElement("script");
+  s.src=url;s.onload=ok;s.onerror=()=>bad(new Error(path));document.head.appendChild(s);});
+}
+function step(n,state){const e=$("s"+n);if(e){e.className="step "+state;}}
+function prog(p,msg){$("prog").style.width=p+"%";if(msg)$("bootmsg").textContent=msg;}
+
+async function boot(){
+ try{
+  step(1,"on");prog(5,"렌더러 불러오는 중…");
+  for(const m of JS_MODULES)await loadScriptRaw("frontend/"+m);
+  step(1,"done");step(2,"on");prog(18,"Python 런타임(WASM) 내려받는 중… (~10MB, 최초 1회)");
+  await loadScriptRaw2(PYODIDE_CDN+"pyodide.js");
+  PY=await loadPyodide({indexURL:PYODIDE_CDN});
+  step(2,"done");step(3,"on");prog(55,"pydantic 패키지…");
+  await PY.loadPackage("pydantic");
+  step(3,"done");step(4,"on");prog(72,"엔진 소스(app/*.py) 불러오는 중…");
+  PY.FS.mkdir("/work");PY.FS.mkdir("/work/app");PY.FS.mkdir("/work/app/vendors");
+  await Promise.all(APP_MODULES.map(async(m)=>{
+   const t=await(await fetch(RAW+"/app/"+m+".py")).text();
+   PY.FS.writeFile("/work/app/"+m+".py",t);}));
+  await Promise.all(VENDOR_MODULES.map(async(m)=>{
+   const t=await(await fetch(RAW+"/app/vendors/"+m+".py")).text();
+   PY.FS.writeFile("/work/app/vendors/"+m+".py",t);}));
+  step(4,"done");step(5,"on");prog(88,"엔진 기동·예열…");
+  PY.runPython(`
+import sys, json
+sys.path.insert(0, "/work")
+from app.intent import extract
+from app.compile_frame import frame_to_spec
+from app.synth import synthesize_st
+from app.verifier import verify
+from app.transpiler import transpile_st
+from app.plant import plant_from_spec
+
+def compile_text(text):
+    frame = extract(text)
+    r = frame_to_spec(frame)
+    base = {"understood": frame.explain(), "unresolved": list(r.unresolved)}
+    if not r.confident:
+        base["confident"] = False
+        return json.dumps(base, ensure_ascii=False)
+    st = synthesize_st(r.spec)
+    rep = verify(r.spec, st)
+    ladder = transpile_st(st, title=r.spec.title)
+    base.update({
+        "confident": True, "ok": rep.passed,
+        "structured_text": st,
+        "ladder": ladder.model_dump(),
+        "plant": plant_from_spec(r.spec).model_dump(),
+        "double_coil_free": not any(i.code == "DOUBLE_COIL" for i in rep.issues),
+        "issues": [{"code": i.code, "severity": i.severity, "message": i.message}
+                   for i in rep.issues],
+    })
+    return json.dumps(base, ensure_ascii=False)
+`);
+  COMPILE=PY.globals.get("compile_text");
+  COMPILE("펌프 켜");// 예열
+  step(5,"done");prog(100,"준비 완료");
+  setTimeout(()=>{$("boot").style.display="none";$("main").style.display="block";},350);
+ }catch(e){
+  prog(100,"");$("bootmsg").innerHTML='<span style="color:var(--err)">로드 실패: '+esc(String(e))+
+   '<br>네트워크 연결을 확인하고 새로고침해 주세요.</span>';
+ }
+}
+// CDN 스크립트(text/javascript 정상 MIME)는 그냥 주입.
+function loadScriptRaw2(url){return new Promise((ok,bad)=>{const s=document.createElement("script");
+ s.src=url;s.onload=ok;s.onerror=()=>bad(new Error(url));document.head.appendChild(s);});}
+
+// ── 컴파일(브라우저 안 진짜 엔진) ───────────────────────────────────────────
+function compileLocal(text){return JSON.parse(COMPILE(text));}
+
+function setStatus(t,cls){const s=$("status");s.textContent=t||"";s.className=cls||"";}
+
+async function run(){
+ const text=$("nl").value.trim();if(!text||!COMPILE)return;
+ $("go").disabled=true;setStatus("⚙ 이해·합성·검증 중…");
+ let res;
+ try{res=compileLocal(text);}catch(e){setStatus("엔진 오류: "+e,"err");$("go").disabled=false;return;}
+ $("go").disabled=false;
+ RES=res;selected=null;
+ $("strip").style.display="flex";
+ $("und").textContent=res.understood||"";
+ let b="";
+ if(!res.confident){
+  const why=(res.unresolved&&res.unresolved.length)?" — "+esc(res.unresolved.join("; "))
+   :" — 도메인 밖이거나 불확실(정직 보류)";
+  $("badges").innerHTML='<span class="badge warn">🤔 확신하지 못함'+why+'</span>';
+  $("studio").style.display="none";
+  setStatus("보류됨 — 거짓 설계를 만들지 않습니다","err");stopSim();return;
+ }
+ b+='<span class="badge'+(res.ok?'':' bad')+'">'+(res.ok?"✓ 구조 검증 통과":"⚠ 검증 이슈")+'</span>';
+ b+='<span class="badge'+(res.double_coil_free?'':' bad')+'">이중코일 '+(res.double_coil_free?"0":"검출")+'</span>';
+ b+='<span class="badge warn">브라우저판 — Z3 형식증명은 서버판</span>';
+ $("badges").innerHTML=b;
+ $("studio").style.display="flex";
+ $("st").textContent=res.structured_text||"";
+ $("ladder").innerHTML=(window.LadderRender&&res.ladder)?window.LadderRender.svg(res.ladder):"";
+ bp=window.Blueprint?window.Blueprint.render($("cadwrap"),res.plant||{devices:[]},{
+   title:text,verified:res.ok,onSelect:selectDevice}):null;
+ if(p3d){p3d.destroy();p3d=null;}
+ if(viewOn("3d"))ensure3D();
+ renderDetailEmpty();
+ buildSim(res.structured_text);
+ setStatus("✓ 설계 완료 — 도면의 기기를 클릭해 정밀 테스트","ok");
+}
+
+// ── 3D(지연 로드: three.min.js 가 커서 탭 열 때만) ─────────────────────────
+let threeLoading=false;
+async function ensure3D(){
+ if(p3d||!RES||!RES.plant)return;
+ if(!window.THREE&&!threeLoading){
+  threeLoading=true;setStatus("3D 모듈 내려받는 중…");
+  try{await loadScriptRaw("frontend/vendor/three.min.js");
+      await loadScriptRaw("frontend/plant3d.js");}
+  catch(e){setStatus("3D 로드 실패: "+e,"err");return;}
+  setStatus("","");
+ }
+ if(window.Plant3D&&!p3d)
+  p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});
+}
+
+// ── 가상 PLC 루프/탭/상세/정밀테스트 (서버판과 동일 UX) ─────────────────────
+EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
+ c.textContent=t;c.onclick=()=>{$("nl").value=t;run();};$("chips").appendChild(c);});
+document.querySelectorAll(".tab").forEach((t)=>t.onclick=()=>{
+ document.querySelectorAll(".tab").forEach((x)=>x.classList.remove("on"));
+ document.querySelectorAll(".view").forEach((x)=>x.classList.remove("on"));
+ t.classList.add("on");$("v-"+t.dataset.v).classList.add("on");
+ if(t.dataset.v==="3d")ensure3D();
+ if(p3d&&t.dataset.v==="3d")p3d.resize();
+});
+function viewOn(v){const e=$("v-"+v);return e&&e.classList.contains("on");}
+
+function buildSim(st){
+ engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
+ Object.keys(forced).forEach((k)=>delete forced[k]);
+ const ins=engine?engine.inputs:[];
+ ins.forEach((s)=>forced[s]=false);
+ $("ins").innerHTML=ins.length
+  ?ins.map((s)=>'<span class="sw" data-sw="'+esc(s)+'"><span class="knob"></span>'+esc(s)+'</span>').join("")
+  :'<span class="empty">외부 입력이 없습니다(자동 동작).</span>';
+ $("ins").querySelectorAll("[data-sw]").forEach((el)=>{el.onclick=()=>toggleForced(el.dataset.sw);});
+ startSim();tick();
+}
+function toggleForced(s){
+ if(!(s in forced))return;
+ forced[s]=!forced[s];
+ document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
+  el.classList.toggle("on",forced[s]));
+ if(selected===s)selectDevice(s);
+ if(!running)tick();
+}
+function tick(){
+ if(!engine)return;
+ const r=engine.step(forced,STEP);
+ if(bp)bp.update(r);
+ if(p3d)p3d.update(r);
+ if(viewOn("ladder")&&RES&&RES.ladder)
+  $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);
+}
+function startSim(){running=true;$("simtoggle").textContent="■ 정지";
+ if(timer)clearInterval(timer);timer=setInterval(tick,STEP);}
+function stopSim(){running=false;if(timer){clearInterval(timer);timer=null;}
+ $("simtoggle").textContent="▶ 가동";}
+
+function devOf(sym){return (RES&&RES.plant?RES.plant.devices:[]).find((d)=>d.symbol===sym);}
+function renderDetailEmpty(){
+ $("detailbody").className="empty";
+ $("detailbody").innerHTML="도면(P&ID)에서 기기 심볼을 클릭하세요 — 태그·PLC 주소·부품 명세(BOM)·연결을 보고, 그 기기만 골라 정밀 테스트를 돌립니다.";
+}
+function selectDevice(sym){
+ selected=sym;if(bp)bp.select(sym);
+ const d=devOf(sym);if(!d){renderDetailEmpty();return;}
+ const conns=(RES.plant.connections||[]).filter((c)=>c.src===sym||c.dst===sym)
+  .map((c)=>c.kind==="pipe"?(c.src+" ⟶ "+c.dst+" (배관)"):(c.src+" ⤳ "+c.dst+" (신호)"));
+ let html='<div class="tagline2">'+esc(d.tag||d.symbol)+' · '+esc(d.symbol)+'</div>'
+  +'<div class="sub">'+esc(d.label||"")+'</div>'
+  +'<div class="kv">'
+  +'<span class="k">PLC 주소</span><span>'+esc(d.address||"—")+'</span>'
+  +'<span class="k">분류</span><span>'+esc(d.kind)+' / '+esc(d.role)+'</span>'
+  +((d.thresholds||[]).length?'<span class="k">설정값</span><span>'+d.thresholds.join(", ")+'</span>':"")
+  +((d.fed_by||[]).length?'<span class="k">공급원</span><span>'+d.fed_by.join(", ")+'</span>':"")
+  +'</div>';
+ if((d.parts||[]).length){
+  html+='<div class="lab">부품 명세 (BOM)</div><ul class="bom">'
+   +d.parts.map((p)=>'<li>'+esc(p)+'</li>').join("")+'</ul>';
+ }
+ if(conns.length){
+  html+='<div class="lab">연결</div><div style="font-size:12px;color:#c6d2e0">'
+   +conns.map(esc).join("<br>")+'</div>';
+ }
+ if(d.role==="input"){
+  html+='<div style="margin-top:10px"><span class="sw'+(forced[sym]?" on":"")
+   +'" data-dsw="'+esc(sym)+'"><span class="knob"></span>입력 '+(forced[sym]?"ON":"OFF")+'</span></div>';
+ }
+ let targets=[];
+ if(d.role==="output")targets=[sym];
+ else if(window.Precision&&RES.structured_text&&engine){
+  if(d.role==="tank")targets=(d.fed_by||[]).slice();
+  else{
+   const seeds=d.role==="gauge"?engine.inputs.filter((i)=>i.indexOf(sym+"_")===0):[sym];
+   const set=new Set();
+   seeds.forEach((s)=>window.Precision.influence(RES.structured_text,s).forEach((o)=>set.add(o)));
+   targets=[...set];
+  }
+ }
+ if(targets.length&&window.Precision){
+  html+='<div style="margin-top:12px"><button class="testbtn" id="runtest">'
+   +'정밀 테스트 ▶ '+targets.map(esc).join(", ")+'</button></div><div class="tres" id="tres"></div>';
+ }
+ $("detailbody").className="";
+ $("detailbody").innerHTML=html;
+ const dsw=$("detailbody").querySelector("[data-dsw]");
+ if(dsw)dsw.onclick=()=>toggleForced(dsw.dataset.dsw);
+ const rb=$("runtest");
+ if(rb)rb.onclick=()=>runPrecision(targets,rb);
+}
+async function runPrecision(targets,btn){
+ btn.disabled=true;btn.textContent="정밀 테스트 실행 중…";
+ const box=$("tres");box.innerHTML="";
+ let all=0,passn=0;
+ for(const o of targets){
+  const results=await window.Precision.testOutput(RES.structured_text,o,
+   {proven:[],stepMs:100,serverless:true});
+  results.forEach((t)=>{all++;if(t.pass)passn++;
+   box.innerHTML+='<div class="tline '+(t.pass?"ok":"bad")+'"><span>'+(t.pass?"✅":"❌")
+    +'</span><span class="nm">'+esc(o)+' · '+esc(t.name)+'</span><span class="dt">'
+    +esc(t.detail)+'</span></div>';});
+ }
+ box.innerHTML+='<div class="tline '+(passn===all?"ok":"bad")+'"><span>'
+  +(passn===all?"🏁":"⚠")+'</span><span class="nm">종합</span><span class="dt">'
+  +passn+'/'+all+' 통과</span></div>';
+ btn.disabled=false;btn.textContent="정밀 테스트 ▶ "+targets.join(", ");
+}
+
+$("go").onclick=run;
+$("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
+$("simtoggle").onclick=()=>{running?stopSim():startSim();};
+window.addEventListener("resize",()=>{if(p3d)p3d.resize();});
+boot();
+</script>
+</body></html>
