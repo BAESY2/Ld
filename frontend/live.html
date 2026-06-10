@@ -176,6 +176,17 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
    <div class="lab">로직 설명 (자동 생성)</div>
    <div id="explain" style="font-size:12.5px;color:#c6d2e0"></div>
   </div>
+  <div class="card">
+   <div class="lab">에러코드 진단 — LS·미쓰비시·지멘스·오므론 (67건 자료)</div>
+   <div style="display:flex;gap:6px">
+    <input id="ecq" placeholder="예: 6706, 배터리, SF, 통신" style="flex:1;background:#0a0f17;
+     border:1px solid var(--bd);color:var(--fg);font:inherit;font-size:13px;
+     padding:8px 10px;border-radius:8px;outline:none;min-width:0"/>
+    <button class="simbtn" id="ecgo">검색</button>
+   </div>
+   <div id="ecres" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;
+    max-height:300px;overflow:auto"></div>
+  </div>
   <div class="card" id="detail">
    <div class="lab">기기 상세 · 정밀 테스트</div>
    <div id="detailbody" class="empty">도면(P&ID)에서 기기 심볼을 클릭하세요 —
@@ -286,6 +297,25 @@ EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip"
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=()=>{running?stopSim():startSim();};
 $("demotoggle").onclick=toggleDemo;
+
+function renderErrors(list){
+ const box=$("ecres");
+ if(!list.length){box.innerHTML='<div class="empty">결과 없음 — 다른 키워드로(코드번호/증상/LED명)</div>';return;}
+ box.innerHTML=list.slice(0,12).map((e)=>{
+  const sev=e.severity==="FATAL"?"🔴":e.severity==="WARNING"?"🟡":"🔵";
+  const src=e.source_url?' · <a href="'+esc(e.source_url)+'" target="_blank" style="color:var(--acc)">출처</a>':"";
+  return '<div class="tline"><span>'+sev+'</span><div><b>'+esc(e.vendor)+' '+esc(e.code)+'</b> — '
+   +esc(e.title)+'<div class="dt" style="margin-top:2px">원인: '+esc(e.likely_cause||"—")
+   +'</div><div class="dt">조치: '+esc(e.suggested_action||"—")+src+'</div></div></div>';
+ }).join("");
+}
+
+$("ecgo").onclick=async()=>{
+ const q=$("ecq").value.trim();if(!q)return;
+ try{const r=await(await fetch("/api/errorcodes?q="+encodeURIComponent(q))).json();
+  renderErrors(r);}catch(e){$("ecres").innerHTML='<div class="empty">서버 연결 실패</div>';}
+};
+$("ecq").addEventListener("keydown",(e)=>{if(e.key==="Enter")$("ecgo").click();});
 
 $("fulltest").onclick=async()=>{
  if(!engine||!RES)return;
