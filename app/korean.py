@@ -134,6 +134,7 @@ DEVICES: dict[str, str] = {
     # 로봇·비전 검사
     "다관절로봇": "ROBOT", "로봇팔": "ROBOT", "로보트": "ROBOT", "매니퓰레이터": "ROBOT",
     "비전": "VISION", "카메라": "VISION", "비전카메라": "VISION",
+    "비상정지": "ESTOP", "비상스위치": "ESTOP", "이머전시": "ESTOP", "비상": "ESTOP",
     "불량": "NG", "불량품": "NG",
     # 기동 방식
     "스타델타": "STAR_DELTA", "와이델타": "STAR_DELTA", "스타델타기동": "STAR_DELTA",

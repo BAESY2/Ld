@@ -367,3 +367,29 @@ def test_unknown_device_not_renamed_to_eject() -> None:
     # 무주어 '배출해'는 여전히 EJECT(의도된 동작)
     r2 = frame_to_spec("배출해")
     assert "EJECT :=" in synthesize_st(r2.spec)
+
+
+def test_estop_guards_all_outputs() -> None:
+    """비상정지(ESTOP) — 전 출력에 'AND NOT ESTOP' 가드. 눌리면 모든 출력 즉시 차단."""
+    from app.simulator import simulate
+
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 비상정지 누르면 전부 멈춰")
+    assert r.confident
+    st = synthesize_st(r.spec)
+    assert "AND NOT (ESTOP)" in st
+    assert verify(r.spec, st).passed and detect_double_coils(st) == {}
+    outs = [p.symbol for p in r.spec.io_points if p.direction.value == "OUTPUT"]
+    ins = [p.symbol for p in r.spec.io_points if p.direction.value == "INPUT"]
+    # 모든 입력을 켜도(ESTOP 포함) ESTOP=1 인 스캔에서 출력은 전부 0 이어야 한다.
+    res = simulate(st, [(100, {i: True for i in ins})], duration_ms=2000, step_ms=100)
+    for s in res.samples:
+        if s.inputs.get("ESTOP"):
+            assert not any(s.outputs.get(o) for o in outs), "ESTOP 중 출력 ON — 안전 위반"
+
+
+def test_estop_not_an_output_device() -> None:
+    """ESTOP 은 출력 기기가 아니다(가드일 뿐) — 출력 심볼에 ESTOP 없음."""
+    r = frame_to_spec("버튼 누르면 모터 돌고 비상정지 누르면 다 꺼")
+    outs = {p.symbol for p in r.spec.io_points if p.direction.value == "OUTPUT"}
+    assert outs == {"MOTOR"} and "ESTOP" not in outs
+    assert "MOTOR := ((START OR MOTOR)) AND NOT (ESTOP);" in synthesize_st(r.spec)

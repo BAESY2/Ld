@@ -124,7 +124,7 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
 _NON_ACTUATABLE = {
     "PRESSURE", "TEMP", "LEVEL", "LEVEL_LO", "LEVEL_HI", "FAULT", "BUTTON",
     "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK", "BOTTLE",
-    "VISION", "NG",
+    "VISION", "NG", "ESTOP",
 }
 # 물리 구동을 뜻하는 동작 술어(이것이 비액추에이터에 걸리면 부적합).
 _ACTUATION_PREDS = _ON | _OFF
@@ -365,8 +365,23 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     last_action = False
     last_out: str | None = None  # 직전 동작의 출력 — 무주어 동작의 지시 해소(anaphora)
     unresolved: list[str] = []
+    estop = False  # 비상정지(ESTOP) 단서 — 전 출력에 'AND NOT ESTOP' 가드를 박는다.
+    after_estop = False  # 직전이 ESTOP 절이면, 뒤따르는 무주어 '다 꺼/전부 멈춰'를 소비.
 
     for i, c in enumerate(frame.clauses):
+        # 비상정지는 출력이 아니라 *전역 차단 가드* — 조건/동작 어느 절에 나와도 표지만 남긴다.
+        if c.device == "ESTOP":
+            estop = True
+            after_estop = True
+            b.add_input("ESTOP")
+            continue
+        # 비상정지 직후 무주어 OFF 동작('다 꺼'·'전부 멈춰')은 가드가 구현하는 효과 — 소비.
+        if (after_estop and c.kind == ClauseKind.ACTION
+                and _out_symbol(c) is None and c.predicate in _OFF):
+            after_estop = False
+            last_action = True
+            continue
+        after_estop = False
         if c.kind == ClauseKind.COND:
             if last_action:
                 pending = []
@@ -444,6 +459,9 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
             others = [o for o in guarded if o != d.output]
             if others:
                 d.expression = f"({d.expression}) AND NOT ({' OR '.join(others)})"
+    if estop and built:  # 비상정지: 전 출력에 'AND NOT ESTOP' — 누르면 즉시 전 출력 차단.
+        for d in derived:
+            d.expression = f"({d.expression}) AND NOT (ESTOP)"
 
     io: list[IOPoint] = [
         IOPoint(symbol=s, direction=IODirection.INPUT, data_type=dt)
