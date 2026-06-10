@@ -21,10 +21,12 @@ const res = JSON.parse(fs.readFileSync(process.argv[2] || "/tmp/plantres2.json",
 const noop = () => {};
 function fakeCanvasCtx() {
   return {
-    font: "", fillStyle: "", strokeStyle: "", textBaseline: "",
+    font: "", fillStyle: "", strokeStyle: "", textBaseline: "", lineWidth: 1,
     measureText: (t) => ({ width: 10 * String(t).length }),
     beginPath: noop, roundRect: noop, rect: noop, fill: noop, stroke: noop,
-    fillText: noop,
+    fillText: noop, fillRect: noop, strokeRect: noop,
+    save: noop, restore: noop, translate: noop, rotate: noop,
+    moveTo: noop, lineTo: noop, closePath: noop,
   };
 }
 global.document = {

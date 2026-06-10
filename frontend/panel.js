@@ -114,13 +114,14 @@
     s.push(txt(inX, 64, "3Φ IN", 9, AMBER, "middle", 700));
     s.push('<g class="wire on" data-w="MAIN">' + symBreaker(inX, 70, "MCCB(M)") + "</g>");
     s.push('<g class="wire on" data-w="MAIN">' + line(inX, BUS_Y, LEFT + outs.length * COL_W - 60, BUS_Y, "currentColor", 0) + "</g>");
-    // 부스바(3선 표현 — 굵은 동색 1선 + 빗금 3Φ 표기)
+    // 부스바 — R/S/T 3도체(동색) + 상 라벨
     var busEnd = Math.max(LEFT + outs.length * COL_W - 60, inX + 120);
-    s.push(line(inX, BUS_Y, busEnd, BUS_Y, BUS, 5));
-    s.push(line(inX + 26, BUS_Y - 7, inX + 36, BUS_Y + 7, BUS, 1.6));
-    s.push(line(inX + 31, BUS_Y - 7, inX + 41, BUS_Y + 7, BUS, 1.6));
-    s.push(line(inX + 36, BUS_Y - 7, inX + 46, BUS_Y + 7, BUS, 1.6));
-    s.push(txt(busEnd - 4, BUS_Y - 10, "BUSBAR 380V", 8.5, BUS, "end"));
+    ["R", "S", "T"].forEach(function (ph, pi) {
+      var by = BUS_Y - 6 + pi * 6;
+      s.push(line(inX, by, busEnd, by, BUS, 2.2));
+      s.push(txt(inX - 8, by + 3, ph, 8, BUS, "end"));
+    });
+    s.push(txt(busEnd - 4, BUS_Y - 14, "BUSBAR 3Φ AC380V", 8.5, BUS, "end"));
 
     // 기기별 분기 회로
     var colX = {};
@@ -132,19 +133,29 @@
       g.push('<rect class="hitbox" x="' + (x - 56) + '" y="' + (BUS_Y + 4) +
         '" width="118" height="' + (H - BUS_Y - 60) + '" rx="6" fill="transparent"/>');
       g.push('<g class="wire" data-w="' + esc(d.symbol) + '">');
-      g.push('<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + BUS + '"/>');
+      [-6, 0, 6].forEach(function (dy) {
+        g.push('<circle cx="' + x + '" cy="' + (y + dy) + '" r="2.2" fill="' + BUS + '"/>');
+      });
+      // 3φ 빗금 + 전선번호
+      g.push(line(x - 5, y + 10, x + 5, y + 18, "currentColor", 1.2));
+      g.push(line(x - 5, y + 13, x + 5, y + 21, "currentColor", 1.2));
+      g.push(line(x - 5, y + 16, x + 5, y + 24, "currentColor", 1.2));
+      g.push(txt(x + 10, y + 20, "W" + (101 + i), 7.5, DIM, "start"));
+      g.push(line(x, y + 6, x, y + 28, "currentColor", 2));
       var hasVfd = has(d, "인버터");
       var hasMC = has(d, "전자접촉기");
       var hasEocr = has(d, "열동계전기");
       var hasBrk = has(d, "MCCB") || has(d, "MCB");
-      var cy = y + 6;
+      var cy = y + 28;
       if (hasBrk) { g.push(symBreaker(x, cy, has(d, "MCCB") ? "MCCB" : "MCB")); cy += 56; }
       else { g.push(line(x, cy, x, cy + 18, "currentColor", 2)); cy += 18; }
       if (hasVfd) { g.push(symVFD(x, cy)); cy += 50; }
       if (hasMC) { g.push(symMC(x, cy)); cy += 46; }
       else { g.push(symRelay(x, cy)); cy += 38; }
       if (hasEocr) { g.push(symEOCR(x, cy)); cy += 43; }
-      g.push(symTerminal(x, cy)); cy += 18;
+      g.push(symTerminal(x, cy));
+      g.push(txt(x, cy + 22, "U  V  W", 7, DIM));
+      cy += 18;
       g.push(line(x, cy, x, cy + 12, "currentColor", 2));
       g.push("</g>");
       // 부하 명판
@@ -155,6 +166,34 @@
       g.push("</g>");
       s.push(g.join(""));
     });
+
+    // 제어회로(AC220V) — L/N 레일 + 출력별 [PLC 접점]-(MC 코일) 렁
+    if (outs.length) {
+      var cy1 = 408, cy2 = 462;
+      var cx0 = LEFT - 60, cx1 = LEFT + (outs.length - 1) * COL_W + 60;
+      s.push(txt(cx0, cy1 - 8, "제어회로 AC220V", 8.5, DIM, "start"));
+      s.push(line(cx0, cy1, cx1, cy1, INK, 1.6));
+      s.push(line(cx0, cy2, cx1, cy2, INK, 1.6));
+      s.push(txt(cx0 - 6, cy1 + 3, "L", 8.5, INK, "end"));
+      s.push(txt(cx0 - 6, cy2 + 3, "N", 8.5, INK, "end"));
+      outs.forEach(function (d, i) {
+        var x = colX[d.symbol];
+        var g2 = ['<g class="wire" data-w="' + esc(d.symbol) + '">'];
+        g2.push(line(x, cy1, x, cy1 + 12, "currentColor", 1.6));
+        // PLC 출력 접점 -| |-
+        g2.push(line(x - 7, cy1 + 12, x - 7, cy1 + 24, "currentColor", 2));
+        g2.push(line(x + 7, cy1 + 12, x + 7, cy1 + 24, "currentColor", 2));
+        g2.push(txt(x + 12, cy1 + 21, d.address || d.symbol, 7, DIM, "start"));
+        g2.push(line(x, cy1 + 24, x, cy1 + 32, "currentColor", 1.6));
+        // MC 코일 ( )
+        g2.push('<circle class="coil" cx="' + x + '" cy="' + (cy1 + 42) +
+          '" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>');
+        g2.push(txt(x, cy1 + 45.5, "MC", 7.5, "currentColor"));
+        g2.push(line(x, cy1 + 51, x, cy2, "currentColor", 1.6));
+        g2.push("</g>");
+        s.push(g2.join(""));
+      });
+    }
 
     // PLC 슬라이스 + 제어 결선(PLC→MC 코일 파선)
     s.push('<rect x="' + plcX + '" y="' + plcY + '" width="120" height="240" rx="5" ' +
