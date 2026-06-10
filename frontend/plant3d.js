@@ -358,7 +358,9 @@
         { emissive: [COL.on, COL.amber, COL.accent][i2], ei: .4 }));
       led.position.set(-.28 + i2 * .28, 1.62, .32); cab.add(led); leds.push(led);
     }
-    cab.add(Object.assign(labelSprite("PLC", "LS XGK"), { position: new T.Vector3(0, 2.35, 0) }));
+    var cabLabel = labelSprite("PLC", "LS XGK");
+    cabLabel.position.set(0, 2.35, 0);   // 주의: THREE 의 position 은 재할당 불가(읽기전용 프로퍼티)
+    cab.add(cabLabel);
     cab.position.set(plcPos.x, 0, plcPos.z);
     scene.add(cab);
     return { leds: leds, pos: new T.Vector3(plcPos.x, 1.1, plcPos.z) };

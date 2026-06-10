@@ -370,8 +370,14 @@ async function ensure3D(){
   catch(e){setStatus("3D 로드 실패: "+e,"err");return;}
   setStatus("","");
  }
- if(window.Plant3D&&!p3d)
-  p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});
+ if(window.Plant3D&&!p3d){
+  try{p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});}
+  catch(e){ // 침묵 실패 금지 — 원인을 화면에 표시
+   $("plantwrap").innerHTML='<div class="empty" style="padding:18px;color:var(--err)">'+
+    '3D 렌더 오류: '+esc(String(e&&e.message||e))+'</div>';
+   console.error("Plant3D",e);
+  }
+ }
 }
 
 // ── 가상 PLC 루프/탭/상세/정밀테스트 (서버판과 동일 UX) ─────────────────────

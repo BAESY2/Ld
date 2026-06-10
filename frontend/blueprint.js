@@ -199,6 +199,31 @@
         (d.address || d.symbol), 7.5, DIM, isOut ? "start" : "end"));
     });
 
+    // ── 주공정 라인 — 설비들이 배관 위에 인라인으로 앉는다(P&ID 의 척추) ──────
+    var procParts = [];
+    if (eqRow.length >= 1) {
+      var pl = pos[eqRow[0].symbol], pr = pos[eqRow[eqRow.length - 1].symbol];
+      var px0 = pl.x - 64, px1 = pr.x + 64, py0 = pl.y;
+      procParts.push('<path class="pipe" d="M ' + px0 + " " + py0 + " H " + px1 + '"/>');
+      // 흐름 화살표(설비 사이마다)
+      for (var ei = 0; ei < eqRow.length - 1; ei++) {
+        var ax = (pos[eqRow[ei].symbol].x + pos[eqRow[ei + 1].symbol].x) / 2;
+        procParts.push('<path d="M ' + (ax - 6) + " " + (py0 - 5) + " L " + (ax + 6) + " " + py0 +
+          " L " + (ax - 6) + " " + (py0 + 5) + ' Z" fill="' + PIPE + '"/>');
+      }
+      procParts.push(txt(px0 + 2, py0 - 12, "공정 흐름 →", 8.5, DIM, "start"));
+    }
+    s.push("<g>" + procParts.join("") + "</g>");
+
+    // 계기 리더선 — 계기/탱크 버블에서 주공정 라인까지 파선 인하(검출점 표기)
+    gauges.forEach(function (d) {
+      var p = pos[d.symbol];
+      s.push('<path class="lead" d="M ' + p.x + " " + (p.y + 16) + " V " + (BAND_EQ - 26) +
+        '" fill="none"/>');
+      s.push('<circle cx="' + p.x + '" cy="' + (BAND_EQ - 22) + '" r="3.4" fill="none" stroke="' +
+        INK + '" stroke-width="1.3"/>');
+    });
+
     // ── 연결 — 배관(탱크) · 신호선(PLC) ───────────────────────────────────
     var wires = [];
     var laneIdx = 0;
@@ -277,17 +302,18 @@
       "<style>" +
       ".bp{font-family:ui-monospace,Menlo,monospace}" +
       ".bp .dev{cursor:pointer;color:" + INK + "}" +
-      ".bp .dev .body{fill:none;stroke:currentColor;stroke-width:1.6}" +
+      ".bp .dev .body{fill:none;stroke:currentColor;stroke-width:2.1}" +
       ".bp .dev.r-gauge .body,.bp .dev.r-input .body{stroke-width:1.4}" +
       ".bp .dev.on{color:" + ON + "}" +
       ".bp .dev.on .body{filter:drop-shadow(0 0 4px rgba(63,185,80,.7))}" +
       ".bp .dev.sel .hit{stroke:" + WHITE + ";stroke-dasharray:5 4;stroke-width:1.2}" +
       ".bp .dev.alarm{color:" + RED + "}" +
-      ".bp .pipe{fill:none;stroke:" + PIPE + ";stroke-width:3}" +
+      ".bp .pipe{fill:none;stroke:" + PIPE + ";stroke-width:3.5}" +
       ".bp .flowdash{fill:none;stroke:" + ON + ";stroke-width:2;stroke-dasharray:7 9;opacity:0}" +
       ".bp .flowdash.go{opacity:1;animation:bpflow 1s linear infinite}" +
       "@keyframes bpflow{to{stroke-dashoffset:-32}}" +
       ".bp .sig{fill:none;stroke:" + DIM + ";stroke-width:1;stroke-dasharray:5 4}" +
+      ".bp .lead{stroke:" + DIM + ";stroke-width:1;stroke-dasharray:3 4}" +
       ".bp .sig.hot{stroke:" + ON + "}" +
       ".bp .water{fill:rgba(47,129,247,.55)}" +
       ".bp .dev.on .rays{animation:bpblink .5s steps(2) infinite}" +

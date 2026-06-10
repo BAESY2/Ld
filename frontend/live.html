@@ -311,8 +311,15 @@ async function run(){
 }
 
 function ensure3D(){
- if(p3d||!RES||!RES.plant||!window.Plant3D)return;
- p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});
+ if(p3d||!RES||!RES.plant)return;
+ if(!window.Plant3D){$("plantwrap").innerHTML=
+  '<div class="empty" style="padding:18px">3D 모듈(three.js) 로드 실패 — 새로고침해 주세요.</div>';return;}
+ try{p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});}
+ catch(e){ // 침묵 실패 금지 — 원인을 화면에 그대로 보여준다
+  $("plantwrap").innerHTML='<div class="empty" style="padding:18px;color:var(--err)">'+
+   '3D 렌더 오류: '+esc(String(e&&e.message||e))+'</div>';
+  console.error("Plant3D",e);
+ }
 }
 
 // ── 가상 PLC 루프 ──────────────────────────────────────────────────────────
