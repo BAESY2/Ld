@@ -7,11 +7,11 @@ from app.error_codes import DB, Vendor
 
 def test_kb_breadth_per_vendor() -> None:
     """브랜드별 최소 충실도 — 4사 + 공통 수칙이 모두 자료화돼 있다."""
-    assert len(DB.search("", Vendor.LS_ELECTRIC)) >= 12
-    assert len(DB.search("", Vendor.MITSUBISHI)) >= 14
-    assert len(DB.search("", Vendor.SIEMENS)) >= 8
-    assert len(DB.search("", Vendor.OMRON)) >= 5
-    assert len(DB.search("")) >= 60
+    assert len(DB.search("", Vendor.LS_ELECTRIC)) >= 18
+    assert len(DB.search("", Vendor.MITSUBISHI)) >= 22
+    assert len(DB.search("", Vendor.SIEMENS)) >= 14
+    assert len(DB.search("", Vendor.OMRON)) >= 8
+    assert len(DB.search("")) >= 100
 
 
 def test_kb_entries_have_substance_and_source() -> None:
