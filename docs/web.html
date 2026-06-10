@@ -57,6 +57,11 @@ header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wr
 #plantwrap{width:100%;height:520px}
 #cadwrap,#panelwrap{width:100%;height:520px}
 #v-ladder,#v-st{padding:14px}
+.ladderbar{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.ladderbar .zbtn{font:inherit;font-size:13px;min-width:34px;background:#0a0f17;color:var(--fg);
+ border:1px solid var(--bd);border-radius:7px;padding:4px 10px;cursor:pointer}
+.ladderbar .zbtn:hover{border-color:var(--acc);color:#bcd8ff}
+.ladderbar .zlab{color:var(--mut);font-size:11.5px;margin-left:4px}
 pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
 .side{width:368px;flex-shrink:0;display:flex;flex-direction:column;gap:12px}
 .card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
@@ -144,7 +149,15 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
   <div class="view on" id="v-cad"><div id="cadwrap"></div></div>
   <div class="view" id="v-panel"><div id="panelwrap" style="height:520px"></div></div>
   <div class="view" id="v-3d"><div id="plantwrap"></div></div>
-  <div class="view" id="v-ladder"><div id="ladder"></div></div>
+  <div class="view" id="v-ladder">
+   <div class="ladderbar">
+    <button class="zbtn" id="lz-out" title="축소">−</button>
+    <button class="zbtn" id="lz-in" title="확대">+</button>
+    <button class="zbtn" id="lz-fit" title="컨테이너 폭에 맞춤">맞춤</button>
+    <span class="zlab" id="lz-lab">폭 맞춤</span>
+   </div>
+   <div id="ladder"></div>
+  </div>
   <div class="view" id="v-st"><pre id="st"></pre></div>
  </div>
  <div class="side">
@@ -227,6 +240,20 @@ const cssesc=(s)=>String(s).replace(/["\\]/g,"\\$&");
 
 let PY=null,COMPILE=null,RES=null,engine=null,bp=null,pnl=null,p3d=null,timer=null,running=false,selected=null;
 const forced={};const STEP=120;
+
+// ── 래더 줌 — "fit"=폭 100% 맞춤(viewBox), 숫자=원본 대비 배율 ────────────────
+let ladderZoom="fit",ladderTable=null;
+function renderLadder(){
+ if(!window.LadderRender)return;
+ $("lz-lab").textContent=ladderZoom==="fit"?"폭 맞춤":Math.round(ladderZoom*100)+"%";
+ $("ladder").innerHTML=(RES&&RES.ladder)
+  ?window.LadderRender.svg(RES.ladder,ladderTable,{zoom:ladderZoom}):"";
+}
+function setLadderZoom(z){ladderZoom=z;renderLadder();}
+function ladderZoomStep(dir){
+ const cur=ladderZoom==="fit"?1:ladderZoom;
+ setLadderZoom(Math.min(3,Math.max(0.3,cur*(dir>0?1.25:0.8))));
+}
 let demoOn=true,demoTimer=null,demoK=0;
 function setDemoBtn(){$("demotoggle").textContent=demoOn?"자동 시연 ●":"자동 시연 ○";
  $("demotoggle").style.color=demoOn?"var(--ok)":"var(--mut)";}
@@ -415,7 +442,7 @@ async function run(){
  $("badges").innerHTML=b;
  $("studio").style.display="flex";
  $("st").textContent=res.structured_text||"";
- $("ladder").innerHTML=(window.LadderRender&&res.ladder)?window.LadderRender.svg(res.ladder):"";
+ ladderTable=null;renderLadder();
  bp=window.Blueprint?window.Blueprint.render($("cadwrap"),res.plant||{devices:[]},{
    title:text,verified:res.ok,onSelect:selectDevice}):null;
  pnl=window.Panel?window.Panel.render($("panelwrap"),res.plant||{devices:[]},{
@@ -489,8 +516,8 @@ function tick(){
  if(pnl)pnl.update(r);
  metricsTick(r);
  if(p3d)p3d.update(r);
- if(viewOn("ladder")&&RES&&RES.ladder)
-  $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);
+ ladderTable=r.table;
+ if(viewOn("ladder"))renderLadder();
 }
 function startSim(){running=true;$("simtoggle").textContent="■ 정지";
  if(timer)clearInterval(timer);timer=setInterval(tick,STEP);}
@@ -571,6 +598,9 @@ $("go").onclick=run;
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=()=>{running?stopSim():startSim();};
 $("demotoggle").onclick=toggleDemo;
+$("lz-in").onclick=()=>ladderZoomStep(1);
+$("lz-out").onclick=()=>ladderZoomStep(-1);
+$("lz-fit").onclick=()=>setLadderZoom("fit");
 
 function renderErrors(list){
  const box=$("ecres");

@@ -1,6 +1,10 @@
-// 공유 래더 SVG 렌더러 v2 (읽기 전용) — 에디터/생성기/스튜디오/웹 공용.
-//   window.LadderRender.svg(ladder)         -> 정적 SVG.
-//   window.LadderRender.svg(ladder, state)  -> state(심볼→bool)로 파워플로우 라이브.
+// 공유 래더 SVG 렌더러 v3 (읽기 전용) — 에디터/생성기/스튜디오/웹 공용.
+//   window.LadderRender.svg(ladder)                -> 정적 SVG.
+//   window.LadderRender.svg(ladder, state)         -> state(심볼→bool)로 파워플로우 라이브.
+//   window.LadderRender.svg(ladder, state, {zoom}) -> zoom: "fit"(기본, 폭 100% 맞춤)
+//                                                     또는 배율 숫자(1=원본, 0.5, 2 …).
+// v3: viewBox 기반 스케일(컨테이너 폭 맞춤 + 원본 크기 토글), 대규모(렁 50+) 가독성 —
+//     렁 헤더에 출력 심볼 요약, 긴 주석은 말줄임(…) 처리.
 // XG5000 풍 전문 도면 문법: 렁 번호 박스·주석 밴드·셀 그리드·정식 접점/코일 심볼·
 // 타이머/카운터 펑션블록(PT 표시)·분기 정션 도트·통전 경로 글로우.
 (function () {
@@ -23,6 +27,24 @@
     return '<text x="' + x + '" y="' + y + '" font-size="' + size + '" fill="' + fill +
       '" text-anchor="' + (anchor || "middle") + '"' +
       (weight ? ' font-weight="' + weight + '"' : "") + ">" + esc(s) + "</text>";
+  }
+  // 근사 텍스트 폭(px) — 모노스페이스 기준, 한글 등 전각 문자는 폰트 크기만큼 차지.
+  function textW(s, size) {
+    var w = 0;
+    for (var i = 0; i < s.length; i++)
+      w += s.charCodeAt(i) > 0x2e7f ? size : size * 0.62;
+    return w;
+  }
+  // 긴 텍스트 말줄임 — maxW(px)를 넘으면 잘라내고 "…" 를 붙인다.
+  function clip(s, size, maxW) {
+    s = String(s);
+    if (textW(s, size) <= maxW) return s;
+    var out = "";
+    for (var i = 0; i < s.length; i++) {
+      if (textW(out + s.charAt(i), size) + size > maxW) break;
+      out += s.charAt(i);
+    }
+    return out + "…";
   }
   function wireCol(live) { return live === null ? C_WIRE : (live ? C_LIVE : C_OFF); }
   function wireW(live) { return live ? 2.6 : 1.6; }
@@ -107,7 +129,21 @@
     p.push('<rect x="' + (LEFT + 4) + '" y="' + (y0 + 4) +
       '" width="44" height="18" rx="3" fill="#1b2738" stroke="#2c3e57" stroke-width="1"/>');
     p.push(txt(LEFT + 26, y0 + 17, String(ri + 1).padStart(4, "0"), 10, C_BLK, "middle", 700));
-    if (rung.comment) p.push(txt(LEFT + 56, y0 + 17, rung.comment, 10.5, C_DIM, "start"));
+    // 출력 심볼 요약(우측 정렬) — 렁 50+ 에서 스크롤 중에도 어떤 출력 렁인지 즉독.
+    var osyms = (rung.outputs || []).map(function (o) { return o.symbol; });
+    var summary = osyms.length
+      ? "▸ " + (osyms.length > 3
+          ? osyms.slice(0, 3).join(",") + " +" + (osyms.length - 3)
+          : osyms.join(","))
+      : "";
+    var sumW = summary ? textW(summary, 10) + 12 : 0;
+    if (summary) p.push(txt(rightRail - 8, y0 + 17, summary, 10, C_BLK, "end", 600));
+    // 긴 주석은 요약과 겹치지 않게 말줄임.
+    if (rung.comment) {
+      var cmax = rightRail - 8 - sumW - (LEFT + 56);
+      p.push(txt(LEFT + 56, y0 + 17, clip(rung.comment, 10.5, Math.max(cmax, 40)),
+        10.5, C_DIM, "start"));
+    }
 
     var top = y0 + HEAD_H;
     var branches = rung.input_branches.length ? rung.input_branches : [{ elements: [] }];
@@ -169,7 +205,8 @@
     return "<g>" + p.join("") + "</g>";
   }
 
-  function svg(ladder, state) {
+  function svg(ladder, state, opts) {
+    opts = opts || {};
     var rungs = (ladder && ladder.rungs) || [];
     if (!rungs.length)
       return '<div style="padding:20px;color:#8b94a3;font-size:13px">래더가 비어 있습니다.</div>';
@@ -189,9 +226,23 @@
       parts.push(drawRung(rung, ri, y, h, busR, coilX, rightRail, st));
       y += h + 6;
     });
-    return '<svg width="' + width + '" height="' + (y + 8) +
-      '" xmlns="http://www.w3.org/2000/svg" ' +
-      'style="background:' + C_BG + ';border-radius:8px" ' +
+    var height = y + 8;
+    // 줌: 숫자 배율이면 고정 픽셀 크기, 그 외("fit"/생략)는 viewBox 로 컨테이너 폭 100% 맞춤.
+    var zoom = opts.zoom;
+    var style = "background:" + C_BG + ";border-radius:8px;display:block";
+    var dims;
+    if (typeof zoom === "number" && isFinite(zoom) && zoom > 0) {
+      dims = 'width="' + Math.round(width * zoom) + '" height="' + Math.round(height * zoom) + '"';
+      style += ";max-width:none";
+    } else {
+      dims = 'width="' + width + '" height="' + height + '"';
+      style += ";width:100%;height:auto";
+    }
+    return '<svg viewBox="0 0 ' + width + " " + height + '" ' + dims +
+      ' preserveAspectRatio="xMinYMin meet"' +
+      ' data-natural-width="' + width + '" data-natural-height="' + height + '"' +
+      ' xmlns="http://www.w3.org/2000/svg" ' +
+      'style="' + style + '" ' +
       'font-family="ui-monospace,Menlo,Consolas,monospace">' + parts.join("") + "</svg>";
   }
 
