@@ -58,12 +58,21 @@
       var label = t === "TIMER" ? "TON" : "CTU";
       var stroke = lit ? C_LIVE : C_BLK;
       var pt = (out.description || "").trim();
+      // 라이브 값: 타이머 ET/PT(ms), 카운터 CV/PV — state 가 있으면 실시간 수치.
+      if (state) {
+        if (t === "TIMER" && state[out.symbol + ".ET"] != null) {
+          pt = (state[out.symbol + ".ET"] / 1000).toFixed(1) + "s / " +
+               ((state[out.symbol + ".PT"] || 0) / 1000).toFixed(1) + "s";
+        } else if (t === "COUNTER" && state[out.symbol + ".CV"] != null) {
+          pt = "CV " + state[out.symbol + ".CV"] + " / PV " + (state[out.symbol + ".PV"] || "?");
+        }
+      }
       g.push('<rect x="' + cx + '" y="' + (cy - 22) + '" width="' + COIL_W +
         '" height="44" rx="5" fill="#121a26" stroke="' + stroke + '" stroke-width="1.6"/>');
       g.push(line(cx, cy - 6, cx + COIL_W, cy - 6, "#22304273", 1));
       g.push(txt(cx + COIL_W / 2, cy - 10, label + "  " + out.symbol, 11,
         lit ? C_LIVE : C_BLK, "middle", 700));
-      g.push(txt(cx + COIL_W / 2, cy + 11, pt || "—", 9.5, C_DIM));
+      g.push(txt(cx + COIL_W / 2, cy + 11, pt || "—", 9.5, lit ? C_LIVE : C_DIM));
       // 입출력 핀
       g.push(line(cx - 6, cy, cx, cy, wireCol(lit), 1.6));
       g.push(txt(cx + 5, cy + 3, "IN", 7.5, C_DIM, "start"));

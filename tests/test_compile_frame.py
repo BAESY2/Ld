@@ -241,3 +241,27 @@ def test_vision_ng_condition_and_large_compound() -> None:
     assert {"PUMP", "VALVE", "ROBOT", "EJECT", "SIREN"} <= outs   # 6서브시스템
     st2 = synthesize_st(big.spec)
     assert detect_double_coils(st2) == {} and verify(big.spec, st2).passed
+
+
+def test_star_delta_starter_compiles_and_proves() -> None:
+    """'스타델타 기동' → 표준 Y-Δ 회로: Y⊥Δ k-귀납 증명 + 1스캔 개방전환 데드타임."""
+    from app.simulator import simulate
+    from app.verifier import proven_safe_pairs
+
+    r = frame_to_spec("5.5킬로와트 모터 스타델타로 기동해")
+    assert r.confident
+    st = synthesize_st(r.spec)
+    assert "MOTOR_D := (MOTOR AND T1.Q) AND NOT MOTOR_Y;" in st
+    assert verify(r.spec, st).passed
+    pairs = {tuple(sorted(p)) for p in proven_safe_pairs(r.spec, st)}
+    assert ("MOTOR_D", "MOTOR_Y") in pairs        # 상간단락 불가가 *증명*됨
+    # kW 가 명세에 실린다(산식 선정의 입력)
+    assert next(p.power_kw for p in r.spec.io_points if p.symbol == "MOTOR") == 5.5
+    # 실거동: 전환 시 동시 ON 0 + 데드타임 ≥1스캔
+    res = simulate(st, [(100, {"START": True}), (300, {"START": False})],
+                   duration_ms=9000, step_ms=100)
+    y, d = res.output_trace("MOTOR_Y"), res.output_trace("MOTOR_D")
+    assert not any(a and b for a, b in zip(y, d, strict=True))
+    last_y = max(i for i, v in enumerate(y) if v)
+    first_d = min(i for i, v in enumerate(d) if v)
+    assert first_d - last_y >= 2                  # 개방전환 데드타임(1스캔 이상)

@@ -171,6 +171,36 @@
     };
   }
 
+  // 5b) 단계별 택트 — 시퀀서 전 단계의 첫 ON 시각 표 + 총 사이클 타임(이론 대비)
+  function measureTakt(st, dt) {
+    var eng = SE.create(st);
+    if (!eng.timers.length || eng.outputs.length < 2) return null;
+    var forced = {};
+    eng.inputs.forEach(function (s) { forced[s] = false; });
+    if (eng.inputs.indexOf("START") >= 0) forced.START = true;
+    var first = {}, MAX = 600, k;
+    for (k = 0; k < MAX; k++) {
+      var r = eng.step(forced, dt);
+      if (k === 3 && "START" in forced) forced.START = false;
+      eng.outputs.forEach(function (o) {
+        if (first[o] == null && r.outputs[o]) first[o] = k * dt;
+      });
+      if (Object.keys(first).length === eng.outputs.length) break;
+    }
+    var rows = eng.outputs.map(function (o) {
+      return o + "=" + (first[o] != null ? (first[o] / 1000).toFixed(1) + "s" : "미도달");
+    });
+    var last = Math.max.apply(null, eng.outputs.map(function (o) {
+      return first[o] != null ? first[o] : -1;
+    }));
+    return {
+      name: "택트(단계 도달)",
+      pass: Object.keys(first).length === eng.outputs.length,
+      detail: rows.join(" → ") + " · 사이클 " + (last / 1000).toFixed(1) + "s" +
+        " · UPH " + (last > 0 ? Math.round(3600000 / last) : "—"),
+    };
+  }
+
   // 6) 교차엔진 대조 — JS(SimEngine) vs 서버 Python 시뮬레이터 비트 일치
   function crossCheck(st, dt) {
     dt = dt || 100;
@@ -238,6 +268,8 @@
       if (il) out.push(il);
       var tp = testTimerPrecision(st, sym, dt);
       if (tp) out.push(tp);
+      var tk = measureTakt(st, dt);
+      if (tk) out.push(tk);
       function done() {
         resolve(out.map(function (t) {
           return { name: t.name, pass: t.pass, detail: t.detail };

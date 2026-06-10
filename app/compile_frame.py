@@ -106,9 +106,9 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
         op = CompareOp.LE if c.predicate == "DROP" else CompareOp.GE
         return b.analog_flag(_ANALOG[c.device], float(c.value), op)
     if c.predicate in ("COUNT", "FILL") and c.value is not None:
-        return b.counter_q(c.value)
+        return b.counter_q(int(c.value))
     if c.device in ("PART", "BOTTLE") and c.value is not None:
-        return b.counter_q(c.value)
+        return b.counter_q(int(c.value))
     if c.device:  # 일반 기기 → 입력 신호(피드백/센서). 커버리지 확장.
         return b.add_input(f"{c.device}_SIG")
     if c.predicate in _SENSOR_PRED:
@@ -217,6 +217,63 @@ def _compile_sequence(frame: IntentFrame) -> CompileResult:
     return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
 
 
+
+# 동력 단위 → kW 환산 (마력=0.746kW). 산식 선정(plant)의 입력이 된다.
+_POWER_UNITS = {"킬로와트": 1.0, "키로와트": 1.0, "키로": 1.0, "kw": 1.0, "마력": 0.746}
+
+
+def _clause_power_kw(c: IntentClause) -> float | None:
+    if c.value is None:
+        return None
+    factor = _POWER_UNITS.get(c.unit.lower())
+    return round(float(c.value) * factor, 2) if factor else None
+
+
+def _compile_star_delta(frame: IntentFrame) -> CompileResult:
+    """'스타델타 기동' → 표준 Y-Δ 기동 회로를 컴파일한다(현업 표준 패턴).
+
+    회로 의미(380V 3상 기동전류 저감 — 기동시 권선을 Y 로 묶어 전류 1/3, 가속 후 Δ):
+      MOTOR  := (START OR MOTOR) AND NOT STOP;       ← 주접촉기(MC-M) 자기유지
+      T1(IN := MOTOR, PT := T#7s);                   ← 전환 타이머(가속 시간)
+      MOTOR_D := (MOTOR AND T1.Q) AND NOT MOTOR_Y;   ← Δ접촉기 — *Y 보다 먼저 평가*
+      MOTOR_Y := MOTOR AND NOT T1.Q AND NOT MOTOR_D; ← Y접촉기
+    Δ 렁을 Y 보다 먼저 두면 전환 스캔에서 Δ 가 직전 Y(아직 참)를 보고 1스캔 쉬어
+    **개방전환 데드타임**이 생기고, 상호 'AND NOT' 가드로 Y⊥Δ 동시투입(상간단락)이
+    구조적으로 불가능하다 — 인터락으로 선언해 k-귀납으로 *증명*한다.
+    """
+    from app.models import TimerSpec
+
+    kw = None
+    for c in frame.clauses:
+        kw = kw or _clause_power_kw(c)
+    io = [
+        IOPoint(symbol="START", direction=IODirection.INPUT),
+        IOPoint(symbol="STOP", direction=IODirection.INPUT),
+        IOPoint(symbol="MOTOR", direction=IODirection.OUTPUT, power_kw=kw,
+                description="주접촉기 MC-M"),
+        IOPoint(symbol="MOTOR_D", direction=IODirection.OUTPUT,
+                description="델타접촉기 MC-D"),
+        IOPoint(symbol="MOTOR_Y", direction=IODirection.OUTPUT,
+                description="와이접촉기 MC-Y"),
+    ]
+    spec = StateMachineSpec(
+        title=(frame.text[:40] or "스타델타 기동"),
+        io_points=io,
+        timers=[TimerSpec(name="T1", preset_ms=7000, enable_condition="MOTOR",
+                          description="Y→Δ 전환(가속) 타이머")],
+        derived_outputs=[
+            DerivedOutput(output="MOTOR", expression="(START OR MOTOR) AND NOT (STOP)"),
+            DerivedOutput(output="MOTOR_D",
+                          expression="(MOTOR AND T1.Q) AND NOT MOTOR_Y"),
+            DerivedOutput(output="MOTOR_Y",
+                          expression="MOTOR AND NOT T1.Q AND NOT MOTOR_D"),
+        ],
+        interlocks=[Interlock(output_a="MOTOR_Y", output_b="MOTOR_D",
+                              reason="Y-Δ 동시투입(상간단락) 금지")],
+    )
+    return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
+
+
 def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존).
 
@@ -226,6 +283,8 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
         source if isinstance(source, IntentFrame)
         else extract(source)
     )
+    if any(c.device == "STAR_DELTA" for c in frame.clauses):
+        return _compile_star_delta(frame)
     if any(c.seq for c in frame.clauses):
         return _compile_sequence(frame)
     b = _Builder()

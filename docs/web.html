@@ -242,7 +242,7 @@ const RATED={motor:6.8,pump:5.2,conveyor:4.1,filler:3.5,capper:3.2,mixer:7.5,
 function metricsInit(plant){
  MET={rows:{}};
  (plant&&plant.devices||[]).filter((d)=>d.role==="output").forEach((d)=>{
-  MET.rows[d.symbol]={kind:d.kind,tag:d.tag,run:0,starts:0,prev:false,amp:0};});
+  MET.rows[d.symbol]={kind:d.kind,tag:d.tag,rated:d.rated_a||null,run:0,starts:0,prev:false,amp:0};});
  $("metricscard").style.display=Object.keys(MET.rows).length?"block":"none";
 }
 function fmtDur(s){const m=Math.floor(s/60),ss=Math.floor(s%60);
@@ -255,14 +255,14 @@ function metricsTick(r){
   if(on&&!m.prev)m.starts++;
   if(on)m.run+=dt;
   m.prev=on;
-  const rated=RATED[m.kind]||1.5;
+  const rated=m.rated||RATED[m.kind]||1.5;
   const tgt=on?rated*(.72+.1*Math.sin(Date.now()/300+sym.length)):0;
   m.amp+=(tgt-m.amp)*.25;
  }
  if(++metTick%4)return;       // 표 갱신은 ~0.5s 주기
  const tb=$("metrics").querySelector("tbody");
  tb.innerHTML=Object.keys(MET.rows).map((sym)=>{
-  const m=MET.rows[sym],rated=RATED[m.kind]||1.5;
+  const m=MET.rows[sym],rated=m.rated||RATED[m.kind]||1.5;
   const load=Math.min(110,m.amp/rated*100);
   const onCls=m.prev?'style="color:var(--ok);font-weight:700"':'style="color:var(--mut)"';
   return '<tr><td style="padding:2px 4px">'+esc(m.tag||sym)+'</td>'+

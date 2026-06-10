@@ -84,6 +84,9 @@ class IOPoint(BaseModel):
     device_class: DeviceClass = DeviceClass.P
     description: str = ""
     fixed_address: str | None = Field(default=None, description="고정 주소 (예: P0001)")
+    power_kw: float | None = Field(
+        default=None, description="전동기 정격출력(kW) — 차단기/접촉기/EOCR 산식 선정의 입력"
+    )
 
 
 class TimerSpec(BaseModel):

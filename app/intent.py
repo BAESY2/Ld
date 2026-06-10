@@ -47,7 +47,7 @@ class IntentClause:
     device: str | None      # 대상 기기 카테고리
     instance: str = ""      # 기기 인스턴스 마커(펌프1→'1', 1번 모터→'1')
     negated: bool = False
-    value: int | None = None
+    value: float | None = None
     unit: str = ""          # 분류사(개/초/바 ...)
     seq: bool = False        # 순차 단계(앞 동작 다음에 진행)
     delay_ms: int = 0        # 이 단계로 넘어가기 전 지연('N초 후')
@@ -57,7 +57,8 @@ class IntentClause:
         if self.instance:
             dev = f"{dev}{self.instance}"
         pred = _PRED_KO.get(self.predicate, self.predicate)
-        qty = f" {self.value}{self.unit}" if self.value is not None else ""
+        qty = (f" {int(self.value) if self.value == int(self.value) else self.value}"
+               f"{self.unit}") if self.value is not None else ""
         neg = "안/못 " if self.negated else ""
         head = "조건" if self.kind == ClauseKind.COND else "동작"
         body = f"{dev}{qty} {neg}{pred}".strip()
@@ -144,7 +145,7 @@ def extract(source: Analysis | str) -> IntentFrame:
     clauses: list[IntentClause] = []
     dev: str | None = None
     inst = ""
-    val: int | None = None
+    val: float | None = None
     unit = ""
     pending_seq = False
     pending_delay = 0
@@ -154,7 +155,7 @@ def extract(source: Analysis | str) -> IntentFrame:
             # 순차 마커: 다음 동작이 단계가 된다. 직전 'N초'는 그 단계로의 지연.
             pending_seq = True
             if val is not None and unit in _SEC:
-                pending_delay = val * _SEC[unit]
+                pending_delay = int(val * _SEC[unit])
                 val, unit = None, ""
             continue
         if m.pos == Pos.NOUN:
@@ -163,7 +164,7 @@ def extract(source: Analysis | str) -> IntentFrame:
             inst = m.instance_idx
             # '1번 모터'처럼 앞에 온 수량(번/대)은 인스턴스 마커로 흡수(개수 아님).
             if not inst and val is not None and unit in ("번", "대", "호"):
-                inst, val, unit = str(val), None, ""
+                inst, val, unit = str(int(val)), None, ""
         elif m.pos == Pos.NUM:
             val, unit = m.value, m.category
         elif m.pos == Pos.VERB:

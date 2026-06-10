@@ -135,6 +135,8 @@ DEVICES: dict[str, str] = {
     "다관절로봇": "ROBOT", "로봇팔": "ROBOT", "로보트": "ROBOT", "매니퓰레이터": "ROBOT",
     "비전": "VISION", "카메라": "VISION", "비전카메라": "VISION",
     "불량": "NG", "불량품": "NG",
+    # 기동 방식
+    "스타델타": "STAR_DELTA", "와이델타": "STAR_DELTA", "스타델타기동": "STAR_DELTA",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.
@@ -200,6 +202,7 @@ _ENDINGS: tuple[tuple[str, bool], ...] = (
 _CLASSIFIERS = (
     "개", "대", "번", "회", "초", "분", "시간", "매", "장", "본", "사이클",
     "바", "도", "퍼센트", "%", "헤르츠",
+    "킬로와트", "키로와트", "키로", "마력",
 )
 _KO_NUM = {
     "한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7,
@@ -220,7 +223,7 @@ class Morpheme:
     particle: str = ""    # 분리된 조사
     is_condition: bool = False  # 조건절 표지(-면)
     negated: bool = False
-    value: int | None = None    # 수량 값
+    value: float | None = None  # 수량 값(5.5kW 같은 소수 공학값 허용)
     instance_idx: str = ""      # 기기 인스턴스 마커(예: 펌프1→'1', 게이트A→'A')
 
 
@@ -271,14 +274,14 @@ _ACTION_SORTED = sorted(ACTIONS, key=len, reverse=True)
 _PARTICLE_SORTED = sorted(_PARTICLES, key=lambda p: len(p[0]), reverse=True)
 _ENDING_SORTED = sorted(_ENDINGS, key=lambda e: len(e[0]), reverse=True)
 _PASSIVE = ("되", "돼", "된", "됐", "하", "해")
-_QTY_RE = re.compile(r"(\d+)\s*(" + "|".join(map(re.escape, _CLASSIFIERS)) + r")")
+_QTY_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(" + "|".join(map(re.escape, _CLASSIFIERS)) + r")")
 
 
 def _m_quantity(s: str) -> tuple[int, Morpheme] | None:
     m = _QTY_RE.match(s)
     if m:
         return m.end(), Morpheme(surface=m.group(0), pos=Pos.NUM,
-                                 value=int(m.group(1)), category=m.group(2))
+                                 value=float(m.group(1)), category=m.group(2))
     for ko, val in _KO_NUM.items():
         for cls in ("개", "대", "번", "회"):
             if s.startswith(ko + cls):

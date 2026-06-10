@@ -164,8 +164,18 @@
     }
     function step(forced, dt) {
       prog.inputs.forEach((s) => { tbl[s] = !!(forced && forced[s]); });
-      for (const name in prog.timers) { scanTimer(prog.timers[name], tbl, dt); tbl[name + ".Q"] = prog.timers[name].q; }
-      for (const name in prog.counters) { scanCounter(prog.counters[name], tbl); tbl[name + ".Q"] = prog.counters[name].q; }
+      for (const name in prog.timers) {
+        scanTimer(prog.timers[name], tbl, dt);
+        tbl[name + ".Q"] = prog.timers[name].q;
+        tbl[name + ".ET"] = prog.timers[name].acc;     // 경과시간(ms) — 래더 ET 표시용
+        tbl[name + ".PT"] = prog.timers[name].preset;
+      }
+      for (const name in prog.counters) {
+        scanCounter(prog.counters[name], tbl);
+        tbl[name + ".Q"] = prog.counters[name].q;
+        tbl[name + ".CV"] = prog.counters[name].cnt;   // 현재값 — 래더 CV 표시용
+        tbl[name + ".PV"] = prog.counters[name].preset;
+      }
       prog.assigns.forEach(([lhs, node]) => { tbl[lhs] = evalNode(node, tbl); });
       const inputs = {}; prog.inputs.forEach((s) => { inputs[s] = tbl[s]; });
       const outputs = {}; prog.driven.forEach((s) => { outputs[s] = tbl[s]; });

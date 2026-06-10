@@ -22,6 +22,7 @@ from app.models import IODirection, StateMachineSpec
 _OUT_KINDS: tuple[tuple[str, str], ...] = (
     ("CONVEYOR", "conveyor"), ("CONV", "conveyor"),
     ("COMPRESSOR", "pump"), ("VACUUM", "pump"), ("PUMP", "pump"),
+    ("MOTOR_Y", "mc"), ("MOTOR_D", "mc"),
     ("MOTOR", "motor"), ("DRILL", "motor"), ("MIXER", "mixer"), ("AGITATOR", "mixer"),
     ("VALVE", "valve"), ("SOL", "valve"),
     ("HEATER", "heater"), ("WELDER", "heater"),
@@ -47,7 +48,8 @@ _KIND_KO: dict[str, str] = {
     "cooler": "쿨러", "fan": "팬", "conveyor": "컨베이어", "beacon": "경광등",
     "ejector": "배출기", "gate": "게이트", "mixer": "믹서", "actuator": "구동기",
     "filler": "충전기", "capper": "캡핑기", "labeler": "라벨러",
-    "washer": "세척기", "packer": "포장기", "robot": "다관절 로봇", "vision": "비전 카메라",
+    "washer": "세척기", "packer": "포장기", "robot": "다관절 로봇",
+    "vision": "비전 카메라", "mc": "전자접촉기",
     "button": "버튼", "estop": "비상정지", "level": "수위센서", "fault": "고장신호",
     "sensor": "센서", "gauge": "계기", "tank": "탱크",
 }
@@ -64,7 +66,7 @@ _TAG_PREFIX: dict[str, str] = {
     "fan": "F", "conveyor": "CV", "beacon": "XL", "ejector": "CY", "gate": "GT",
     "mixer": "MX", "actuator": "A", "tank": "TK",
     "filler": "FL", "capper": "CP", "labeler": "LB", "washer": "WS", "packer": "PK",
-    "robot": "RB", "vision": "VS",
+    "robot": "RB", "vision": "VS", "mc": "MC",
     "button": "HS", "estop": "ES", "level": "LSH", "fault": "XA", "sensor": "XS",
 }
 _GAUGE_TAG = {"PRESSURE": "PT", "TEMP": "TT", "LEVEL": "LT", "FLOW": "FT"}
@@ -99,6 +101,7 @@ _BOM: dict[str, list[str]] = {
         *_MOTOR_POWER_CHAIN,
     ],
     "vision": ["비전 카메라", "렌즈(C마운트)", "링 조명", "비전 컨트롤러", "단자대"],
+    "mc": ["전자접촉기(MC)", "보조접점 블록(1a1b)", "서지 킬러"],
     "actuator": ["범용 액추에이터", "배선용차단기(MCB)", "구동 릴레이"],
     "tank": ["저장탱크(SUS304)", "레벨 스위치 2점", "드레인 밸브", "오버플로 배관"],
     "gauge": ["트랜스미터(4-20mA)", "신호 변환기", "게이지 콕"],
@@ -108,6 +111,42 @@ _BOM: dict[str, list[str]] = {
     "fault": ["고장 알람 접점", "단자대"],
     "sensor": ["근접센서(PNP)", "센서 브래킷", "단자대"],
 }
+
+
+
+# ── 전기 산식 — 380V 3상 전동기 정격전류(FLA)와 차단기/접촉기/EOCR 선정 ────────
+# FLA 표: 380V 60Hz IE3 4극 표준 사양표(현장 표준; hyundaiacmotor.com 전류표 대조).
+# 표 밖 용량은 I = P/(√3·V·cosφ·η) (V=380, cosφ≈0.85, η≈0.90) 으로 산출한다.
+_FLA_380V: dict[float, float] = {
+    0.75: 1.9, 1.5: 3.5, 2.2: 5.1, 3.7: 8.2, 5.5: 11.8, 7.5: 15.8,
+    11.0: 22.5, 15.0: 30.5, 22.0: 43.0, 37.0: 72.0,
+}
+_MCCB_AT = (15, 20, 30, 40, 50, 60, 75, 100, 125, 150, 175, 200, 225)
+# LS Metasol 전자접촉기 AC-3 정격(프레임명 ≈ 정격 A).
+_MC_FRAMES = (9, 12, 18, 22, 32, 40, 50, 65, 75, 85, 100, 130, 150)
+
+
+def motor_fla_380v(kw: float) -> float:
+    """380V 3상 전동기 정격전류(A) — 표 우선, 밖은 산식 I=P/(√3·V·cosφ·η)."""
+    if kw in _FLA_380V:
+        return _FLA_380V[kw]
+    return round(kw * 1000 / (1.732 * 380 * 0.85 * 0.90), 1)
+
+
+def size_power_circuit(kw: float) -> dict[str, str]:
+    """kW → 동력회로 기기 선정(현업 규칙): MCCB AT≥FLA×1.6, MC AC-3≥FLA, EOCR=FLA."""
+    fla = motor_fla_380v(kw)
+    at = next((a for a in _MCCB_AT if a >= fla * 1.6), _MCCB_AT[-1])
+    mc = next((m for m in _MC_FRAMES if m >= fla), _MC_FRAMES[-1])
+    lo = max(1, int(fla * 0.55))
+    hi = max(lo + 1, int(fla * 1.25) + 1)
+    return {
+        "fla": f"{fla}A",
+        "mccb": f"배선용차단기(MCCB 3P {at}AT)",
+        "mc": f"전자접촉기(MC-{mc})",
+        "eocr": f"열동계전기(EOCR {lo}-{hi}A · 설정 {fla}A)",
+        "rating": f"정격 {kw}kW · FLA {fla}A (380V 3Φ)",
+    }
 
 
 class PlantDevice(BaseModel):
@@ -121,6 +160,8 @@ class PlantDevice(BaseModel):
     z: float = 0.0
     label: str = ""
     tag: str = ""        # CAD 도면 태그번호 (P-101, TK-101, PT-101 …)
+    power_kw: float | None = None   # 전동기 정격출력(산식 선정의 입력)
+    rated_a: float | None = None    # 정격전류 FLA(A) — 운전 데이터/선정 근거
     address: str = ""    # PLC 디바이스 주소 (LS P/M/T/C — IO 가 아니면 빈 값)
     parts: list[str] = Field(default_factory=list)  # 부품 명세(BOM, 설계 세분화)
     # gauge: 임계값 목록(표시용) / tank: 채우는 기기 심볼(수위 연출용)
@@ -209,13 +250,28 @@ def plant_from_spec(spec: StateMachineSpec) -> PlantLayout:
             return ""
         return alloc.address_of(sym) or ""
 
-    # 구동기 열(중앙) — 모터·펌프·밸브…
+    # 구동기 열(중앙) — 모터·펌프·밸브… (kW 가 있으면 산식으로 차단기/MC/EOCR 선정)
+    power_of = {p.symbol: p.power_kw for p in spec.io_points if p.power_kw}
     for x, sym in zip(_centered_xs(len(outs), _SPACING_OUT), outs, strict=True):
         kind = output_kind(sym)
+        parts = list(_BOM.get(kind, []))
+        kw = power_of.get(sym)
+        rated = None
+        star_delta = any(o.endswith("_Y") for o in outs)
+        if star_delta and kind == "motor":
+            parts = [pp for pp in parts if "인버터" not in pp]
+            parts.append("Y-Δ 기동(전환 타이머 7s · 개방전환)")
+        if kw is not None:
+            sz = size_power_circuit(kw)
+            rated = motor_fla_380v(kw)
+            repl = {"배선용차단기(MCCB)": sz["mccb"], "전자접촉기(MC)": sz["mc"],
+                    "열동계전기(EOCR)": sz["eocr"]}
+            parts = [repl.get(pp, pp) for pp in parts]
+            parts.insert(0, sz["rating"])
         devices.append(PlantDevice(
             symbol=sym, kind=kind, role="output", x=x, z=_ROW_OUT,
             label=_label(kind, sym), tag=tags.take(_TAG_PREFIX.get(kind, "A")),
-            address=addr(sym), parts=list(_BOM.get(kind, [])),
+            address=addr(sym), parts=parts, power_kw=kw, rated_a=rated,
         ))
 
     # 계기 열(뒤) — 아날로그 비교기 신호별 게이지(임계값 함께)

@@ -145,3 +145,29 @@ def test_robot_and_vision_devices() -> None:
     assert any("다관절" in p for p in robot.parts)
     ng = _by_symbol(layout, "NG_SENSOR")
     assert ng.kind == "vision" and ng.tag.startswith("VS-")
+
+
+def test_motor_sizing_formula_and_table() -> None:
+    """전기 산식 — 380V FLA 표(현장 표준)·식 일치, MCCB/MC/EOCR 선정 규칙."""
+    from app.plant import motor_fla_380v, size_power_circuit
+
+    assert motor_fla_380v(7.5) == 15.8            # 표 값(IE3 사양표)
+    assert motor_fla_380v(5.5) == 11.8
+    assert 25.0 < motor_fla_380v(13) < 27.0       # 표 밖 → I=P/(√3·V·cosφ·η)
+    sz = size_power_circuit(5.5)
+    assert "20AT" in sz["mccb"]                   # FLA 11.8×1.6=18.9 → 20AT
+    assert "MC-12" in sz["mc"]                    # AC-3 12A ≥ 11.8A
+    assert "11.8A" in sz["eocr"]
+
+
+def test_star_delta_plant_sizing_applied() -> None:
+    """스타델타 설계 — 주전동기 BOM 에 산식 선정 반영 + Y/Δ 는 MC(접촉기) 기기."""
+    r = frame_to_spec("5.5킬로와트 모터 스타델타로 기동해")
+    layout = plant_from_spec(r.spec)
+    motor = _by_symbol(layout, "MOTOR")
+    parts = " ".join(motor.parts)
+    assert motor.power_kw == 5.5 and motor.rated_a == 11.8
+    assert "MCCB 3P 20AT" in parts and "MC-12" in parts and "설정 11.8A" in parts
+    assert "인버터" not in parts                  # Y-Δ 와 VFD 동시 사용 모순 제거
+    assert _by_symbol(layout, "MOTOR_Y").kind == "mc"
+    assert _by_symbol(layout, "MOTOR_D").tag.startswith("MC-")

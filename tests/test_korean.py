@@ -125,7 +125,7 @@ def test_coverage_full_vs_partial() -> None:
     full = analyze("버튼 누르면 모터 돌고 정지 누르면 멈추게")
     assert full.coverage == 1.0
     # 도메인 밖 어휘는 정직하게 UNKNOWN → coverage 하락(확신 강등의 근거)
-    partial = analyze("비전검사 불량 리젝트")
+    partial = analyze("블록체인 메타버스 거버넌스")  # 진짜 도메인 밖(비전/불량은 이제 어휘에 있음)
     assert partial.coverage < 0.5
 
 
