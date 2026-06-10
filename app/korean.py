@@ -137,6 +137,8 @@ DEVICES: dict[str, str] = {
     "불량": "NG", "불량품": "NG",
     # 기동 방식
     "스타델타": "STAR_DELTA", "와이델타": "STAR_DELTA", "스타델타기동": "STAR_DELTA",
+    # 교번(듀티 교대) 운전 — 펌프 2대 교번 표준회로의 구조 변별자
+    "교대": "ALTERNATE", "교번": "ALTERNATE", "번갈아": "ALTERNATE",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.
@@ -403,13 +405,39 @@ def _segment(token: str) -> list[Morpheme]:
     return out
 
 
+# 한국어 수사 뒤에 띄어 쓴 분류사('두 대') 병합 대상 — _m_quantity 가 다루는 이산 단위.
+_KO_NUM_CLASSIFIERS = ("개", "대", "번", "회")
+
+
+def _merge_spaced_numerals(tokens: list[str]) -> list[str]:
+    """'두 대'처럼 수사·분류사가 띄어 쓰인 쌍을 '두대'로 합친다(거짓 UNKNOWN 방지).
+
+    수사 단독 토큰은 분류사 없이는 수량이 못 되므로, 바로 뒤 토큰이 분류사로 시작할
+    때만 병합한다(예: '두 대' → '두대', '두 대를' → '두대를').
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(tokens):
+        if (
+            tokens[i] in _KO_NUM
+            and i + 1 < len(tokens)
+            and tokens[i + 1].startswith(_KO_NUM_CLASSIFIERS)
+        ):
+            out.append(tokens[i] + tokens[i + 1])
+            i += 2
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
 def analyze(text: str) -> Analysis:
     """한국어 제어 지시를 형태소 단위로 분석한다(결정론·키 불필요).
 
     어절 단위로 분석하되, 부정 부사(안/못)는 바로 뒤 용언에 부정 자질을 전파한다.
     """
     morphs: list[Morpheme] = []
-    for token in text.replace(",", " ").split():
+    for token in _merge_spaced_numerals(text.replace(",", " ").split()):
         morphs.extend(_segment(token))
 
     def _set_negated(idx: int) -> None:

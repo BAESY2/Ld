@@ -267,6 +267,86 @@ def test_star_delta_starter_compiles_and_proves() -> None:
     assert first_d - last_y >= 2                  # 개방전환 데드타임(1스캔 이상)
 
 
+def test_pump_alternation_compiles_proves_and_simulates() -> None:
+    """'펌프 두 대 교대로' → 교번 표준회로: PUMP1⊥PUMP2 k-귀납 증명 + 실거동 교번.
+
+    실거동(스캔 시뮬레이션): 기동 1회차 PUMP1 → 정지 → 재기동 시 PUMP2 로 교번 →
+    재정지 → 3회차 다시 PUMP1. 운전 중 재기동 누름은 펌프를 갈아타지 않고,
+    두 펌프 동시 ON 은 단 한 스캔도 없다.
+    """
+    from app.simulator import simulate
+    from app.verifier import proven_safe_pairs
+
+    r = frame_to_spec("펌프 두 대 교대로 운전해")
+    assert r.confident is True
+    st = synthesize_st(r.spec)
+    # 렁 순서가 의미를 만든다 — 엣지/직전값/토글/자기유지/상보 출력 순.
+    assert st.splitlines() == [
+        "EDGE := (START AND NOT START_PREV) AND NOT RUN;",
+        "START_PREV := START;",
+        "TGL := (EDGE AND NOT TGL) OR (TGL AND NOT EDGE);",
+        "RUN := (START OR RUN) AND NOT STOP;",
+        "PUMP1 := RUN AND TGL;",
+        "PUMP2 := RUN AND NOT TGL;",
+    ]
+    assert covers_all_outputs(r.spec)
+    assert detect_double_coils(st) == {}
+    assert verify(r.spec, st).passed
+    pairs = {tuple(sorted(p)) for p in proven_safe_pairs(r.spec, st)}
+    assert ("PUMP1", "PUMP2") in pairs  # 동시 기동 불가가 *증명*됨
+
+    res = simulate(
+        st,
+        [(100, {"START": True}), (300, {"START": False}),
+         (500, {"START": True}), (700, {"START": False}),   # 운전 중 재누름(교체 금지)
+         (1000, {"STOP": True}), (1200, {"STOP": False}),
+         (2000, {"START": True}), (2200, {"START": False}),
+         (3000, {"STOP": True}), (3200, {"STOP": False}),
+         (4000, {"START": True}), (4200, {"START": False})],
+        duration_ms=5000, step_ms=100,
+    )
+    p1, p2 = res.output_trace("PUMP1"), res.output_trace("PUMP2")
+    assert not any(a and b for a, b in zip(p1, p2, strict=True))  # 동시 ON 0
+
+    def at(trace: list[bool], t_ms: int) -> bool:
+        return trace[t_ms // 100]
+
+    assert at(p1, 100) and not at(p2, 100)        # 기동 1회차 → PUMP1
+    assert at(p1, 900) and not at(p2, 900)        # 운전 중 재누름에도 PUMP1 유지
+    assert not at(p1, 1000) and not at(p2, 1000)  # 정지
+    assert at(p2, 2000) and not at(p1, 2000)      # 재기동 → PUMP2 로 교번
+    assert not at(p1, 3000) and not at(p2, 3000)  # 재정지
+    assert at(p1, 4000) and not at(p2, 4000)      # 3회차 → 다시 PUMP1
+
+
+@pytest.mark.parametrize("text,outs", [
+    ("펌프 교번 운전", {"PUMP1", "PUMP2"}),
+    ("펌프 두 대 교대로 운전해", {"PUMP1", "PUMP2"}),
+    ("모터 두 대 번갈아 돌려", {"MOTOR1", "MOTOR2"}),  # 기기 일반화(접두 베이스)
+])
+def test_alternation_cue_variants_route(text: str, outs: set[str]) -> None:
+    """'교대/교번/번갈아' 단서 변형이 모두 교번 회로로 라우팅·검증된다."""
+    r = frame_to_spec(text)
+    assert r.confident is True
+    assert outs <= _outs(r.spec)
+    st = synthesize_st(r.spec)
+    assert detect_double_coils(st) == {}
+    assert verify(r.spec, st).passed
+
+
+def test_alternator_pumps_recognized_in_plant() -> None:
+    """PUMP1/PUMP2 가 설비 설계에서 pump 종류로 잡히고, 내부 릴레이는 M 주소를 받는다."""
+    from app.plant import plant_from_spec
+
+    r = frame_to_spec("펌프 교번 운전")
+    layout = plant_from_spec(r.spec)
+    kinds = {d.symbol: d.kind for d in layout.devices}
+    assert kinds["PUMP1"] == "pump" and kinds["PUMP2"] == "pump"
+    addrs = {d.symbol: d.address for d in layout.devices}
+    assert addrs["TGL"].startswith("M") and addrs["RUN"].startswith("M")  # 내부 릴레이 M
+    assert addrs["PUMP1"].startswith("P") and addrs["PUMP2"].startswith("P")
+
+
 def test_fwd_rev_interlock_proven() -> None:
     """정역 운전 — MOTOR_FWD⊥MOTOR_REV 동시투입 금지가 k-귀납으로 증명된다."""
     from app.verifier import proven_safe_pairs

@@ -16,13 +16,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.intent import ClauseKind, IntentClause, IntentFrame, extract
-from app.korean import Analysis
+from app.korean import Analysis, Pos, analyze
 from app.models import (
     Comparator,
     CompareOp,
     CounterSpec,
     DataType,
     DerivedOutput,
+    DeviceClass,
     Interlock,
     IODirection,
     IOPoint,
@@ -280,6 +281,66 @@ def _compile_star_delta(frame: IntentFrame) -> CompileResult:
     return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
 
 
+def _alternation_base(frame: IntentFrame) -> str:
+    """교번 대상 기기의 출력 심볼 베이스(미상이면 PUMP — 현업 교번의 기본은 펌프 2대).
+
+    절(clause)은 동사에 가장 가까운 체언만 남기므로('펌프 교대로'의 펌프가 ALTERNATE
+    에 덮인다), 원문을 다시 형태소 분석해 첫 액추에이터 체언을 찾는다(결정론·키 불필요).
+    """
+    for m in analyze(frame.text).morphemes:
+        if m.pos == Pos.NOUN and m.category in _DEV_OUT:
+            return _DEV_OUT[m.category]
+    return "PUMP"
+
+
+def _compile_alternator(frame: IntentFrame) -> CompileResult:
+    """'교대/교번 운전' → 펌프 2대 교번(alternation) 표준회로를 컴파일한다(현업 패턴).
+
+    회로(렁 순서가 의미를 만든다 — 자기참조·아래 렁 참조 = 직전 스캔 값):
+      EDGE       := (START AND NOT START_PREV) AND NOT RUN;   ← 정지 중 기동 엣지만
+      START_PREV := START;                                    ← EDGE *다음* 렁(직전값 공급)
+      TGL        := (EDGE AND NOT TGL) OR (TGL AND NOT EDGE); ← 기동 엣지마다 토글
+      RUN        := (START OR RUN) AND NOT STOP;              ← 운전 자기유지
+      PUMP1      := RUN AND TGL;                              ← 첫 기동 스캔에 TGL 이
+      PUMP2      := RUN AND NOT TGL;                             0→1 토글 → TGL=1 이 1호기
+    EDGE 의 'AND NOT RUN' 가드(직전 스캔 RUN 참조)로 운전 *중* 재기동 누름이 펌프를
+    갈아타지 않는다. PUMP1/PUMP2 는 같은 스캔의 TGL 한 값에서 상보로 갈리므로 동시
+    ON 이 구조적으로 불가능하다 — 인터락으로 선언해 k-귀납으로 *증명*한다.
+    """
+    base = _alternation_base(frame)
+    p1, p2 = f"{base}1", f"{base}2"
+    aux: list[tuple[str, str, str]] = [
+        ("EDGE", "(START AND NOT START_PREV) AND NOT RUN", "기동 상승엣지(1스캔 펄스)"),
+        ("START_PREV", "START", "START 직전 스캔 값(엣지 검출용)"),
+        ("TGL", "(EDGE AND NOT TGL) OR (TGL AND NOT EDGE)", "교번 선택 토글(1=1호기)"),
+        ("RUN", "(START OR RUN) AND NOT STOP", "운전 자기유지"),
+    ]
+    io = [
+        IOPoint(symbol="START", direction=IODirection.INPUT, description="기동 버튼"),
+        IOPoint(symbol="STOP", direction=IODirection.INPUT, description="정지 버튼"),
+        *[
+            IOPoint(symbol=s, direction=IODirection.OUTPUT,
+                    device_class=DeviceClass.M, description=d)
+            for s, _, d in aux
+        ],
+        IOPoint(symbol=p1, direction=IODirection.OUTPUT, description="교번 1호기"),
+        IOPoint(symbol=p2, direction=IODirection.OUTPUT, description="교번 2호기"),
+    ]
+    derived = [DerivedOutput(output=s, expression=e) for s, e, _ in aux]
+    derived += [
+        DerivedOutput(output=p1, expression="RUN AND TGL"),
+        DerivedOutput(output=p2, expression="RUN AND NOT TGL"),
+    ]
+    spec = StateMachineSpec(
+        title=(frame.text[:40] or "펌프 2대 교번 운전"),
+        io_points=io,
+        derived_outputs=derived,
+        interlocks=[Interlock(output_a=p1, output_b=p2,
+                              reason="교번 운전 — 2대 동시 기동 금지")],
+    )
+    return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
+
+
 def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존).
 
@@ -291,6 +352,8 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     )
     if any(c.device == "STAR_DELTA" for c in frame.clauses):
         return _compile_star_delta(frame)
+    if any(c.device == "ALTERNATE" for c in frame.clauses):
+        return _compile_alternator(frame)
     if any(c.seq for c in frame.clauses):
         return _compile_sequence(frame)
     b = _Builder()

@@ -32,6 +32,7 @@ _DEV_KO: dict[str, str] = {
     "LEVEL_LO": "저수위", "LEVEL_HI": "고수위", "FAULT": "고장", "VALVE2": "밸브",
     "ALARM": "알람", "CYLINDER": "실린더", "COUNTER": "카운터", "TIMER": "타이머",
     "SWITCH": "스위치", "DIR_FWD": "정방향", "DIR_REV": "역방향",
+    "ALTERNATE": "교번",
 }
 
 
