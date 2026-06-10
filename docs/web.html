@@ -163,6 +163,7 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
      <th>전류</th><th>부하</th></tr></thead>
     <tbody></tbody>
    </table>
+   <div style="margin-top:10px"><button class="testbtn" id="fulltest">전체 정밀 리포트 ▶ (전 기기 전수검사·택트)</button></div>
   </div>
   <div class="card" id="exportcard" style="display:none">
    <div class="lab">내보내기 — 기계가독 산출물</div>
@@ -551,6 +552,18 @@ $("go").onclick=run;
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=()=>{running?stopSim():startSim();};
 $("demotoggle").onclick=toggleDemo;
+
+$("fulltest").onclick=async()=>{
+ if(!engine||!RES)return;
+ const outs=engine.outputs.slice();
+ selected=null;if(bp)bp.select(null);if(pnl)pnl.select(null);
+ $("detailbody").className="";
+ $("detailbody").innerHTML='<div class="tagline2">전체 정밀 리포트</div>'+
+  '<div class="sub">전 출력 '+outs.length+'기기 × (전수조합·자기유지·정지우선·인터락·타이머·택트)</div>'+
+  '<div class="tres" id="tres"></div>';
+ const fakeBtn={disabled:false,textContent:""};
+ await runPrecision(outs,Object.assign(fakeBtn,{}));
+};
 function download(name,text,mime){
  const a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([text],{type:mime||"text/plain;charset=utf-8"}));
