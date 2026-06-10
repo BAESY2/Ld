@@ -186,6 +186,35 @@ def test_no_mutex_cue_no_interlock() -> None:
     assert r.spec.interlocks == []
 
 
+def test_deviceless_stop_resolves_to_previous_device() -> None:
+    """회귀(유령 OUT): '정지 누르면 멈춰'의 무주어 멈춤이 직전 기기(MOTOR)로 해소된다.
+
+    이전엔 MOTOR 는 못 멈추고 유령 'OUT := OUT AND NOT (STOP)' 코일이 생겼다(의미 버그).
+    """
+    r = frame_to_spec("버튼 누르면 모터 돌고 정지 누르면 멈춰")
+    st = synthesize_st(r.spec)
+    assert r.confident is True
+    assert _outs(r.spec) == {"MOTOR"}          # 유령 OUT 없음
+    assert "MOTOR := (START OR MOTOR) AND NOT (STOP);" in st  # 정지가 진짜 멈춘다
+    assert verify(r.spec, st).passed
+
+
+def test_deviceless_off_anaphora_hysteresis() -> None:
+    """'고수위 되면 꺼'(무주어) → 직전 기기 PUMP 의 OFF 조건으로 붙는다."""
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 꺼")
+    st = synthesize_st(r.spec)
+    assert _outs(r.spec) == {"PUMP"}
+    assert "PUMP := (LO_LS OR PUMP) AND NOT (HI_LS);" in st
+    assert verify(r.spec, st).passed and r.confident
+
+
+def test_deviceless_action_without_antecedent_rejected() -> None:
+    """선행 기기 없는 무주어 동작('멈춰')은 유령 출력 대신 정직 미해결."""
+    r = frame_to_spec("멈춰")
+    assert r.confident is False
+    assert any("대상 기기" in u for u in r.unresolved)
+
+
 def test_below_threshold_hysteresis_pump() -> None:
     """'밑으로 떨어지면'(LE) + '넘으면'(GE) = 올바른 히스테리시스 펌프 제어."""
     r = frame_to_spec("압력 3바 밑으로 떨어지면 펌프 켜고 압력 5바 넘으면 펌프 꺼")

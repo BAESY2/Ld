@@ -43,9 +43,19 @@ def test_root_is_live_landing_page() -> None:
 
 def test_live_static_assets_served() -> None:
     """라이브 페이지가 의존하는 정적 JS 가 실제로 서빙된다(404 아님)."""
-    for asset in ("/sim-engine.js", "/ladder-render.js", "/live.html"):
+    for asset in (
+        "/sim-engine.js", "/ladder-render.js", "/live.html",
+        "/vendor/three.min.js", "/plant3d.js",  # 3D 가상 공장
+    ):
         r = client.get(asset)
         assert r.status_code == 200, asset
+
+
+def test_root_includes_3d_plant() -> None:
+    """첫 화면이 3D 가상 공장 렌더러를 싣는다(자연어→설비 설계→실가동)."""
+    r = client.get("/")
+    assert "plant3d.js" in r.text
+    assert "three.min.js" in r.text
 
 
 def test_recipes_keyfree_path_nonempty() -> None:

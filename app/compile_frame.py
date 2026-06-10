@@ -129,12 +129,31 @@ def _action_valid(c: IntentClause) -> bool:
     return True
 
 
-def _out_symbol(c: IntentClause) -> str:
-    base = _DEV_OUT.get(c.device or "", "EJECT" if c.predicate == "EJECT" else "OUT")
+def _out_symbol(c: IntentClause) -> str | None:
+    """동작 절의 출력 심볼. 기기 미상(무주어)은 None — 호출부가 직전 기기로 해소(anaphora)
+    하거나 정직 미해결 처리한다(유령 'OUT' 코일 합성 금지)."""
+    if not c.device and c.predicate != "EJECT":
+        return None
+    base = _DEV_OUT.get(c.device or "", "EJECT")
     # 인스턴스 마커가 있으면 고유 심볼(PUMP1/PUMP2/GATE_A) — 인스턴스별로 분리된다.
-    if c.instance and base not in ("EJECT", "OUT"):
+    if c.instance and base != "EJECT":
         return f"{base}{c.instance.upper()}"
     return base
+
+
+def _is_button_name(clauses: list[IntentClause], i: int) -> bool:
+    """'기동/정지 *누르면*' 의 선두 무주어 동작은 동작이 아니라 *버튼 이름*이다.
+
+    무주어 ACTION 바로 뒤에 PRESS 조건이 오면 그 ACTION 은 버튼 라벨(기동→START,
+    정지→STOP)일 뿐이므로 건너뛴다 — 극성은 뒤따르는 실제 동작이 결정한다.
+    """
+    c = clauses[i]
+    if c.kind != ClauseKind.ACTION or _out_symbol(c) is not None:
+        return False
+    nxt = clauses[i + 1] if i + 1 < len(clauses) else None
+    return nxt is not None and nxt.kind == ClauseKind.COND and (
+        nxt.predicate == "PRESS" or nxt.device == "BUTTON"
+    )
 
 
 @dataclass
@@ -150,13 +169,25 @@ class CompileResult:
 
 
 def _seq_steps(frame: IntentFrame) -> list[tuple[str, int]]:
-    """순차 동작 단계 [(출력, 드웰초)]. 단계 드웰 = '다음 단계 진입 지연'(없으면 기본 2초)."""
-    acts = [c for c in frame.clauses if c.kind == ClauseKind.ACTION]
+    """순차 동작 단계 [(출력, 드웰초)]. 단계 드웰 = '다음 단계 진입 지연'(없으면 기본 2초).
+
+    무주어 단계는 직전 기기로 해소(anaphora) — 그러면 출력 중복이 되어 호출부의
+    중복 검사("시퀀스 부적합")로 정직 거절된다. 선행 기기조차 없으면 빈 목록(부적합).
+    """
+    acts = [
+        c for i, c in enumerate(frame.clauses)
+        if c.kind == ClauseKind.ACTION and not _is_button_name(frame.clauses, i)
+    ]
     steps: list[tuple[str, int]] = []
+    last: str | None = None
     for i, c in enumerate(acts):
+        sym = _out_symbol(c) or last
+        if sym is None:
+            return []
+        last = sym
         nxt = acts[i + 1] if i + 1 < len(acts) else None
         sec = (nxt.delay_ms // 1000) if (nxt and nxt.delay_ms) else 2
-        steps.append((_out_symbol(c), max(1, sec)))
+        steps.append((sym, max(1, sec)))
     return steps
 
 
@@ -199,14 +230,17 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     order: list[str] = []
     pending: list[str | None] = []
     last_action = False
+    last_out: str | None = None  # 직전 동작의 출력 — 무주어 동작의 지시 해소(anaphora)
     unresolved: list[str] = []
 
-    for c in frame.clauses:
+    for i, c in enumerate(frame.clauses):
         if c.kind == ClauseKind.COND:
             if last_action:
                 pending = []
             pending.append(_resolve_cond(c, b))
             last_action = False
+        elif _is_button_name(frame.clauses, i):
+            continue  # '기동/정지 누르면' — 버튼 라벨이지 동작이 아니다(건너뜀)
         else:  # ACTION
             if not _action_valid(c):
                 # 의미 부적합(예: '온도 올려'·'탱크 켜') — 측정/신호 기기는 구동 대상이 아니다.
@@ -214,7 +248,17 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
                 unresolved.append(f"'{dev_ko}'는 구동할 수 없는 대상(센서/측정/용기)")
                 last_action = True
                 continue
-            out = _out_symbol(c)
+            # 무주어 동작('… 꺼'·'멈춰')은 직전 기기를 가리킨다 — 선행 기기가 없으면
+            # 유령 출력(OUT)을 지어내지 않고 정직 미해결로 강등한다.
+            sym = _out_symbol(c)
+            if sym is None:
+                sym = last_out
+            if sym is None:
+                unresolved.append("동작의 대상 기기를 찾지 못함")
+                last_action = True
+                continue
+            out = sym
+            last_out = sym
             if out not in order:
                 order.append(out)
                 on_trig[out] = []

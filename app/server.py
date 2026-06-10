@@ -65,6 +65,7 @@ from app.models import (
     VerificationReport,
 )
 from app.nlmatch import analyze as nl_analyze
+from app.plant import PlantLayout, plant_from_spec
 from app.project import ProjectError, compose, scaffold_from_recipes, scaffold_mutex
 from app.safety import SAFETY_NOTICE, safety_payload
 from app.simulator import MAX_SIM_SAMPLES, simulate
@@ -490,6 +491,8 @@ class CompileResponse(BaseModel):
     double_coil_free: bool = False
     # k-귀납으로 *동시 구동 불가가 증명된* 출력 묶음(쌍·그룹) — 해자(검증)의 가시적 증거.
     proven_interlocks: list[list[str]] = Field(default_factory=list)
+    # 3D 가상 공장 설비 배치도(결정론 컴파일) — 프론트가 Three.js 로 실가동 렌더.
+    plant: PlantLayout | None = None
     unresolved: list[str] = Field(default_factory=list)  # 컴파일 못한 절(정직 강등)
     explanation: str = ""
     error: str | None = None
@@ -549,6 +552,7 @@ def compile_nl(req: CompileRequest) -> CompileResponse:
         verification=report,
         double_coil_free=double_coil_free,
         proven_interlocks=proven_interlocks,
+        plant=plant_from_spec(result.spec),
         unresolved=result.unresolved,
         explanation=explain_all(result.spec, ladder, report),
     )

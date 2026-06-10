@@ -95,6 +95,12 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}
  <div class="card"><div class="lab">이해 내용 (결정론 파싱)</div>
   <div class="understood" id="und"></div></div>
  <div class="card"><div class="lab">형식 검증</div><div id="badges"></div></div>
+ <div class="card" id="plantcard" style="display:none">
+  <div class="lab">3D 가상 공장 — 검증된 로직으로 실시간 가동</div>
+  <div id="plantwrap" style="width:100%;height:380px;border-radius:10px;overflow:hidden;
+   background:#070b11;cursor:grab"></div>
+  <div class="hint">드래그=회전 · 휠=줌 · 조작반 버튼을 직접 클릭해 입력을 켜보세요.</div>
+ </div>
  <div class="card" id="simcard"><div class="lab">장치 — 가상 PLC 실시간 가동</div>
   <div class="simctl"><button id="simtoggle">■ 정지</button>
    <span class="hint" style="margin:0">아래 스위치를 눌러 입력을 직접 켜보세요.</span></div>
@@ -115,6 +121,8 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}
 
 <script src="/ladder-render.js"></script>
 <script src="/sim-engine.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script src="/plant3d.js"></script>
 <script>
 const EXAMPLES=[
  "버튼 누르면 모터 돌고 정지 누르면 멈춰",
@@ -129,9 +137,17 @@ const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&g
 const isSpin=(s)=>SPIN.some((x)=>String(s).toUpperCase().startsWith(x));
 const glyph=(s)=>isSpin(s)?"⚙":"⬤";
 
-let engine=null,timer=null,running=false,lastLadder=null;
+let engine=null,timer=null,running=false,lastLadder=null,plant3d=null;
 const forced={};
 const STEP=120;
+
+function toggleForced(s){
+ if(!(s in forced))return;
+ forced[s]=!forced[s];
+ document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
+  el.classList.toggle("on",forced[s]));
+ if(!running)tick();
+}
 
 // 예시 칩
 EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
@@ -139,6 +155,7 @@ EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip"
 
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=toggleSim;
+window.addEventListener("resize",()=>{if(plant3d)plant3d.resize();});
 
 async function run(){
  const text=$("nl").value.trim();if(!text)return;
@@ -158,6 +175,8 @@ async function run(){
    :" — 도메인 밖이거나 이해가 불확실해 래더 생성을 보류했어요(정직 거절).";
   $("badges").innerHTML='<span class="badge warn">🤔 확신하지 못함'+why+'</span>';
   $("simcard").style.display="none";$("ladder").innerHTML='';$("st").textContent='';
+  if(plant3d){plant3d.destroy();plant3d=null;}
+  $("plantcard").style.display="none";
   stopSim();$("result").scrollIntoView({behavior:"smooth",block:"start"});
   return;
  }
@@ -175,7 +194,7 @@ async function run(){
  $("st").textContent=res.structured_text||"(없음)";
  lastLadder=res.ladder;
  renderLadder(null);
- buildSim(res.structured_text);
+ buildSim(res.structured_text,res.plant);
  $("result").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
@@ -185,11 +204,17 @@ function renderLadder(state){
   :'<div style="color:#8b98a8;padding:14px">래더 없음</div>';
 }
 
-function buildSim(st){
+function buildSim(st,plant){
  engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
  Object.keys(forced).forEach((k)=>delete forced[k]);
  const ins=engine?engine.inputs:[];
  ins.forEach((s)=>forced[s]=false);
+ // 3D 가상 공장 — 서버 배치도(plant)로 세우고 스캔 루프와 동기.
+ if(plant3d){plant3d.destroy();plant3d=null;}
+ if(plant&&window.Plant3D){
+  $("plantcard").style.display="block";
+  plant3d=window.Plant3D.create($("plantwrap"),plant,{onToggle:toggleForced});
+ }else{$("plantcard").style.display="none";}
  // 장치(출력) 글리프
  const outs=engine?engine.outputs:[];
  $("devs").innerHTML=outs.length
@@ -201,8 +226,7 @@ function buildSim(st){
   ?ins.map((s)=>'<span class="sw" data-sw="'+esc(s)+'"><span class="knob"></span>'+esc(s)+'</span>').join("")
   :'<span class="hint" style="margin:0">외부 입력이 없습니다(자동 동작).</span>';
  $("ins").querySelectorAll("[data-sw]").forEach((el)=>{
-  el.onclick=()=>{const s=el.dataset.sw;forced[s]=!forced[s];
-   el.classList.toggle("on",forced[s]);if(!running)tick();};});
+  el.onclick=()=>toggleForced(el.dataset.sw);});
  startSim();tick();
 }
 
@@ -214,6 +238,7 @@ function tick(){
    const on=r.outputs[o];el.classList.toggle("on",on);
    el.classList.toggle("spin",on&&isSpin(o));});
  }
+ if(plant3d)plant3d.update(r);
  renderLadder(r.table);
 }
 function cssesc(s){return String(s).replace(/["\\]/g,"\\$&");}

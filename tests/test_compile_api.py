@@ -88,6 +88,24 @@ def test_compile_exposes_proven_interlocks() -> None:
     assert ("COOLER", "HEATER") in proven  # k-귀납으로 증명된 쌍이 그대로 실린다
 
 
+def test_compile_includes_3d_plant_layout() -> None:
+    """confident 응답에 3D 설비 배치도(plant)가 실린다 — 기기 종류·위치·탱크."""
+    r = client.post(
+        "/api/compile", json={"text": "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼"}
+    )
+    data = r.json()
+    assert data["confident"] is True
+    plant = data["plant"]
+    assert plant is not None
+    kinds = {d["symbol"]: d["kind"] for d in plant["devices"]}
+    assert kinds["PUMP"] == "pump"
+    assert kinds["TANK"] == "tank"       # 수위 제어 → 탱크 자동 합성
+    assert kinds["LO_LS"] == "level"
+    # 비확신이면 plant 도 보류된다(거짓 설계 금지).
+    r2 = client.post("/api/compile", json={"text": "오늘 점심 뭐 먹지"})
+    assert r2.json()["plant"] is None
+
+
 def test_compile_no_mutex_no_proven_interlocks() -> None:
     """상호배제 단서가 없으면 증명 묶음은 비어 있다(거짓 증거 금지)."""
     r = client.post(

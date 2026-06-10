@@ -140,6 +140,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "세우": ("세우다", "STOP"), "세워": ("세우다", "STOP"),
     # TURN_ON / TURN_OFF
     "켜": ("켜다", "TURN_ON"), "켜지": ("켜지다", "TURN_ON"), "점등": ("점등하다", "TURN_ON"),
+    "키": ("켜다", "TURN_ON"), "켜라": ("켜다", "TURN_ON"),  # 구어 변형 '불 키고'
     "끄": ("끄다", "TURN_OFF"), "꺼": ("끄다", "TURN_OFF"), "소등": ("소등하다", "TURN_OFF"),
     # PRESS
     "누르": ("누르다", "PRESS"), "눌러": ("누르다", "PRESS"), "눌리": ("눌리다", "PRESS"),
