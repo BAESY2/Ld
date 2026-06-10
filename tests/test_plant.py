@@ -134,3 +134,14 @@ def test_connections_pipe_and_signal() -> None:
     assert ("PUMP", "TANK", "pipe") in kinds
     assert ("PLC", "PUMP", "signal") in kinds
     assert ("LO_LS", "PLC", "signal") in kinds
+
+
+def test_robot_and_vision_devices() -> None:
+    """다관절 로봇(출력)·비전 카메라(검출 입력)가 종류·태그로 선다."""
+    r = frame_to_spec("불량 나면 로봇 켜고 배출해")
+    layout = plant_from_spec(r.spec)
+    robot = _by_symbol(layout, "ROBOT")
+    assert robot.kind == "robot" and robot.tag.startswith("RB-")
+    assert any("다관절" in p for p in robot.parts)
+    ng = _by_symbol(layout, "NG_SENSOR")
+    assert ng.kind == "vision" and ng.tag.startswith("VS-")

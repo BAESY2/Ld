@@ -155,6 +155,15 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
     <span class="empty">기기 클릭=상세·정밀테스트</span></div>
    <div class="ins" id="ins"></div>
   </div>
+  <div class="card" id="metricscard" style="display:none">
+   <div class="lab">운전 데이터 — 실시간</div>
+   <table id="metrics" style="width:100%;border-collapse:collapse;font-size:11.5px">
+    <thead><tr style="color:var(--mut);text-align:left">
+     <th style="padding:2px 4px">기기</th><th>상태</th><th>가동</th><th>기동</th>
+     <th>전류</th><th>부하</th></tr></thead>
+    <tbody></tbody>
+   </table>
+  </div>
   <div class="card" id="exportcard" style="display:none">
    <div class="lab">내보내기 — 기계가독 산출물</div>
    <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -191,6 +200,8 @@ const VENDOR_MODULES=["__init__","profiles"];
 const PKG_MODULES={"export":["__init__","plcopen"],"emit":["__init__","ladder_il"]};
 const JS_MODULES=["ladder-render.js","sim-engine.js","blueprint.js","precision.js","panel.js"];
 const EXAMPLES=[
+ "저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 압력 5바 넘으면 밸브 닫고 부품 10개 차면 로봇 켜고 불량 나면 배출하고 고장 나면 사이렌 울려",
+ "불량 나면 로봇 켜고 배출해",
  "컨베이어 돌리고 다음 충전기 켜고 다음 캡핑기 켜고 다음 배출해",
  "버튼 누르면 모터 돌고 정지 누르면 멈춰",
  "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",
@@ -222,6 +233,46 @@ function startDemo(){
 }
 function stopDemoTimer(){if(demoTimer){clearInterval(demoTimer);demoTimer=null;}}
 function toggleDemo(){demoOn=!demoOn;setDemoBtn();demoOn?startDemo():stopDemoTimer();}
+
+// ── 운전 데이터(실시간 수치) — 상태·가동시간·기동횟수·가상 전류/부하율 ──────────
+let MET=null,metTick=0;
+const RATED={motor:6.8,pump:5.2,conveyor:4.1,filler:3.5,capper:3.2,mixer:7.5,
+ fan:2.8,cooler:2.8,heater:9.4,robot:4.6,washer:3.9,labeler:2.6,packer:3.8,
+ ejector:1.4,valve:.6,gate:1.2,beacon:.3,actuator:1.2};
+function metricsInit(plant){
+ MET={rows:{}};
+ (plant&&plant.devices||[]).filter((d)=>d.role==="output").forEach((d)=>{
+  MET.rows[d.symbol]={kind:d.kind,tag:d.tag,run:0,starts:0,prev:false,amp:0};});
+ $("metricscard").style.display=Object.keys(MET.rows).length?"block":"none";
+}
+function fmtDur(s){const m=Math.floor(s/60),ss=Math.floor(s%60);
+ return (m?m+"m ":"")+ss+"s";}
+function metricsTick(r){
+ if(!MET)return;
+ const dt=STEP/1000;
+ for(const sym in MET.rows){
+  const m=MET.rows[sym],on=!!r.outputs[sym];
+  if(on&&!m.prev)m.starts++;
+  if(on)m.run+=dt;
+  m.prev=on;
+  const rated=RATED[m.kind]||1.5;
+  const tgt=on?rated*(.72+.1*Math.sin(Date.now()/300+sym.length)):0;
+  m.amp+=(tgt-m.amp)*.25;
+ }
+ if(++metTick%4)return;       // 표 갱신은 ~0.5s 주기
+ const tb=$("metrics").querySelector("tbody");
+ tb.innerHTML=Object.keys(MET.rows).map((sym)=>{
+  const m=MET.rows[sym],rated=RATED[m.kind]||1.5;
+  const load=Math.min(110,m.amp/rated*100);
+  const onCls=m.prev?'style="color:var(--ok);font-weight:700"':'style="color:var(--mut)"';
+  return '<tr><td style="padding:2px 4px">'+esc(m.tag||sym)+'</td>'+
+   '<td '+onCls+'>'+(m.prev?"RUN":"STOP")+'</td>'+
+   '<td>'+fmtDur(m.run)+'</td><td>'+m.starts+'</td>'+
+   '<td>'+m.amp.toFixed(1)+'A</td>'+
+   '<td>'+(m.prev?load.toFixed(0)+"%":"—")+'</td></tr>';
+ }).join("");
+}
+
 function setForced(s,v){
  if(!(s in forced)||forced[s]===v)return;
  forced[s]=v;
@@ -394,6 +445,7 @@ document.querySelectorAll(".tab").forEach((t)=>t.onclick=()=>{
 function viewOn(v){const e=$("v-"+v);return e&&e.classList.contains("on");}
 
 function buildSim(st){
+ metricsInit(RES&&RES.plant);
  engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
  Object.keys(forced).forEach((k)=>delete forced[k]);
  const ins=engine?engine.inputs:[];
@@ -415,6 +467,7 @@ function tick(){
  const r=engine.step(forced,STEP);
  if(bp)bp.update(r);
  if(pnl)pnl.update(r);
+ metricsTick(r);
  if(p3d)p3d.update(r);
  if(viewOn("ladder")&&RES&&RES.ladder)
   $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);

@@ -32,6 +32,7 @@ _OUT_KINDS: tuple[tuple[str, str], ...] = (
     ("GATE", "gate"), ("DOOR", "gate"),
     ("FILLER", "filler"), ("CAPPER", "capper"), ("LABELER", "labeler"),
     ("WASHER", "washer"), ("PACKER", "packer"),
+    ("ROBOT", "robot"),
 )
 
 # 입력 심볼 단서 → 기기 종류
@@ -39,13 +40,14 @@ _ESTOP_CUES = ("ESTOP", "EMG", "EMERGENCY")
 _BUTTON_CUES = ("START", "STOP", "BTN", "BUTTON", "SW", "RESET", "RUN")
 _FAULT_CUES = ("FAULT", "ERROR", "ERR", "FLT", "TRIP", "OVERLOAD")
 _LEVEL_CUES = ("_LS", "LEVEL", "LO_", "HI_", "FLOAT")
+_VISION_CUES = ("VISION", "NG_", "CAMERA")
 
 _KIND_KO: dict[str, str] = {
     "motor": "모터", "pump": "펌프", "valve": "밸브", "heater": "히터",
     "cooler": "쿨러", "fan": "팬", "conveyor": "컨베이어", "beacon": "경광등",
     "ejector": "배출기", "gate": "게이트", "mixer": "믹서", "actuator": "구동기",
     "filler": "충전기", "capper": "캡핑기", "labeler": "라벨러",
-    "washer": "세척기", "packer": "포장기",
+    "washer": "세척기", "packer": "포장기", "robot": "다관절 로봇", "vision": "비전 카메라",
     "button": "버튼", "estop": "비상정지", "level": "수위센서", "fault": "고장신호",
     "sensor": "센서", "gauge": "계기", "tank": "탱크",
 }
@@ -62,6 +64,7 @@ _TAG_PREFIX: dict[str, str] = {
     "fan": "F", "conveyor": "CV", "beacon": "XL", "ejector": "CY", "gate": "GT",
     "mixer": "MX", "actuator": "A", "tank": "TK",
     "filler": "FL", "capper": "CP", "labeler": "LB", "washer": "WS", "packer": "PK",
+    "robot": "RB", "vision": "VS",
     "button": "HS", "estop": "ES", "level": "LSH", "fault": "XA", "sensor": "XS",
 }
 _GAUGE_TAG = {"PRESSURE": "PT", "TEMP": "TT", "LEVEL": "LT", "FLOW": "FT"}
@@ -91,6 +94,11 @@ _BOM: dict[str, list[str]] = {
     "labeler": ["라벨 릴", "압착 롤러", *_MOTOR_POWER_CHAIN],
     "washer": ["분사 노즐 링", "세척수 펌프", *_MOTOR_POWER_CHAIN],
     "packer": ["박스 매거진", "푸셔 실린더", *_MOTOR_POWER_CHAIN, "만재 센서"],
+    "robot": [
+        "6축 다관절 로봇", "로봇 컨트롤러", "티치 펜던트", "안전펜스 인터록",
+        *_MOTOR_POWER_CHAIN,
+    ],
+    "vision": ["비전 카메라", "렌즈(C마운트)", "링 조명", "비전 컨트롤러", "단자대"],
     "actuator": ["범용 액추에이터", "배선용차단기(MCB)", "구동 릴레이"],
     "tank": ["저장탱크(SUS304)", "레벨 스위치 2점", "드레인 밸브", "오버플로 배관"],
     "gauge": ["트랜스미터(4-20mA)", "신호 변환기", "게이지 콕"],
@@ -158,6 +166,8 @@ def input_kind(symbol: str) -> str:
         return "fault"
     if any(c in s for c in _LEVEL_CUES):
         return "level"
+    if any(c in s for c in _VISION_CUES) or s == "NG":
+        return "vision"
     return "sensor"
 
 

@@ -51,6 +51,7 @@ _DEV_TRIG = {
     "LEVEL_LO": "LO_LS", "LEVEL_HI": "HI_LS", "LEVEL": "LEVEL_SW",
     "FAULT": "FAULT", "SENSOR": "SENSOR", "SWITCH": "SWITCH",
     "LIMIT": "LIMIT_SW", "PROX": "PROX_SW", "PHOTO": "PHOTO_SW",
+    "VISION": "VISION_NG", "NG": "NG_SENSOR",
 }
 # 센서/상태 조건 술어(기기 없이도 입력 신호로 푼다).
 _SENSOR_PRED = {"ARRIVE", "DONE", "EMPTY", "JAM", "DETECT"}
@@ -120,6 +121,7 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
 _NON_ACTUATABLE = {
     "PRESSURE", "TEMP", "LEVEL", "LEVEL_LO", "LEVEL_HI", "FAULT", "BUTTON",
     "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK", "BOTTLE",
+    "VISION", "NG",
 }
 # 물리 구동을 뜻하는 동작 술어(이것이 비액추에이터에 걸리면 부적합).
 _ACTUATION_PREDS = _ON | _OFF

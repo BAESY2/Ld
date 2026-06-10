@@ -254,7 +254,7 @@
       if (on) hub.rotateOnAxis(new T.Vector3(0, 0, 1), dt * 12);
     } };
   }
-  function bConveyor() {
+  function bConveyor(d, ctx) {
     var g = new T.Group();
     [-0.42, 0.42].forEach(function (z) {                           // 사이드 프레임
       var fr = box(2.6, .16, .05, mat(COL.blueDeep, { metal: .55, rough: .35 }));
@@ -270,10 +270,12 @@
       });
     });
     var items = [];
-    for (var i = 0; i < 4; i++) {                                  // 흐르는 제품(병)
-      var it = cyl(.085, .085, .26, mat(COL.glass, { alpha: .55, rough: .15, metal: .1 }));
-      var cap = cyl(.05, .05, .05, mat(COL.blue, { metal: .4 })); cap.position.y = .155; it.add(cap);
-      it.position.set(-1.1 + i * .58, .8, 0); g.add(it); items.push(it);
+    if (!(ctx && ctx.line)) {
+      for (var i = 0; i < 4; i++) {                                // 흐르는 제품(병)
+        var it = cyl(.085, .085, .26, mat(COL.glass, { alpha: .55, rough: .15, metal: .1 }));
+        var cap = cyl(.05, .05, .05, mat(COL.blue, { metal: .4 })); cap.position.y = .155; it.add(cap);
+        it.position.set(-1.1 + i * .58, .8, 0); g.add(it); items.push(it);
+      }
     }
     return { group: g, anim: function (on, t, dt) {
       if (!on) return;
@@ -435,7 +437,7 @@
       led.material.emissiveIntensity = on ? 1.7 : (Math.sin(t * 3) > .85 ? .7 : 0);
     } };
   }
-  function bFiller() {
+  function bFiller(d, ctx) {
     var g = new T.Group();
     [-0.55, 0.55].forEach(function (x) {
       var post = box(.13, 1.8, .13, mat(COL.frame, { metal: .55 })); post.position.set(x, .9, 0); g.add(post);
@@ -449,8 +451,10 @@
     });
     var drop = new T.Mesh(new T.SphereGeometry(.045, 8, 8), mat(COL.water, { emissive: COL.water, ei: .9 }));
     drop.visible = false; g.add(drop);
-    var bottle = cyl(.1, .1, .32, mat(COL.glass, { alpha: .5, rough: .12 }));
-    bottle.position.y = .68; g.add(bottle);
+    if (!(ctx && ctx.line)) {
+      var bottle = cyl(.1, .1, .32, mat(COL.glass, { alpha: .5, rough: .12 }));
+      bottle.position.y = .68; g.add(bottle);
+    }
     return { group: g, anim: function (on, t) {
       var dip = on ? (Math.sin(t * 3) * .5 + .5) * .16 : 0;
       nozzles.forEach(function (n) { n.position.y = 1.34 - dip; });
@@ -458,7 +462,7 @@
       if (drop.visible) drop.position.set(.0, 1.1 - ((t * 1.8) % 1) * .25, 0);
     } };
   }
-  function bCapper() {
+  function bCapper(d, ctx) {
     var g = new T.Group();
     [-0.5, 0.5].forEach(function (x) {
       var post = box(.13, 1.7, .13, mat(COL.frame, { metal: .55 })); post.position.set(x, .85, 0); g.add(post);
@@ -466,11 +470,70 @@
     var beam = box(1.15, .16, .34, mat(COL.frame, { metal: .55 })); beam.position.y = 1.7; g.add(beam);
     var ram = box(.32, .46, .28, mat(COL.safety, { metal: .35, rough: .45 })); ram.position.y = 1.35; g.add(ram);
     var chuck = cyl(.12, .12, .12, mat(COL.steelDark, { metal: .7 })); chuck.position.y = 1.06; g.add(chuck);
-    var bottle = cyl(.1, .1, .32, mat(COL.glass, { alpha: .5, rough: .12 }));
-    bottle.position.y = .68; g.add(bottle);
+    if (!(ctx && ctx.line)) {
+      var bottle = cyl(.1, .1, .32, mat(COL.glass, { alpha: .5, rough: .12 }));
+      bottle.position.y = .68; g.add(bottle);
+    }
     return { group: g, anim: function (on, t) {
       var press = on ? Math.max(0, Math.sin(t * 4)) * .2 : 0;
       ram.position.y = 1.35 - press; chuck.position.y = 1.06 - press;
+    } };
+  }
+
+  // 6축 느낌의 다관절 로봇 — 베이스 선회 + 어깨/팔꿈치/손목 + 그리퍼 픽사이클
+  function bRobot() {
+    var g = new T.Group();
+    var base = cyl(.34, .42, .26, mat(COL.safety, { rough: .45, metal: .35 }));
+    base.position.y = .13; g.add(base);
+    var yaw = new T.Group(); yaw.position.y = .26; g.add(yaw);
+    var turret = cyl(.26, .3, .3, mat(0xd8dde4, { metal: .4, rough: .35 }));
+    turret.position.y = .15; yaw.add(turret);
+    var shoulder = new T.Group(); shoulder.position.y = .32; yaw.add(shoulder);
+    var upper = box(.2, .85, .26, mat(0xe8ebef, { metal: .4, rough: .3 }));
+    upper.position.y = .42; shoulder.add(upper);
+    var elbow = new T.Group(); elbow.position.y = .85; shoulder.add(elbow);
+    var fore = box(.16, .7, .2, mat(0xd8dde4, { metal: .4, rough: .3 }));
+    fore.position.y = .35; elbow.add(fore);
+    var wrist = new T.Group(); wrist.position.y = .7; elbow.add(wrist);
+    var hand = box(.14, .18, .14, mat(COL.steelDark, { metal: .6 }));
+    hand.position.y = .09; wrist.add(hand);
+    [-0.05, 0.05].forEach(function (dx) {
+      var fing = box(.03, .14, .08, mat(0x222831, { metal: .5 }));
+      fing.position.set(dx, .25, 0); wrist.add(fing);
+    });
+    [shoulder, elbow].forEach(function (j) {
+      var jc = cyl(.12, .12, .3, mat(COL.safety, { rough: .45, metal: .35 }));
+      jc.rotation.z = Math.PI / 2; j.add(jc);
+    });
+    var led = box(.07, .07, .03, mat(COL.on, { emissive: COL.on, ei: .1 }));
+    led.position.set(0, .3, .31); yaw.add(led);
+    return { group: g, anim: function (on, t, dt) {
+      var s = on ? Math.sin(t * 1.6) : 0;           // 픽&플레이스 사이클
+      yaw.rotation.y += ((on ? Math.sin(t * .8) * 1.1 : 0) - yaw.rotation.y) * Math.min(1, dt * 3);
+      shoulder.rotation.x = -.5 + (on ? s * .45 : 0);
+      elbow.rotation.x = .95 + (on ? -s * .7 : 0);
+      wrist.rotation.x = -.45 + (on ? s * .3 : 0);
+      led.material.emissiveIntensity = on ? 1.6 : .1;
+    } };
+  }
+  // 비전 카메라 — 마스트 + 카메라 헤드 + 검사 빔(스캔)
+  function bVision() {
+    var g = new T.Group();
+    var mast = cyl(.05, .07, 1.7, mat(COL.frame, { metal: .55 })); mast.position.y = .85; g.add(mast);
+    var arm = box(.5, .08, .08, mat(COL.frame, { metal: .55 })); arm.position.set(.22, 1.66, 0); g.add(arm);
+    var cam = box(.22, .16, .3, mat(0x1b2129, { metal: .45, rough: .3 }));
+    cam.position.set(.45, 1.6, 0); g.add(cam);
+    var lens = cyl(.05, .06, .08, mat(0x0a0e13, { metal: .2, rough: .2 }));
+    lens.rotation.x = Math.PI / 2; lens.position.set(.45, 1.5, .0); g.add(lens);
+    var ring = torus(.07, .012, mat(0xff3838, { emissive: 0xff3838, ei: .2 }));
+    ring.rotation.x = Math.PI / 2; ring.position.set(.45, 1.49, 0); g.add(ring);
+    var beam = new T.Mesh(new T.ConeGeometry(.34, 1.1, 20, 1, true),
+      mat(0xff4040, { emissive: 0xff3030, ei: .5, alpha: .12, side: T.DoubleSide }));
+    beam.position.set(.45, .95, 0); g.add(beam);
+    return { group: g, anim: function (on, t) {
+      beam.visible = !!on;
+      ring.material.emissiveIntensity = on ? 1.8 : .2;
+      if (on) beam.scale.x = beam.scale.z = 1 + Math.sin(t * 6) * .12;
     } };
   }
 
@@ -479,8 +542,40 @@
     fan: bFan, conveyor: bConveyor, beacon: bBeacon, ejector: bEjector,
     gate: bGate, mixer: bMixer, actuator: bActuator, tank: bTank, gauge: bGauge,
     filler: bFiller, capper: bCapper, labeler: bMixer, washer: bFan, packer: bActuator,
+    robot: bRobot, vision: bVision,
     button: bInput, estop: bInput, level: bInput, fault: bInput, sensor: bInput,
   };
+
+  // 공유 이송 라인(스파인) — 스테이션 기기들을 하나의 컨베이어로 물리적으로 잇는다.
+  var LINE_KINDS = ["conveyor", "filler", "capper", "labeler", "washer", "packer",
+    "ejector", "robot"];
+  function buildLine(scene, lineDevs) {
+    var xs = lineDevs.map(function (d) { return d.x; });
+    var x0 = Math.min.apply(null, xs) - 1.5, x1 = Math.max.apply(null, xs) + 1.5;
+    var z = lineDevs[0].z, len = x1 - x0, cx = (x0 + x1) / 2;
+    var g = new T.Group();
+    [-0.34, 0.34].forEach(function (dz) {                       // 사이드 프레임
+      var fr = box(len, .14, .04, mat(COL.blueDeep, { metal: .55, rough: .35 }));
+      fr.position.set(cx, .6, z + dz); g.add(fr);
+    });
+    var belt = box(len - .1, .035, .6, mat(0x171b21, { rough: .85, metal: .1 }));
+    belt.position.set(cx, .62, z); g.add(belt);
+    for (var lx = x0 + .6; lx < x1 - .3; lx += 1.2) {            // 다리
+      [-0.26, 0.26].forEach(function (dz) {
+        var leg = box(.07, .56, .07, mat(COL.frame, { metal: .5 }));
+        leg.position.set(lx, .28, z + dz); g.add(leg);
+      });
+    }
+    var items = [];
+    var n = Math.max(5, Math.floor(len / .9));
+    for (var i = 0; i < n; i++) {                                // 라인 전체를 흐르는 제품
+      var it = cyl(.085, .085, .26, mat(COL.glass, { alpha: .55, rough: .15, metal: .1 }));
+      var cap = cyl(.05, .05, .05, mat(COL.blue, { metal: .4 })); cap.position.y = .155; it.add(cap);
+      it.position.set(x0 + .4 + i * (len - .8) / n, .78, z); g.add(it); items.push(it);
+    }
+    scene.add(g);
+    return { x0: x0 + .3, x1: x1 - .3, items: items };
+  }
 
   function deviceOn(d, r) {
     if (!r) return false;
@@ -567,6 +662,29 @@
     cab.add(cabLabel);
     cab.position.set(plcPos.x, 0, plcPos.z);
     scene.add(cab);
+    // 배전반(MDB) — 수배전 캐비닛: 인입 차단기 + 분기 차단기 핸들 행렬
+    var mdb = new T.Group();
+    var mbody = box(1.2, 2.1, .6, mat(0x44505e, { metal: .4, rough: .35 }));
+    mbody.position.y = 1.05; mdb.add(mbody);
+    var mdoor = box(1.1, 1.9, .04, mat(0x53616f, { metal: .35, rough: .3 }));
+    mdoor.position.set(0, 1.05, .32); mdb.add(mdoor);
+    var main = box(.34, .42, .06, mat(0x20262e, { rough: .4 }));
+    main.position.set(0, 1.72, .34); mdb.add(main);
+    var mhandle = box(.07, .2, .05, mat(0xd6a416, { rough: .4, metal: .3 }));
+    mhandle.position.set(0, 1.72, .39); mdb.add(mhandle);
+    for (var bi2 = 0; bi2 < 6; bi2++) {
+      var br = box(.22, .3, .05, mat(0x20262e, { rough: .4 }));
+      br.position.set(-.38 + (bi2 % 3) * .38, 1.2 - Math.floor(bi2 / 3) * .42, .34);
+      mdb.add(br);
+      var bh = box(.05, .14, .04, mat(0x9aa8b8, { metal: .5 }));
+      bh.position.set(-.38 + (bi2 % 3) * .38, 1.2 - Math.floor(bi2 / 3) * .42, .38);
+      mdb.add(bh);
+    }
+    var mdbLabel = labelSprite("MDB", "수배전반 3Φ 380V");
+    mdbLabel.position.set(0, 2.55, 0);
+    mdb.add(mdbLabel);
+    mdb.position.set(plcPos.x + 1.6, 0, plcPos.z);
+    scene.add(mdb);
     // 케이블 트레이(바닥, 캐비닛까지)
     var trayLen = Math.abs(plcPos.x) + fw / 2;
     var tray = new T.Group();
@@ -668,9 +786,15 @@
 
     var units = [], clickables = [];
     var posOf = {};
+    // 공유 이송 라인 — 스테이션 기기 2대 이상이면 하나의 컨베이어로 잇는다(연결감)
+    var lineDevs = (plant.devices || []).filter(function (d) {
+      return d.role === "output" && LINE_KINDS.indexOf(d.kind) >= 0;
+    }).sort(function (a, b) { return a.x - b.x; });
+    var line = lineDevs.length >= 2 ? buildLine(scene, lineDevs) : null;
+    var ctx = { line: !!line };
     (plant.devices || []).forEach(function (d) {
       var build = BUILDERS[d.kind] || bActuator;
-      var u = build(d);
+      var u = build(d, ctx);
       u.dev = d;
       u.group.position.set(d.x, 0, d.z);
       var sp = labelSprite(d.tag || d.symbol, d.symbol);
@@ -777,6 +901,13 @@
       plcEnv.leds.forEach(function (led, i) {
         led.material.emissiveIntensity = .3 + (Math.sin(t * (2 + i)) > 0 ? .9 : 0);
       });
+      if (line) {                                   // 라인 제품 — 전 구간 관통 흐름
+        var lineOn = !!latest && lineDevs.some(function (d) { return latest.outputs[d.symbol]; });
+        if (lineOn) line.items.forEach(function (it) {
+          it.position.x += dt * 1.05;
+          if (it.position.x > line.x1) it.position.x = line.x0;
+        });
+      }
       renderer.render(scene, cam);
     }
     frame();

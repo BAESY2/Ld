@@ -223,3 +223,21 @@ def test_below_threshold_hysteresis_pump() -> None:
     assert ("PRESSURE_LE3", "<=") in ops and ("PRESSURE_GE5", ">=") in ops
     assert "PUMP := (PRESSURE_LE3 OR PUMP) AND NOT (PRESSURE_GE5);" in st
     assert detect_double_coils(st) == {} and verify(r.spec, st).passed
+
+
+def test_vision_ng_condition_and_large_compound() -> None:
+    """'불량 나면' 비전 NG 조건 + 6서브시스템 대규모 복합문이 즉시 컴파일·검증된다."""
+    r = frame_to_spec("불량 나면 로봇 켜고 배출해")
+    st = synthesize_st(r.spec)
+    assert "ROBOT := (NG_SENSOR OR ROBOT);" in st
+    assert verify(r.spec, st).passed and r.confident
+
+    big = frame_to_spec(
+        "저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 압력 5바 넘으면 밸브 닫고 "
+        "부품 10개 차면 로봇 켜고 불량 나면 배출하고 고장 나면 사이렌 울려"
+    )
+    assert big.confident
+    outs = _outs(big.spec)
+    assert {"PUMP", "VALVE", "ROBOT", "EJECT", "SIREN"} <= outs   # 6서브시스템
+    st2 = synthesize_st(big.spec)
+    assert detect_double_coils(st2) == {} and verify(big.spec, st2).passed

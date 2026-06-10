@@ -131,6 +131,10 @@ DEVICES: dict[str, str] = {
     "라벨러": "LABELER", "라벨기": "LABELER",
     "세척기": "WASHER", "포장기": "PACKER", "박싱기": "PACKER",
     "병": "BOTTLE", "보틀": "BOTTLE", "캔": "BOTTLE",
+    # 로봇·비전 검사
+    "다관절로봇": "ROBOT", "로봇팔": "ROBOT", "로보트": "ROBOT", "매니퓰레이터": "ROBOT",
+    "비전": "VISION", "카메라": "VISION", "비전카메라": "VISION",
+    "불량": "NG", "불량품": "NG",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.
