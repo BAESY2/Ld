@@ -1,126 +1,165 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>한국어 한 줄 → 검증된 PLC · 라이브</title>
+<title>자연어 공장 설계 스튜디오 — 한국어 → CAD 도면 · 검증 래더 · 실가동</title>
 <style>
 :root{
- --bg:#070b11;--panel:rgba(20,27,36,.78);--bd:#26303d;--fg:#eaf1f8;--mut:#8b98a8;
- --acc:#58a6ff;--acc2:#7c5cff;--ok:#3fb950;--amber:#d29922;--err:#ff6b6b;
- --r:14px;--shadow:0 18px 50px rgba(0,0,0,.45);
+ --bg:#070b11;--panel:#0e141d;--panel2:#0b1018;--bd:#1f2a38;--fg:#e8f0f9;--mut:#8b98a8;
+ --acc:#58a6ff;--acc2:#7c5cff;--ok:#3fb950;--amber:#d29922;--err:#ff5d5d;
+ --r:12px;
 }
 *{box-sizing:border-box}
+html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);
  font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
- line-height:1.6;-webkit-font-smoothing:antialiased}
-.wrap{max-width:880px;margin:0 auto;padding:26px 16px 80px}
-.aurora{position:fixed;inset:-30% -10% auto -10%;height:520px;z-index:-1;filter:blur(80px);opacity:.5;
- background:radial-gradient(40% 40% at 25% 30%,rgba(88,166,255,.5),transparent 60%),
-  radial-gradient(40% 40% at 80% 20%,rgba(124,92,255,.45),transparent 60%),
-  radial-gradient(45% 45% at 60% 75%,rgba(63,185,80,.35),transparent 60%)}
-h1{font-size:clamp(22px,4.5vw,32px);letter-spacing:-.5px;margin:0 0 6px;font-weight:850}
-.g{background:linear-gradient(90deg,#58a6ff,#7c5cff 55%,#3fb950);
+ line-height:1.55;-webkit-font-smoothing:antialiased}
+.aurora{position:fixed;inset:-30% -10% auto -10%;height:480px;z-index:-1;filter:blur(90px);opacity:.4;
+ background:radial-gradient(40% 40% at 25% 30%,rgba(88,166,255,.45),transparent 60%),
+  radial-gradient(40% 40% at 80% 20%,rgba(124,92,255,.4),transparent 60%),
+  radial-gradient(45% 45% at 60% 75%,rgba(63,185,80,.3),transparent 60%)}
+.wrap{max-width:1480px;margin:0 auto;padding:18px 18px 60px}
+header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.brand{font-weight:850;font-size:18px;letter-spacing:-.4px}
+.brand .g{background:linear-gradient(90deg,#58a6ff,#7c5cff 55%,#3fb950);
  -webkit-background-clip:text;background-clip:text;color:transparent}
-.lead{color:#c4d0dd;margin:0 0 20px;font-size:15px}
-.lead b{color:#fff}
-.trybox{background:var(--panel);border:1px solid var(--bd);border-radius:16px;
- padding:14px;box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.tagline{color:var(--mut);font-size:12.5px}
+#status{margin-left:auto;font-size:12.5px;color:var(--mut)}
+#status.ok{color:var(--ok)}#status.err{color:var(--err)}
+
+.trybox{background:var(--panel);border:1px solid var(--bd);border-radius:14px;
+ padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.4)}
 .tryrow{display:flex;gap:10px}
 #nl{flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:inherit;
- font-size:16px;padding:13px 15px;border-radius:10px;outline:none;min-width:0}
-#nl:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(88,166,255,.18)}
+ font-size:15.5px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
+#nl:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(88,166,255,.16)}
 .btn{border:0;cursor:pointer;font:inherit;font-weight:800;white-space:nowrap;
  background:linear-gradient(135deg,var(--acc),var(--acc2));color:#06101f;
- padding:13px 20px;border-radius:10px;transition:transform .15s,box-shadow .15s}
-.btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(88,166,255,.35)}
-.btn:disabled{opacity:.6;cursor:default;transform:none;box-shadow:none}
-.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
-.chip{font-size:13px;background:rgba(255,255,255,.04);border:1px solid var(--bd);
- color:var(--mut);padding:7px 12px;border-radius:16px;cursor:pointer;transition:.15s}
-.chip:hover{color:var(--fg);border-color:var(--acc);background:rgba(88,166,255,.08)}
-.hint{color:var(--mut);font-size:12.5px;margin:10px 2px 0}
-#result{margin-top:18px;display:none}
-.card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);
- padding:16px;margin-bottom:14px;backdrop-filter:blur(8px);animation:fade .35s ease}
-@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.lab{color:var(--mut);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
-.understood{color:#9cc7ff;font-size:15px}
-.badge{display:inline-block;border-radius:7px;padding:4px 11px;font-size:12.5px;margin:3px 7px 3px 0;
- background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.5);color:#7ee787}
-.badge.warn{background:rgba(210,153,34,.1);border-color:var(--amber);color:#f0c26b}
-.badge.bad{background:rgba(255,107,107,.1);border-color:var(--err);color:#ff9a9a}
-.devs{display:flex;flex-wrap:wrap;gap:14px}
-.dev{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:78px}
-.glyph{font-size:42px;line-height:1;color:#2f3946;transition:color .15s,filter .15s}
-.glyph.on{color:var(--ok);filter:drop-shadow(0 0 10px rgba(63,185,80,.6))}
-.glyph.spin{animation:spin 1.1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.dev .nm{font-size:12px;color:#b6c0cc}
-.ins{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd)}
-.sw{display:flex;align-items:center;gap:8px;background:#0a0f17;border:1px solid var(--bd);
- border-radius:20px;padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;transition:.15s}
-.sw .knob{width:30px;height:17px;border-radius:10px;background:#39424f;position:relative;transition:.18s}
-.sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;
- background:#cdd6e3;transition:.18s}
-.sw.on{border-color:var(--acc);color:#bcd8ff}
-.sw.on .knob{background:var(--acc)}.sw.on .knob::after{left:15px;background:#06101f}
-.simctl{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.simctl button{font:inherit;font-size:13px;background:#0a0f17;color:var(--fg);
- border:1px solid var(--bd);border-radius:8px;padding:7px 14px;cursor:pointer}
-.simctl button.run{border-color:var(--ok);color:#7ee787}
-.ladder{overflow-x:auto;background:#0a0f17;border-radius:10px;padding:8px}
+ padding:12px 20px;border-radius:10px}
+.btn:disabled{opacity:.55;cursor:default}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.chip{font-size:12.5px;background:rgba(255,255,255,.04);border:1px solid var(--bd);
+ color:var(--mut);padding:6px 11px;border-radius:15px;cursor:pointer}
+.chip:hover{color:var(--fg);border-color:var(--acc)}
+
+.strip{display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 2px}
+.understood{color:#9cc7ff;font-size:13.5px}
+.badge{display:inline-block;border-radius:7px;padding:3px 10px;font-size:12px;
+ background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.45);color:#7ee787}
+.badge.warn{background:rgba(210,153,34,.08);border-color:var(--amber);color:#f0c26b}
+.badge.bad{background:rgba(255,93,93,.08);border-color:var(--err);color:#ff9a9a}
+
+#studio{display:none;gap:14px;margin-top:4px;align-items:flex-start}
+.canvasCol{flex:1;min-width:0}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tab{font:inherit;font-size:13px;font-weight:700;background:var(--panel);color:var(--mut);
+ border:1px solid var(--bd);border-radius:9px;padding:8px 16px;cursor:pointer}
+.tab.on{color:#06101f;background:linear-gradient(135deg,var(--acc),var(--acc2));border-color:transparent}
+.view{display:none;background:var(--panel2);border:1px solid var(--bd);border-radius:var(--r);
+ overflow:auto;min-height:430px;max-height:72vh}
+.view.on{display:block}
+#v-cad{padding:0}
+#plantwrap{width:100%;height:520px}
+#v-ladder{padding:14px}
+#v-st{padding:14px}
 pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
-details summary{cursor:pointer;color:var(--mut);font-size:13px}
-.notice{background:rgba(210,153,34,.08);border:1px solid var(--amber);color:#f0c26b;
- border-radius:10px;padding:10px 13px;font-size:12.5px;margin-top:16px}
-.foot{color:var(--mut);font-size:12px;margin-top:26px;text-align:center}
+
+.side{width:368px;flex-shrink:0;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.lab{color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px}
+.simctl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
+ border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+.ins{display:flex;flex-wrap:wrap;gap:8px}
+.sw{display:flex;align-items:center;gap:7px;background:#0a0f17;border:1px solid var(--bd);
+ border-radius:18px;padding:5px 11px;cursor:pointer;font-size:12.5px;user-select:none}
+.sw .knob{width:26px;height:15px;border-radius:9px;background:#39424f;position:relative;transition:.16s}
+.sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+ background:#cdd6e3;transition:.16s}
+.sw.on{border-color:var(--acc);color:#bcd8ff}
+.sw.on .knob{background:var(--acc)}.sw.on .knob::after{left:13px;background:#06101f}
+
+#detail .tagline2{font-size:16px;font-weight:800;margin-bottom:2px}
+#detail .sub{color:var(--mut);font-size:12px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:84px 1fr;gap:3px 10px;font-size:12.5px;margin-bottom:10px}
+.kv .k{color:var(--mut)}
+.bom li{font-size:12.5px;color:#c6d2e0;margin:2px 0}
+.bom{margin:4px 0 10px;padding-left:18px}
+.testbtn{width:100%;font:inherit;font-weight:800;font-size:13px;border:0;border-radius:9px;
+ padding:10px;cursor:pointer;background:linear-gradient(135deg,#3fb950,#2ea043);color:#03130a}
+.testbtn:disabled{opacity:.55}
+.tres{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.tline{display:flex;gap:8px;font-size:12.5px;background:#0a0f17;border:1px solid var(--bd);
+ border-radius:8px;padding:7px 10px;align-items:flex-start}
+.tline .ic{flex-shrink:0}
+.tline .nm{font-weight:700;white-space:nowrap}
+.tline .dt{color:var(--mut)}
+.tline.ok{border-color:rgba(63,185,80,.4)}
+.tline.bad{border-color:var(--err)}
+.empty{color:var(--mut);font-size:12.5px}
+.notice{background:rgba(210,153,34,.07);border:1px solid var(--amber);color:#f0c26b;
+ border-radius:10px;padding:9px 12px;font-size:12px;margin-top:14px}
+@media(max-width:1020px){
+ #studio{flex-direction:column}
+ .side{width:100%}
+}
 </style></head>
 <body><div class="aurora"></div><div class="wrap">
 
-<h1>한국어 한 줄로 <span class="g">공장을 제어</span>한다</h1>
-<p class="lead">평문으로 적으면 — AI 없이 결정론 엔진이 <b>안전 검증된 PLC 래더</b>를 만들고,
- <b>가상 PLC에서 실시간으로 가동</b>합니다. 아무 문장이나 입력해 보세요.</p>
+<header class="top">
+ <span class="brand">자연어 <span class="g">공장 설계</span> 스튜디오</span>
+ <span class="tagline">한국어 → CAD 도면 · 검증 래더 · 정밀 테스트 (결정론·키 불필요)</span>
+ <span id="status"></span>
+</header>
 
 <div class="trybox">
  <div class="tryrow">
-  <input id="nl" autocomplete="off" placeholder="예: 버튼 누르면 모터 돌고 정지 누르면 멈춰"/>
-  <button class="btn" id="go" onclick="run()">생성 ▶</button>
+  <input id="nl" autocomplete="off" placeholder="예: 저수위 되면 펌프 켜고 고수위 되면 펌프 꺼"/>
+  <button class="btn" id="go" onclick="run()">설계 생성 ▶</button>
  </div>
  <div class="chips" id="chips"></div>
- <div class="hint" id="hint">엔진이 직접 이해·합성·검증·가상가동합니다(키 불필요·결정론).</div>
 </div>
 
-<div id="result">
- <div class="card"><div class="lab">입력(한국어)</div>
-  <div id="ko" style="color:#fff;font-size:16px"></div></div>
- <div class="card"><div class="lab">이해 내용 (결정론 파싱)</div>
-  <div class="understood" id="und"></div></div>
- <div class="card"><div class="lab">형식 검증</div><div id="badges"></div></div>
- <div class="card" id="plantcard" style="display:none">
-  <div class="lab">3D 가상 공장 — 검증된 로직으로 실시간 가동</div>
-  <div id="plantwrap" style="width:100%;height:380px;border-radius:10px;overflow:hidden;
-   background:#070b11;cursor:grab"></div>
-  <div class="hint">드래그=회전 · 휠=줌 · 조작반 버튼을 직접 클릭해 입력을 켜보세요.</div>
+<div class="strip" id="strip">
+ <span class="understood" id="und"></span>
+ <span id="badges"></span>
+</div>
+
+<div id="studio">
+ <div class="canvasCol">
+  <div class="tabs">
+   <button class="tab on" data-v="cad">공장 도면 (P&ID)</button>
+   <button class="tab" data-v="3d">3D 가동</button>
+   <button class="tab" data-v="ladder">래더</button>
+   <button class="tab" data-v="st">ST 코드</button>
+  </div>
+  <div class="view on" id="v-cad"><div id="cadwrap"></div></div>
+  <div class="view" id="v-3d"><div id="plantwrap"></div></div>
+  <div class="view" id="v-ladder"><div id="ladder"></div></div>
+  <div class="view" id="v-st"><pre id="st"></pre></div>
  </div>
- <div class="card" id="simcard"><div class="lab">장치 — 가상 PLC 실시간 가동</div>
-  <div class="simctl"><button id="simtoggle">■ 정지</button>
-   <span class="hint" style="margin:0">아래 스위치를 눌러 입력을 직접 켜보세요.</span></div>
-  <div class="devs" id="devs"></div>
-  <div class="ins" id="ins"></div></div>
- <div class="card"><div class="lab">합성된 검증 래더 (살아 움직임)</div>
-  <div class="ladder" id="ladder"></div></div>
- <div class="card"><details><summary>합성된 ST 코드 보기 (IEC 61131-3)</summary>
-  <pre id="st" style="margin-top:10px"></pre></details></div>
+
+ <div class="side">
+  <div class="card">
+   <div class="lab">가상 PLC — 실시간 스캔</div>
+   <div class="simctl"><button id="simtoggle">■ 정지</button>
+    <span class="empty">도면의 기기를 클릭하면 상세·정밀테스트</span></div>
+   <div class="ins" id="ins"></div>
+  </div>
+  <div class="card" id="detail">
+   <div class="lab">기기 상세 · 정밀 테스트</div>
+   <div id="detailbody" class="empty">도면(P&ID)에서 기기 심볼을 클릭하세요 —
+    태그·PLC 주소·부품 명세(BOM)·연결을 보고, 그 기기만 골라 정밀 테스트를 돌립니다.</div>
+  </div>
+ </div>
 </div>
 
-<div class="notice">⚠ 화면 속 가동은 <b>디지털 트윈 시뮬레이션</b>입니다(실물 모터 아님).
- 이해·합성·검증은 실제 엔진이 수행하며, 장치는 검증된 로직 그대로 동작합니다.
- 본 도구는 설계 보조이며 안전 인증이 아닙니다.</div>
-
-<div class="foot">결정론 엔진 · LLM 없이 합성·검증 · 이중코일 0 · 인터락 Z3 증명</div>
-</div>
+<div class="notice">⚠ 화면 속 가동은 <b>디지털 트윈 시뮬레이션</b>입니다(실물 아님). 이해·합성·검증·
+ 테스트는 실제 엔진이 수행합니다. 본 도구는 설계 보조이며 안전 인증이 아닙니다.</div>
 
 <script src="/ladder-render.js"></script>
 <script src="/sim-engine.js"></script>
+<script src="/blueprint.js"></script>
+<script src="/precision.js"></script>
 <script src="/vendor/three.min.js"></script>
 <script src="/plant3d.js"></script>
 <script>
@@ -131,123 +170,184 @@ const EXAMPLES=[
  "압력 5바 넘으면 밸브 닫고 온도 200도 되면 히터 꺼",
  "부품 10개 차면 배출하고 고장 나면 경광등 켜",
 ];
-const SPIN=["MOTOR","PUMP","FAN","CONVEYOR","BLOWER","VACUUM","COMPRESSOR","DRILL","COOLER"];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const isSpin=(s)=>SPIN.some((x)=>String(s).toUpperCase().startsWith(x));
-const glyph=(s)=>isSpin(s)?"⚙":"⬤";
+const cssesc=(s)=>String(s).replace(/["\\]/g,"\\$&");
 
-let engine=null,timer=null,running=false,lastLadder=null,plant3d=null;
+let RES=null,engine=null,bp=null,p3d=null,timer=null,running=false,selected=null;
 const forced={};
 const STEP=120;
 
+EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
+ c.textContent=t;c.onclick=()=>{$("nl").value=t;run();};$("chips").appendChild(c);});
+$("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
+$("simtoggle").onclick=()=>{running?stopSim():startSim();};
+window.addEventListener("resize",()=>{if(p3d)p3d.resize();});
+
+// 탭
+document.querySelectorAll(".tab").forEach((t)=>t.onclick=()=>{
+ document.querySelectorAll(".tab").forEach((x)=>x.classList.remove("on"));
+ document.querySelectorAll(".view").forEach((x)=>x.classList.remove("on"));
+ t.classList.add("on");$("v-"+t.dataset.v).classList.add("on");
+ if(t.dataset.v==="3d")ensure3D();
+ if(p3d&&t.dataset.v==="3d")p3d.resize();
+});
+function viewOn(v){const e=$("v-"+v);return e&&e.classList.contains("on");}
+
+function setStatus(t,cls){const s=$("status");s.textContent=t||"";s.className=cls||"";}
+
+async function run(){
+ const text=$("nl").value.trim();if(!text)return;
+ $("go").disabled=true;setStatus("⚙ 이해·합성·검증 중…");
+ let res;
+ try{res=await(await fetch("/api/compile",{method:"POST",
+   headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();}
+ catch(e){setStatus("서버 연결 실패: "+e,"err");$("go").disabled=false;return;}
+ $("go").disabled=false;
+ RES=res;selected=null;
+ $("strip").style.display="flex";
+ $("und").textContent=res.understood||"";
+ let b="";
+ if(!res.confident){
+  const why=(res.unresolved&&res.unresolved.length)?" — "+esc(res.unresolved.join("; "))
+   :" — 도메인 밖이거나 불확실(정직 보류)";
+  b='<span class="badge warn">🤔 확신하지 못함'+why+'</span>';
+  $("badges").innerHTML=b;$("studio").style.display="none";
+  setStatus("보류됨 — 거짓 설계를 만들지 않습니다","err");stopSim();return;
+ }
+ b+='<span class="badge'+(res.ok?'':' bad')+'">'+(res.ok?"✓ Z3 검증 통과":"⚠ 검증 이슈")+'</span>';
+ b+='<span class="badge'+(res.double_coil_free?'':' bad')+'">이중코일 '+(res.double_coil_free?"0":"검출")+'</span>';
+ (res.proven_interlocks||[]).forEach((p)=>{b+='<span class="badge">증명: '+esc(p.join("⊥"))+' 동시금지</span>';});
+ $("badges").innerHTML=b;
+ $("studio").style.display="flex";
+ // 뷰들
+ $("st").textContent=res.structured_text||"";
+ $("ladder").innerHTML=(window.LadderRender&&res.ladder)?window.LadderRender.svg(res.ladder):"";
+ if(bp){bp=null;}
+ bp=window.Blueprint?window.Blueprint.render($("cadwrap"),res.plant||{devices:[]},{
+   title:text,verified:res.ok,dcFree:res.double_coil_free,onSelect:selectDevice}):null;
+ if(p3d){p3d.destroy();p3d=null;}
+ if(viewOn("3d"))ensure3D();
+ renderDetailEmpty();
+ buildSim(res.structured_text);
+ setStatus("✓ 설계 완료 — 도면의 기기를 클릭해 정밀 테스트","ok");
+}
+
+function ensure3D(){
+ if(p3d||!RES||!RES.plant||!window.Plant3D)return;
+ p3d=window.Plant3D.create($("plantwrap"),RES.plant,{onToggle:toggleForced});
+}
+
+// ── 가상 PLC 루프 ──────────────────────────────────────────────────────────
+function buildSim(st){
+ engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
+ Object.keys(forced).forEach((k)=>delete forced[k]);
+ const ins=engine?engine.inputs:[];
+ ins.forEach((s)=>forced[s]=false);
+ $("ins").innerHTML=ins.length
+  ?ins.map((s)=>'<span class="sw" data-sw="'+esc(s)+'"><span class="knob"></span>'+esc(s)+'</span>').join("")
+  :'<span class="empty">외부 입력이 없습니다(자동 동작).</span>';
+ $("ins").querySelectorAll("[data-sw]").forEach((el)=>{
+  el.onclick=()=>toggleForced(el.dataset.sw);});
+ startSim();tick();
+}
 function toggleForced(s){
  if(!(s in forced))return;
  forced[s]=!forced[s];
  document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
   el.classList.toggle("on",forced[s]));
+ if(selected===s)selectDevice(s); // 상세 패널 토글 상태 갱신
  if(!running)tick();
 }
-
-// 예시 칩
-EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
- c.textContent=t;c.onclick=()=>{$("nl").value=t;run();};$("chips").appendChild(c);});
-
-$("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
-$("simtoggle").onclick=toggleSim;
-window.addEventListener("resize",()=>{if(plant3d)plant3d.resize();});
-
-async function run(){
- const text=$("nl").value.trim();if(!text)return;
- $("go").disabled=true;$("hint").textContent="⚙ 컴파일·검증 중…";
- let res;
- try{res=await(await fetch("/api/compile",{method:"POST",
-   headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();}
- catch(e){$("hint").textContent="서버 연결 실패: "+e;$("go").disabled=false;return;}
- $("go").disabled=false;$("hint").textContent="엔진이 직접 이해·합성·검증·가상가동합니다(키 불필요·결정론).";
- $("result").style.display="block";
- $("ko").textContent='"'+text+'"';
- $("und").textContent=res.understood||"(이해 내용 없음)";
-
- if(!res.confident){
-  const why=(res.unresolved&&res.unresolved.length)
-   ?" — 미해결: "+esc(res.unresolved.join("; "))
-   :" — 도메인 밖이거나 이해가 불확실해 래더 생성을 보류했어요(정직 거절).";
-  $("badges").innerHTML='<span class="badge warn">🤔 확신하지 못함'+why+'</span>';
-  $("simcard").style.display="none";$("ladder").innerHTML='';$("st").textContent='';
-  if(plant3d){plant3d.destroy();plant3d=null;}
-  $("plantcard").style.display="none";
-  stopSim();$("result").scrollIntoView({behavior:"smooth",block:"start"});
-  return;
- }
- $("simcard").style.display="block";
- // 검증 배지
- let b="";
- b+='<span class="badge'+(res.ok?'':' bad')+'">'+(res.ok?"✓ 검증 통과":"⚠ 검증 이슈")+'</span>';
- b+='<span class="badge'+(res.double_coil_free?'':' bad')+'">이중코일 '+(res.double_coil_free?"0":"검출")+'</span>';
- (res.proven_interlocks||[]).forEach((p)=>{b+='<span class="badge">증명: '+esc(p.join(" ⊥ "))+' 동시금지</span>';});
- const v=res.verification||{};
- (v.issues||[]).forEach((i)=>{const cls=i.severity==="error"?"bad":"warn";
-  b+='<span class="badge '+cls+'">['+esc(i.code)+'] '+esc(i.message)+'</span>';});
- $("badges").innerHTML=b;
-
- $("st").textContent=res.structured_text||"(없음)";
- lastLadder=res.ladder;
- renderLadder(null);
- buildSim(res.structured_text,res.plant);
- $("result").scrollIntoView({behavior:"smooth",block:"start"});
-}
-
-function renderLadder(state){
- $("ladder").innerHTML=(window.LadderRender&&lastLadder)
-  ?window.LadderRender.svg(lastLadder,state)
-  :'<div style="color:#8b98a8;padding:14px">래더 없음</div>';
-}
-
-function buildSim(st,plant){
- engine=(window.SimEngine&&st)?window.SimEngine.create(st):null;
- Object.keys(forced).forEach((k)=>delete forced[k]);
- const ins=engine?engine.inputs:[];
- ins.forEach((s)=>forced[s]=false);
- // 3D 가상 공장 — 서버 배치도(plant)로 세우고 스캔 루프와 동기.
- if(plant3d){plant3d.destroy();plant3d=null;}
- if(plant&&window.Plant3D){
-  $("plantcard").style.display="block";
-  plant3d=window.Plant3D.create($("plantwrap"),plant,{onToggle:toggleForced});
- }else{$("plantcard").style.display="none";}
- // 장치(출력) 글리프
- const outs=engine?engine.outputs:[];
- $("devs").innerHTML=outs.length
-  ?outs.map((o)=>'<div class="dev"><span class="glyph" data-o="'+esc(o)+'">'+glyph(o)+
-    '</span><span class="nm">'+esc(o)+'</span></div>').join("")
-  :'<div class="hint" style="margin:0">출력 장치가 없습니다.</div>';
- // 입력 스위치
- $("ins").innerHTML=ins.length
-  ?ins.map((s)=>'<span class="sw" data-sw="'+esc(s)+'"><span class="knob"></span>'+esc(s)+'</span>').join("")
-  :'<span class="hint" style="margin:0">외부 입력이 없습니다(자동 동작).</span>';
- $("ins").querySelectorAll("[data-sw]").forEach((el)=>{
-  el.onclick=()=>toggleForced(el.dataset.sw);});
- startSim();tick();
-}
-
 function tick(){
  if(!engine)return;
  const r=engine.step(forced,STEP);
- for(const o in r.outputs){
-  document.querySelectorAll('[data-o="'+cssesc(o)+'"]').forEach((el)=>{
-   const on=r.outputs[o];el.classList.toggle("on",on);
-   el.classList.toggle("spin",on&&isSpin(o));});
- }
- if(plant3d)plant3d.update(r);
- renderLadder(r.table);
+ if(bp)bp.update(r);
+ if(p3d)p3d.update(r);
+ if(viewOn("ladder")&&RES&&RES.ladder)
+  $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);
+ return r;
 }
-function cssesc(s){return String(s).replace(/["\\]/g,"\\$&");}
-
 function startSim(){running=true;$("simtoggle").textContent="■ 정지";
- $("simtoggle").classList.remove("run");
  if(timer)clearInterval(timer);timer=setInterval(tick,STEP);}
 function stopSim(){running=false;if(timer){clearInterval(timer);timer=null;}
- $("simtoggle").textContent="▶ 가동";$("simtoggle").classList.add("run");}
-function toggleSim(){running?stopSim():startSim();}
+ $("simtoggle").textContent="▶ 가동";}
+
+// ── 기기 상세 + 정밀 테스트 ────────────────────────────────────────────────
+function devOf(sym){return (RES&&RES.plant?RES.plant.devices:[]).find((d)=>d.symbol===sym);}
+function renderDetailEmpty(){
+ $("detailbody").className="empty";
+ $("detailbody").innerHTML="도면(P&ID)에서 기기 심볼을 클릭하세요 — 태그·PLC 주소·부품 명세(BOM)·연결을 보고, 그 기기만 골라 정밀 테스트를 돌립니다.";
+}
+function selectDevice(sym){
+ selected=sym;if(bp)bp.select(sym);
+ const d=devOf(sym);if(!d){renderDetailEmpty();return;}
+ const conns=(RES.plant.connections||[]).filter((c)=>c.src===sym||c.dst===sym)
+  .map((c)=>c.kind==="pipe"?(c.src+" ⟶ "+c.dst+" (배관)"):(c.src+" ⤳ "+c.dst+" (신호)"));
+ let html='<div class="tagline2">'+esc(d.tag||d.symbol)+' · '+esc(d.symbol)+'</div>'
+  +'<div class="sub">'+esc(d.label||"")+'</div>'
+  +'<div class="kv">'
+  +'<span class="k">PLC 주소</span><span>'+esc(d.address||"—")+'</span>'
+  +'<span class="k">분류</span><span>'+esc(d.kind)+' / '+esc(d.role)+'</span>'
+  +((d.thresholds||[]).length?'<span class="k">설정값</span><span>'+d.thresholds.join(", ")+'</span>':"")
+  +((d.fed_by||[]).length?'<span class="k">공급원</span><span>'+d.fed_by.join(", ")+'</span>':"")
+  +'</div>';
+ if((d.parts||[]).length){
+  html+='<div class="lab">부품 명세 (BOM)</div><ul class="bom">'
+   +d.parts.map((p)=>'<li>'+esc(p)+'</li>').join("")+'</ul>';
+ }
+ if(conns.length){
+  html+='<div class="lab">연결</div><div style="font-size:12px;color:#c6d2e0">'
+   +conns.map(esc).join("<br>")+'</div>';
+ }
+ if(d.role==="input"){
+  html+='<div style="margin-top:10px"><span class="sw'+(forced[sym]?" on":"")
+   +'" data-dsw="'+esc(sym)+'"><span class="knob"></span>입력 '+(forced[sym]?"ON":"OFF")+'</span></div>';
+ }
+ // 정밀 테스트 — 출력은 자기 자신, 입력/계기는 영향을 받는 출력들
+ let targets=[];
+ if(d.role==="output")targets=[sym];
+ else if(window.Precision&&RES.structured_text){
+  if(d.role==="tank")targets=(d.fed_by||[]).slice();
+  else{
+   // 입력 심볼 + (계기면 그 임계 플래그들)이 영향을 주는 출력
+   const seeds=d.role==="gauge"
+    ?engine.inputs.filter((i)=>i.indexOf(sym+"_")===0):[sym];
+   const set=new Set();
+   seeds.forEach((s)=>window.Precision.influence(RES.structured_text,s).forEach((o)=>set.add(o)));
+   targets=[...set];
+  }
+ }
+ if(targets.length&&window.Precision){
+  html+='<div style="margin-top:12px"><button class="testbtn" id="runtest">'
+   +'정밀 테스트 ▶ '+targets.map(esc).join(", ")+'</button></div><div class="tres" id="tres"></div>';
+ }
+ $("detailbody").className="";
+ $("detailbody").innerHTML=html;
+ const dsw=$("detailbody").querySelector("[data-dsw]");
+ if(dsw)dsw.onclick=()=>toggleForced(dsw.dataset.dsw);
+ const rb=$("runtest");
+ if(rb)rb.onclick=()=>runPrecision(targets,rb);
+}
+
+async function runPrecision(targets,btn){
+ btn.disabled=true;btn.textContent="정밀 테스트 실행 중…";
+ const box=$("tres");box.innerHTML="";
+ let all=0,passn=0;
+ for(const o of targets){
+  box.innerHTML+='<div class="tline"><span class="ic">⚙</span><span class="nm">'+esc(o)+'</span><span class="dt">테스트 중…</span></div>';
+  const results=await window.Precision.testOutput(RES.structured_text,o,
+   {proven:RES.proven_interlocks||[],stepMs:100});
+  box.lastElementChild.remove();
+  results.forEach((t)=>{all++;if(t.pass)passn++;
+   box.innerHTML+='<div class="tline '+(t.pass?"ok":"bad")+'"><span class="ic">'
+    +(t.pass?"✅":"❌")+'</span><span class="nm">'+esc(o)+' · '+esc(t.name)
+    +'</span><span class="dt">'+esc(t.detail)+'</span></div>';});
+ }
+ box.innerHTML+='<div class="tline '+(passn===all?"ok":"bad")+'"><span class="ic">'
+  +(passn===all?"🏁":"⚠")+'</span><span class="nm">종합</span><span class="dt">'
+  +passn+'/'+all+' 통과</span></div>';
+ btn.disabled=false;btn.textContent="정밀 테스트 ▶ "+targets.join(", ");
+}
 </script>
 </body></html>

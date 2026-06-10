@@ -45,7 +45,8 @@ def test_live_static_assets_served() -> None:
     """라이브 페이지가 의존하는 정적 JS 가 실제로 서빙된다(404 아님)."""
     for asset in (
         "/sim-engine.js", "/ladder-render.js", "/live.html",
-        "/vendor/three.min.js", "/plant3d.js",  # 3D 가상 공장
+        "/vendor/three.min.js", "/plant3d.js",   # 3D 가상 공장
+        "/blueprint.js", "/precision.js",        # CAD 도면 + 정밀 테스트
     ):
         r = client.get(asset)
         assert r.status_code == 200, asset
@@ -56,6 +57,14 @@ def test_root_includes_3d_plant() -> None:
     r = client.get("/")
     assert "plant3d.js" in r.text
     assert "three.min.js" in r.text
+
+
+def test_root_includes_cad_and_precision() -> None:
+    """첫 화면이 CAD 도면(blueprint)·정밀테스트(precision) 모듈을 싣는다."""
+    r = client.get("/")
+    assert "blueprint.js" in r.text
+    assert "precision.js" in r.text
+    assert "/api/compile" in r.text
 
 
 def test_recipes_keyfree_path_nonempty() -> None:

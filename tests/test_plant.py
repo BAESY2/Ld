@@ -76,3 +76,52 @@ def test_layout_is_deterministic() -> None:
     a = plant_from_spec(frame_to_spec(text).spec)
     b = plant_from_spec(frame_to_spec(text).spec)
     assert a.model_dump() == b.model_dump()
+
+
+def test_cad_tags_are_unique_and_kind_prefixed() -> None:
+    """CAD 태그번호 — 종류별 접두(P-/M-/TK-/PT-)·전 기기 고유(도면 식별자)."""
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 고장 나면 경광등 켜")
+    layout = plant_from_spec(r.spec)
+    tags = [d.tag for d in layout.devices]
+    assert all(tags), "모든 기기에 태그가 있어야 한다"
+    assert len(set(tags)) == len(tags), "태그는 고유해야 한다"
+    assert _by_symbol(layout, "PUMP").tag.startswith("P-")
+    assert _by_symbol(layout, "TANK").tag.startswith("TK-")
+    assert _by_symbol(layout, "BEACON").tag.startswith("XL-")
+
+
+def test_gauge_tag_follows_isa_letter() -> None:
+    """계기 태그 — 압력 PT-, 온도 TT-(ISA 계열 문자)."""
+    r = frame_to_spec("압력 5바 넘으면 밸브 닫고 온도 200도 되면 히터 꺼")
+    layout = plant_from_spec(r.spec)
+    assert _by_symbol(layout, "PRESSURE").tag.startswith("PT-")
+    assert _by_symbol(layout, "TEMP").tag.startswith("TT-")
+
+
+def test_bom_parts_per_device() -> None:
+    """설계 세분화 — 기기마다 부품 명세(BOM)가 붙는다(모터→접촉기/EOCR…)."""
+    layout = plant_from_spec(build_spec("motor_start_stop"))
+    motor = _by_symbol(layout, "MOTOR")
+    assert any("전자접촉기" in p for p in motor.parts)
+    assert any("열동계전기" in p for p in motor.parts)
+    start = _by_symbol(layout, "START")
+    assert any("푸시버튼" in p for p in start.parts)
+
+
+def test_plc_addresses_assigned_to_io() -> None:
+    """IO 기기에 LS 디바이스 주소(P…)가 결정론 부여된다(탱크는 IO 아님→빈 값)."""
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 꺼")
+    layout = plant_from_spec(r.spec)
+    assert _by_symbol(layout, "PUMP").address.startswith("P")
+    assert _by_symbol(layout, "LO_LS").address.startswith("P")
+    assert _by_symbol(layout, "TANK").address == ""
+
+
+def test_connections_pipe_and_signal() -> None:
+    """연결 컴파일 — 펌프→탱크 배관, 입력→PLC·PLC→구동기 신호선."""
+    r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 꺼")
+    layout = plant_from_spec(r.spec)
+    kinds = {(c.src, c.dst, c.kind) for c in layout.connections}
+    assert ("PUMP", "TANK", "pipe") in kinds
+    assert ("PLC", "PUMP", "signal") in kinds
+    assert ("LO_LS", "PLC", "signal") in kinds
