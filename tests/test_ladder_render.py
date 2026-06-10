@@ -20,10 +20,10 @@ _RUNNER = Path(__file__).resolve().parent.parent / "scripts" / "ladder_render_ru
 
 pytestmark = pytest.mark.skipif(_NODE is None, reason="node 미설치 — 렌더러 색 검사 스킵")
 
-C_LIVE = "#5ff08a"   # 도통/점등 초록
-C_OFF = "#454c57"    # 비도통 접점
-W_STATIC = "#3a7"    # 무상태 기본 전선(다른 화면 호환)
-W_DIM = "#33414f"    # 비도통 직렬 구간
+# v2(XG5000 풍) 팔레트 — 의도는 동일: 무상태=중립, 도통=라이브 초록, 비도통=흐림.
+C_LIVE = "#46e07c"   # 도통/점등 초록
+C_OFF = "#3a4350"    # 비도통 접점·흐림 직렬 구간
+W_IDLE = "#5d6b7c"   # 무상태 기본 전선(중립 회색 — 라이브와 뚜렷이 구분)
 
 _LADDER = {
     "rungs": [
@@ -47,10 +47,10 @@ def _svg(state: dict | None) -> str:
     return out.stdout
 
 
-def test_stateless_keeps_legacy_colors() -> None:
+def test_stateless_has_no_live_highlight() -> None:
     svg = _svg(None)
     assert "A" in svg and "Y" in svg
-    assert W_STATIC in svg          # 기존 초록 전선 유지
+    assert W_IDLE in svg            # 무상태 = 중립 전선
     assert C_LIVE not in svg        # 상태 없으면 라이브 하이라이트 없음
 
 
@@ -60,6 +60,6 @@ def test_energized_path_and_coil_are_live() -> None:
 
 
 def test_dead_contact_and_segment_are_dim() -> None:
+    """비도통 접점과 그 *하류* 구간은 흐림 — 전원측(접점 앞) 구간은 통전이 맞다."""
     svg = _svg({"A": False})
-    assert C_OFF in svg             # NO 접점 비도통 = 꺼짐색
-    assert W_DIM in svg             # 접점 하류 직렬 구간 = 흐림
+    assert C_OFF in svg             # NO 접점 비도통·하류 직렬 구간 = 흐림/꺼짐

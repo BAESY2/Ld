@@ -125,6 +125,12 @@ DEVICES: dict[str, str] = {
     # 방향(정/역) — fwd_rev 의 구조 변별자
     "정방향": "DIR_FWD", "정회전": "DIR_FWD", "전진": "DIR_FWD",
     "역방향": "DIR_REV", "역회전": "DIR_REV", "후진": "DIR_REV",
+    # 보틀링/포장 라인(수직 슬라이스) — 충전→캡핑→라벨→포장 공정 기기
+    "충전기": "FILLER", "필러": "FILLER", "주입기": "FILLER",
+    "캡핑기": "CAPPER", "캡퍼": "CAPPER", "마개": "CAPPER",
+    "라벨러": "LABELER", "라벨기": "LABELER",
+    "세척기": "WASHER", "포장기": "PACKER", "박싱기": "PACKER",
+    "병": "BOTTLE", "보틀": "BOTTLE", "캔": "BOTTLE",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.

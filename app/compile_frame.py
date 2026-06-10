@@ -42,6 +42,9 @@ _DEV_OUT = {
     "ROBOT": "ROBOT", "SOLENOID": "SOLENOID", "CYLINDER": "CYLINDER",
     "COOLER": "COOLER", "COMPRESSOR": "COMPRESSOR",
     "LAMP_R": "LAMP_R", "LAMP_G": "LAMP_G", "LAMP_Y": "LAMP_Y",
+    # 보틀링/포장 라인
+    "FILLER": "FILLER", "CAPPER": "CAPPER", "LABELER": "LABELER",
+    "WASHER": "WASHER", "PACKER": "PACKER",
 }
 # 조건 기기 → (트리거 입력 심볼). 아날로그/계수는 별도(비교기/카운터)로 푼다.
 _DEV_TRIG = {
@@ -103,7 +106,7 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
         return b.analog_flag(_ANALOG[c.device], float(c.value), op)
     if c.predicate in ("COUNT", "FILL") and c.value is not None:
         return b.counter_q(c.value)
-    if c.device == "PART" and c.value is not None:
+    if c.device in ("PART", "BOTTLE") and c.value is not None:
         return b.counter_q(c.value)
     if c.device:  # 일반 기기 → 입력 신호(피드백/센서). 커버리지 확장.
         return b.add_input(f"{c.device}_SIG")
@@ -116,7 +119,7 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
 # 이들이 ACTION 의 대상이면 의미 난센스("온도 올려"·"탱크 켜"·"압력 켜")로 보고 정직 거절한다.
 _NON_ACTUATABLE = {
     "PRESSURE", "TEMP", "LEVEL", "LEVEL_LO", "LEVEL_HI", "FAULT", "BUTTON",
-    "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK",
+    "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK", "BOTTLE",
 }
 # 물리 구동을 뜻하는 동작 술어(이것이 비액추에이터에 걸리면 부적합).
 _ACTUATION_PREDS = _ON | _OFF

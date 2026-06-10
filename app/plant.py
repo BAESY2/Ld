@@ -30,6 +30,8 @@ _OUT_KINDS: tuple[tuple[str, str], ...] = (
     ("ALARM", "beacon"), ("BUZZER", "beacon"), ("SIREN", "beacon"),
     ("EJECT", "ejector"), ("PUSHER", "ejector"), ("CYL", "ejector"),
     ("GATE", "gate"), ("DOOR", "gate"),
+    ("FILLER", "filler"), ("CAPPER", "capper"), ("LABELER", "labeler"),
+    ("WASHER", "washer"), ("PACKER", "packer"),
 )
 
 # 입력 심볼 단서 → 기기 종류
@@ -42,6 +44,8 @@ _KIND_KO: dict[str, str] = {
     "motor": "모터", "pump": "펌프", "valve": "밸브", "heater": "히터",
     "cooler": "쿨러", "fan": "팬", "conveyor": "컨베이어", "beacon": "경광등",
     "ejector": "배출기", "gate": "게이트", "mixer": "믹서", "actuator": "구동기",
+    "filler": "충전기", "capper": "캡핑기", "labeler": "라벨러",
+    "washer": "세척기", "packer": "포장기",
     "button": "버튼", "estop": "비상정지", "level": "수위센서", "fault": "고장신호",
     "sensor": "센서", "gauge": "계기", "tank": "탱크",
 }
@@ -57,6 +61,7 @@ _TAG_PREFIX: dict[str, str] = {
     "motor": "M", "pump": "P", "valve": "XV", "heater": "H", "cooler": "F",
     "fan": "F", "conveyor": "CV", "beacon": "XL", "ejector": "CY", "gate": "GT",
     "mixer": "MX", "actuator": "A", "tank": "TK",
+    "filler": "FL", "capper": "CP", "labeler": "LB", "washer": "WS", "packer": "PK",
     "button": "HS", "estop": "ES", "level": "LSH", "fault": "XA", "sensor": "XS",
 }
 _GAUGE_TAG = {"PRESSURE": "PT", "TEMP": "TT", "LEVEL": "LT", "FLOW": "FT"}
@@ -81,6 +86,11 @@ _BOM: dict[str, list[str]] = {
     ],
     "gate": ["공압 실린더", "배선용차단기(MCB)", "구동 릴레이", "가이드 레일", "리밋 스위치 2점"],
     "mixer": ["교반 전동기", *_MOTOR_POWER_CHAIN, "감속기", "임펠러"],
+    "filler": ["충전 노즐(4련)", "정량 펌프", *_MOTOR_POWER_CHAIN, "병 검출 포토센서"],
+    "capper": ["캡 호퍼", "토크 클러치 헤드", *_MOTOR_POWER_CHAIN, "캡 유무 센서"],
+    "labeler": ["라벨 릴", "압착 롤러", *_MOTOR_POWER_CHAIN],
+    "washer": ["분사 노즐 링", "세척수 펌프", *_MOTOR_POWER_CHAIN],
+    "packer": ["박스 매거진", "푸셔 실린더", *_MOTOR_POWER_CHAIN, "만재 센서"],
     "actuator": ["범용 액추에이터", "배선용차단기(MCB)", "구동 릴레이"],
     "tank": ["저장탱크(SUS304)", "레벨 스위치 2점", "드레인 밸브", "오버플로 배관"],
     "gauge": ["트랜스미터(4-20mA)", "신호 변환기", "게이지 콕"],

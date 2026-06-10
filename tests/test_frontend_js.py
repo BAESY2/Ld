@@ -48,6 +48,7 @@ def _payload(tmp_path: Path, text: str) -> Path:
     "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",          # 탱크·배관·수위
     "모터 돌리고 다음 펌프 켜고 다음 밸브 열어",          # 시퀀서·타이머
     "부품 10개 차면 배출하고 고장 나면 경광등 켜",        # 카운터·경광등·실린더
+    "컨베이어 돌리고 다음 충전기 켜고 다음 캡핑기 켜고 다음 배출해",  # 보틀링 라인
 ])
 def test_js_smoke_scene_and_svg(tmp_path: Path, text: str) -> None:
     payload = _payload(tmp_path, text)

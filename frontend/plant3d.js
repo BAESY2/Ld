@@ -293,10 +293,50 @@
     } };
   }
 
+  // 보틀링 라인 — 충전기(겐트리+노즐 하강·적하), 캡핑기(프레스 헤드 스탬핑)
+  function bFiller() {
+    var g = new T.Group();
+    [-0.5, 0.5].forEach(function (x) {
+      var post = box(.12, 1.7, .12, mat(COL.steel, { metal: .5 })); post.position.set(x, .85, 0); g.add(post);
+    });
+    var beam = box(1.15, .14, .3, mat(COL.steel, { metal: .5 })); beam.position.y = 1.7; g.add(beam);
+    var head = box(.5, .22, .26, mat(COL.accent, { metal: .4 })); head.position.y = 1.5; g.add(head);
+    var noz = cyl(.045, .03, .3, mat(COL.steel, { metal: .7 })); noz.position.y = 1.3; g.add(noz);
+    var drop = new T.Mesh(new T.SphereGeometry(.05, 8, 8),
+      mat(COL.water, { emissive: COL.water, ei: .8 }));
+    drop.position.y = 1.0; drop.visible = false; g.add(drop);
+    var bottle = cyl(.11, .11, .34, mat(COL.glass, { alpha: .4, rough: .15 }));
+    bottle.position.y = .65; g.add(bottle);
+    var t0 = 0;
+    return { group: g, anim: function (on, t, dt) {
+      t0 = t;
+      var dip = on ? (Math.sin(t * 3) * .5 + .5) * .18 : 0;   // 노즐 주기 하강
+      head.position.y = 1.5 - dip; noz.position.y = 1.3 - dip;
+      drop.visible = !!on && Math.sin(t * 3) > 0;
+      if (drop.visible) drop.position.y = 1.05 - ((t * 1.7) % 1) * .25;
+    } };
+  }
+  function bCapper() {
+    var g = new T.Group();
+    [-0.45, 0.45].forEach(function (x) {
+      var post = box(.12, 1.6, .12, mat(COL.steel, { metal: .5 })); post.position.set(x, .8, 0); g.add(post);
+    });
+    var beam = box(1.05, .14, .3, mat(COL.steel, { metal: .5 })); beam.position.y = 1.6; g.add(beam);
+    var ram = box(.3, .42, .26, mat(COL.amber, { metal: .35 })); ram.position.y = 1.28; g.add(ram);
+    var chuck = cyl(.13, .13, .12, mat(COL.dark, { metal: .6 })); chuck.position.y = 1.02; g.add(chuck);
+    var bottle = cyl(.11, .11, .34, mat(COL.glass, { alpha: .4, rough: .15 }));
+    bottle.position.y = .65; g.add(bottle);
+    return { group: g, anim: function (on, t) {
+      var press = on ? Math.max(0, Math.sin(t * 4)) * .2 : 0;   // 스탬핑
+      ram.position.y = 1.28 - press; chuck.position.y = 1.02 - press;
+    } };
+  }
+
   var BUILDERS = {
     motor: bMotor, pump: bPump, valve: bValve, heater: bHeater, cooler: bFan,
     fan: bFan, conveyor: bConveyor, beacon: bBeacon, ejector: bEjector,
     gate: bGate, mixer: bMixer, actuator: bActuator, tank: bTank, gauge: bGauge,
+    filler: bFiller, capper: bCapper, labeler: bMixer, washer: bFan, packer: bActuator,
     button: bInput, estop: bInput, level: bInput, fault: bInput, sensor: bInput,
   };
 
