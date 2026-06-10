@@ -45,6 +45,8 @@ _DEV_OUT = {
     # 보틀링/포장 라인
     "FILLER": "FILLER", "CAPPER": "CAPPER", "LABELER": "LABELER",
     "WASHER": "WASHER", "PACKER": "PACKER",
+    # 정역 운전(전동기 방향)
+    "DIR_FWD": "MOTOR_FWD", "DIR_REV": "MOTOR_REV",
 }
 # 조건 기기 → (트리거 입력 심볼). 아날로그/계수는 별도(비교기/카운터)로 푼다.
 _DEV_TRIG = {
@@ -139,7 +141,11 @@ def _out_symbol(c: IntentClause) -> str | None:
     하거나 정직 미해결 처리한다(유령 'OUT' 코일 합성 금지)."""
     if not c.device and c.predicate != "EJECT":
         return None
-    base = _DEV_OUT.get(c.device or "", "EJECT")
+    base = _DEV_OUT.get(c.device or "")
+    if base is None:
+        # 미등록 기기 — 카테고리명을 심볼로 그대로 쓴다(예: JIG).
+        # 과거엔 무엇이든 'EJECT' 로 합성되는 잘못된 폴백이었다(기기 뒤바뀜).
+        base = "EJECT" if (not c.device and c.predicate == "EJECT") else (c.device or "EJECT")
     # 인스턴스 마커가 있으면 고유 심볼(PUMP1/PUMP2/GATE_A) — 인스턴스별로 분리된다.
     if c.instance and base != "EJECT":
         return f"{base}{c.instance.upper()}"

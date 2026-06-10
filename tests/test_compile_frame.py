@@ -265,3 +265,25 @@ def test_star_delta_starter_compiles_and_proves() -> None:
     last_y = max(i for i, v in enumerate(y) if v)
     first_d = min(i for i, v in enumerate(d) if v)
     assert first_d - last_y >= 2                  # 개방전환 데드타임(1스캔 이상)
+
+
+def test_fwd_rev_interlock_proven() -> None:
+    """정역 운전 — MOTOR_FWD⊥MOTOR_REV 동시투입 금지가 k-귀납으로 증명된다."""
+    from app.verifier import proven_safe_pairs
+
+    r = frame_to_spec("정회전 돌리고 역회전 돌리고 동시에 안 되게")
+    st = synthesize_st(r.spec)
+    pairs = {tuple(sorted(p)) for p in proven_safe_pairs(r.spec, st)}
+    assert ("MOTOR_FWD", "MOTOR_REV") in pairs
+    assert verify(r.spec, st).passed and r.confident
+
+
+def test_unknown_device_not_renamed_to_eject() -> None:
+    """회귀(기기 뒤바뀜): 미등록 기기 동작이 EJECT 로 둔갑하던 폴백 — 카테고리명 유지."""
+    r = frame_to_spec("지그 고정해")
+    st = synthesize_st(r.spec)
+    assert "JIG :=" in st and "EJECT" not in st
+    assert verify(r.spec, st).passed
+    # 무주어 '배출해'는 여전히 EJECT(의도된 동작)
+    r2 = frame_to_spec("배출해")
+    assert "EJECT :=" in synthesize_st(r2.spec)
