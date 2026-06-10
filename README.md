@@ -11,6 +11,12 @@
 > 메모리맵 할당 · 이중코일 기계적 제거 · Z3 인터락 증명이다. 자세한 검토는
 > [`ARCHITECTURE_REVIEW.md`](ARCHITECTURE_REVIEW.md), 전체 플랜은 [`PLAN.md`](PLAN.md).
 
+### 📘 핵심 문서
+- **[백서 `docs/WHITEPAPER.md`](docs/WHITEPAPER.md)** — 난제·아키텍처·재현 가능 측정치·형식 증명 사례·한계.
+- **[사용자 매뉴얼 `docs/MANUAL.md`](docs/MANUAL.md)** — 한국어 작성법·표준회로 카탈로그·정밀테스트·내보내기·FAQ.
+- **[에러코드 자료집 `docs/ERRORCODES.md`](docs/ERRORCODES.md)** — LS·미쓰비시·지멘스·오므론+공통 101건(출처 인용).
+- 측정 재현: `python scripts/capability_report.py`
+
 ## 맥/리눅스에서 바로 실행 (라이브 래더 에디터)
 
 ```bash
