@@ -1,135 +1,190 @@
-// 공유 래더 SVG 렌더러 (읽기 전용) — 에디터/생성기/스튜디오 공용.
-//   window.LadderRender.svg(ladder)         -> 정적 SVG(기존 동작 보존).
-//   window.LadderRender.svg(ladder, state)  -> state(심볼→bool)로 파워플로우 하이라이트.
-// state 가 주어지면 도통 접점/도통 직렬경로/점등 코일을 초록으로 라이브 표시한다
-// (sim-engine 의 매 스캔 table 과 동기화 → "살아 움직이는 래더").
+// 공유 래더 SVG 렌더러 v2 (읽기 전용) — 에디터/생성기/스튜디오/웹 공용.
+//   window.LadderRender.svg(ladder)         -> 정적 SVG.
+//   window.LadderRender.svg(ladder, state)  -> state(심볼→bool)로 파워플로우 라이브.
+// XG5000 풍 전문 도면 문법: 렁 번호 박스·주석 밴드·셀 그리드·정식 접점/코일 심볼·
+// 타이머/카운터 펑션블록(PT 표시)·분기 정션 도트·통전 경로 글로우.
 (function () {
-  const LEFT_RAIL = 24, BUS_L = 70, SLOT = 104, ROW_H = 58, PAD_TOP = 28, COIL_W = 90;
-  const C_IDLE = "#cdd6e3", C_LIVE = "#5ff08a", C_OFF = "#454c57";
-  const W_STATIC = "#3a7", W_LIVE = "#5ff08a", W_DIM = "#33414f";
+  var LEFT = 30, BUS_L = 86, SLOT = 112, ROW_H = 66, HEAD_H = 26, COIL_W = 104, PAD_B = 10;
+  var C_WIRE = "#5d6b7c", C_LIVE = "#46e07c", C_OFF = "#3a4350", C_IDLE = "#cdd6e3";
+  var C_RAIL = "#4f9dff", C_TXT = "#e6edf6", C_DIM = "#76828f", C_BG = "#0d1117";
+  var C_CELL = "#161d27", C_BLK = "#8ec9ff";
 
   function esc(s) {
-    return String(s).replace(/[&<>"]/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
   }
-  function line(x1, y1, x2, y2, color, w) {
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}"/>`;
+  function line(x1, y1, x2, y2, color, w, cls) {
+    return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+      '" stroke="' + color + '" stroke-width="' + w + '"' +
+      (cls ? ' class="' + cls + '"' : "") + "/>";
   }
-  // 접점 도통 여부: NO 는 값 그대로, NC 는 반전. state 없으면 null(무상태).
+  function txt(x, y, s, size, fill, anchor, weight) {
+    return '<text x="' + x + '" y="' + y + '" font-size="' + size + '" fill="' + fill +
+      '" text-anchor="' + (anchor || "middle") + '"' +
+      (weight ? ' font-weight="' + weight + '"' : "") + ">" + esc(s) + "</text>";
+  }
+  function wireCol(live) { return live === null ? C_WIRE : (live ? C_LIVE : C_OFF); }
+  function wireW(live) { return live ? 2.6 : 1.6; }
   function conducts(el, state) {
     if (!state) return null;
-    const v = !!state[el.symbol];
+    var v = !!state[el.symbol];
     return el.element_type === "CONTACT_NC" ? !v : v;
   }
-  // 전선 색: 무상태면 기존 초록, 상태 있으면 라이브=밝은초록 / 비도통=흐림.
-  function wire(live) { return live === null ? W_STATIC : (live ? W_LIVE : W_DIM); }
 
+  // ── 접점 — 정식 -| |- / -|/|- 심볼 ────────────────────────────────────────
   function contact(cx, cy, el, state) {
-    const cond = conducts(el, state);
-    const col = cond === null ? C_IDLE : (cond ? C_LIVE : C_OFF);
-    const nc = el.element_type === "CONTACT_NC";
-    const g = [];
-    g.push(line(cx - 6, cy - 11, cx - 6, cy + 11, col, 2));
-    g.push(line(cx + 6, cy - 11, cx + 6, cy + 11, col, 2));
-    if (nc) g.push(line(cx - 9, cy + 11, cx + 9, cy - 11, col, 2));
-    const txt = cond ? C_LIVE : "#dce4f0";
-    g.push(`<text x="${cx}" y="${cy - 16}" fill="${txt}" font-size="11" text-anchor="middle">${esc(el.symbol)}</text>`);
-    if (el.address)
-      g.push(`<text x="${cx}" y="${cy + 26}" fill="#6f7a8a" font-size="10" text-anchor="middle">${esc(el.address)}</text>`);
+    var cond = conducts(el, state);
+    var col = cond === null ? C_IDLE : (cond ? C_LIVE : C_OFF);
+    var nc = el.element_type === "CONTACT_NC";
+    var g = [];
+    if (cond) g.push('<rect x="' + (cx - 13) + '" y="' + (cy - 15) +
+      '" width="26" height="30" rx="3" fill="rgba(70,224,124,.12)"/>');
+    g.push(line(cx - 8, cy - 13, cx - 8, cy + 13, col, 2.6));
+    g.push(line(cx + 8, cy - 13, cx + 8, cy + 13, col, 2.6));
+    if (nc) g.push(line(cx - 12, cy + 13, cx + 12, cy - 13, col, 2.2));
+    g.push(txt(cx, cy - 21, el.symbol, 11.5, cond ? C_LIVE : C_TXT, "middle", 600));
+    if (el.address) g.push(txt(cx, cy + 28, el.address, 9, C_DIM));
     return g.join("");
   }
 
+  // ── 출력 — 코일( ) / (S) / (R) / TON·CTU 펑션블록 ─────────────────────────
   function output(cx, cy, out, state) {
-    const t = out.element_type;
-    const lit = state ? (t === "TIMER" || t === "COUNTER"
+    var t = out.element_type;
+    var lit = state ? (t === "TIMER" || t === "COUNTER"
       ? !!state[out.symbol + ".Q"] : !!state[out.symbol]) : null;
-    const g = [];
+    var g = [];
     if (t === "TIMER" || t === "COUNTER") {
-      const label = t === "TIMER" ? "TON" : "CTU";
-      const stroke = lit ? C_LIVE : "#4f9dff";
-      g.push(`<rect x="${cx}" y="${cy - 18}" width="${COIL_W}" height="36" rx="4" fill="#1d2733" stroke="${stroke}" stroke-width="1.5"/>`);
-      g.push(`<text x="${cx + COIL_W / 2}" y="${cy - 3}" fill="#8ec9ff" font-size="10" text-anchor="middle">${label} ${esc(out.symbol)}</text>`);
-      g.push(`<text x="${cx + COIL_W / 2}" y="${cy + 12}" fill="#9fb3c8" font-size="10" text-anchor="middle">${esc(out.description || "")}</text>`);
+      var label = t === "TIMER" ? "TON" : "CTU";
+      var stroke = lit ? C_LIVE : C_BLK;
+      var pt = (out.description || "").trim();
+      g.push('<rect x="' + cx + '" y="' + (cy - 22) + '" width="' + COIL_W +
+        '" height="44" rx="5" fill="#121a26" stroke="' + stroke + '" stroke-width="1.6"/>');
+      g.push(line(cx, cy - 6, cx + COIL_W, cy - 6, "#22304273", 1));
+      g.push(txt(cx + COIL_W / 2, cy - 10, label + "  " + out.symbol, 11,
+        lit ? C_LIVE : C_BLK, "middle", 700));
+      g.push(txt(cx + COIL_W / 2, cy + 11, pt || "—", 9.5, C_DIM));
+      // 입출력 핀
+      g.push(line(cx - 6, cy, cx, cy, wireCol(lit), 1.6));
+      g.push(txt(cx + 5, cy + 3, "IN", 7.5, C_DIM, "start"));
+      g.push(txt(cx + COIL_W - 5, cy + 3, "Q", 7.5, lit ? C_LIVE : C_DIM, "end"));
       return g.join("");
     }
-    const base = t === "COIL_SET" ? "#f5b14c" : t === "COIL_RESET" ? "#ff7a7a" : "#46c46a";
-    const color = lit ? C_LIVE : base;
-    const tag = t === "COIL_SET" ? "(S)" : t === "COIL_RESET" ? "(R)" : "";
-    const txt = lit ? C_LIVE : "#9fe0b0";
-    g.push(`<text x="${cx + 35}" y="${cy - 16}" fill="${txt}" font-size="11" text-anchor="middle">${esc(out.symbol)} ${tag}</text>`);
-    const sw = lit ? 2.5 : 2;
-    g.push(`<path d="M ${cx} ${cy - 12} Q ${cx + 14} ${cy} ${cx} ${cy + 12}" fill="none" stroke="${color}" stroke-width="${sw}"/>`);
-    g.push(`<path d="M ${cx + 70} ${cy - 12} Q ${cx + 56} ${cy} ${cx + 70} ${cy + 12}" fill="none" stroke="${color}" stroke-width="${sw}"/>`);
-    if (out.address)
-      g.push(`<text x="${cx + 35}" y="${cy + 26}" fill="#6f7a8a" font-size="10" text-anchor="middle">${esc(out.address)}</text>`);
+    var base = t === "COIL_SET" ? "#f5b14c" : t === "COIL_RESET" ? "#ff7a7a" : "#46c46a";
+    var color = lit ? C_LIVE : base;
+    var tag = t === "COIL_SET" ? "S" : t === "COIL_RESET" ? "R" : "";
+    var ccx = cx + COIL_W / 2;
+    if (lit) g.push('<circle cx="' + ccx + '" cy="' + cy +
+      '" r="17" fill="rgba(70,224,124,.14)"/>');
+    g.push('<circle cx="' + ccx + '" cy="' + cy + '" r="13" fill="none" stroke="' +
+      color + '" stroke-width="' + (lit ? 2.6 : 2) + '"/>');
+    if (tag) g.push(txt(ccx, cy + 4, tag, 11, color, "middle", 700));
+    g.push(txt(ccx, cy - 21, out.symbol, 11.5, lit ? C_LIVE : C_TXT, "middle", 600));
+    if (out.address) g.push(txt(ccx, cy + 28, out.address, 9, C_DIM));
+    g.push(line(cx, cy, ccx - 13, cy, wireCol(lit), wireW(lit)));
+    g.push(line(ccx + 13, cy, cx + COIL_W, cy, wireCol(lit), wireW(lit)));
     return g.join("");
+  }
+
+  function junction(x, y, live) {
+    return '<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + wireCol(live) + '"/>';
   }
 
   function drawRung(rung, ri, y0, h, busR, coilX, rightRail, state) {
-    const top = y0 + PAD_TOP;
-    const p = [];
-    p.push(`<text x="${BUS_L}" y="${y0 + 17}" fill="#7f8a9a" font-size="11">${esc(`[${ri + 1}] ${rung.comment || ""}`)}</text>`);
-    p.push(line(LEFT_RAIL, y0, LEFT_RAIL, y0 + h, "#d14b4b", 3));
-    p.push(line(rightRail, y0, rightRail, y0 + h, "#d14b4b", 3));
-    const branches = rung.input_branches.length ? rung.input_branches : [{ elements: [] }];
-    const rowYs = branches.map((_, i) => top + i * ROW_H + ROW_H / 2);
-    // 각 브랜치의 끝단 도통(직렬 AND) → rung 도통(OR)
-    const branchLive = branches.map((b) =>
-      state ? (b.elements || []).every((el) => conducts(el, state)) : null);
-    const rungLive = state ? branchLive.some((x) => x) : null;
+    var p = [];
+    // 렁 헤더 밴드 — 번호 박스 + 주석
+    p.push('<rect x="' + LEFT + '" y="' + y0 + '" width="' + (rightRail - LEFT) +
+      '" height="' + HEAD_H + '" fill="#10161f"/>');
+    p.push('<rect x="' + (LEFT + 4) + '" y="' + (y0 + 4) +
+      '" width="44" height="18" rx="3" fill="#1b2738" stroke="#2c3e57" stroke-width="1"/>');
+    p.push(txt(LEFT + 26, y0 + 17, String(ri + 1).padStart(4, "0"), 10, C_BLK, "middle", 700));
+    if (rung.comment) p.push(txt(LEFT + 56, y0 + 17, rung.comment, 10.5, C_DIM, "start"));
+
+    var top = y0 + HEAD_H;
+    var branches = rung.input_branches.length ? rung.input_branches : [{ elements: [] }];
+    var rowYs = branches.map(function (_, i) { return top + i * ROW_H + ROW_H / 2 + 4; });
+    var branchLive = branches.map(function (b) {
+      return state ? (b.elements || []).every(function (el) { return conducts(el, state); }) : null;
+    });
+    var rungLive = state ? branchLive.some(function (x) { return x; }) : null;
+
+    // 셀 그리드(편집기 느낌의 옅은 격자)
+    for (var gx = BUS_L; gx <= busR; gx += SLOT)
+      p.push(line(gx, top + 2, gx, y0 + h - 4, C_CELL, 1));
+
+    // 전원 레일
+    p.push(line(LEFT, y0, LEFT, y0 + h, C_RAIL, 4));
+    p.push(line(rightRail, y0, rightRail, y0 + h, C_RAIL, 4));
+
+    // 분기 수직 묶음 + 정션
     if (branches.length > 1) {
-      p.push(line(BUS_L, rowYs[0], BUS_L, rowYs[rowYs.length - 1], wire(state ? true : null), 2));
-      p.push(line(busR, rowYs[0], busR, rowYs[rowYs.length - 1], wire(rungLive), 2));
+      p.push(line(BUS_L, rowYs[0], BUS_L, rowYs[rowYs.length - 1], wireCol(state ? true : null), 2));
+      p.push(line(busR, rowYs[0], busR, rowYs[rowYs.length - 1], wireCol(rungLive), 2));
+      rowYs.forEach(function (yc, i) {
+        p.push(junction(BUS_L, yc, state ? true : null));
+        p.push(junction(busR, yc, branchLive[i]));
+      });
     }
-    p.push(line(LEFT_RAIL, rowYs[0], BUS_L, rowYs[0], wire(state ? true : null), 2));
-    branches.forEach((b, bi) => {
-      const yc = rowYs[bi];
-      let x = BUS_L, live = state ? true : null; // 좌측 버스는 항상 통전
-      if (b.elements.length === 0) {
-        p.push(line(BUS_L, yc, busR, yc, wire(live), 2));
+    p.push(line(LEFT, rowYs[0], BUS_L, rowYs[0], wireCol(state ? true : null), wireW(state ? true : false)));
+
+    branches.forEach(function (b, bi) {
+      var yc = rowYs[bi];
+      var x = BUS_L, live = state ? true : null;
+      if (!b.elements.length) {
+        p.push(line(BUS_L, yc, busR, yc, wireCol(live), wireW(live)));
       } else {
-        b.elements.forEach((el, ci) => {
-          const cx = BUS_L + ci * SLOT + SLOT / 2;
-          p.push(line(x, yc, cx - 16, yc, wire(live), 2));   // 접점 앞 구간: 누적 통전
+        b.elements.forEach(function (el, ci) {
+          var cx = BUS_L + ci * SLOT + SLOT / 2;
+          p.push(line(x, yc, cx - 14, yc, wireCol(live), wireW(live)));
           p.push(contact(cx, yc, el, state));
-          if (state) live = live && conducts(el, state);     // 접점 통과 후 누적 갱신
-          x = cx + 16;
+          if (state) live = live && conducts(el, state);
+          x = cx + 14;
         });
-        p.push(line(x, yc, busR, yc, wire(live), 2));
+        p.push(line(x, yc, busR, yc, wireCol(live), wireW(live)));
       }
     });
-    const midY = rowYs[0];
-    p.push(line(busR, midY, coilX - 16, midY, wire(rungLive), 2));
-    (rung.outputs || []).forEach((out, oi) => {
-      const yc = midY + oi * ROW_H;
+
+    var midY = rowYs[0];
+    p.push(line(busR, midY, coilX, midY, wireCol(rungLive), wireW(rungLive)));
+    (rung.outputs || []).forEach(function (out, oi) {
+      var yc = midY + oi * ROW_H;
+      if (oi > 0) {
+        p.push(line(coilX - 14, midY, coilX - 14, yc, wireCol(rungLive), 2));
+        p.push(line(coilX - 14, yc, coilX, yc, wireCol(rungLive), wireW(rungLive)));
+        p.push(junction(coilX - 14, midY, rungLive));
+      }
       p.push(output(coilX, yc, out, state));
-      const olit = state ? !!state[out.symbol] : null;
-      p.push(line(coilX + COIL_W - 16, yc, rightRail, yc, wire(olit), 2));
+      var olit = state ? !!state[out.symbol] : null;
+      p.push(line(coilX + COIL_W, yc, rightRail, yc, wireCol(olit), wireW(olit)));
     });
-    return `<g>${p.join("")}</g>`;
+    return "<g>" + p.join("") + "</g>";
   }
 
   function svg(ladder, state) {
-    const rungs = (ladder && ladder.rungs) || [];
-    if (rungs.length === 0) return '<div class="empty" style="padding:20px;color:#8b94a3">래더가 비어 있습니다.</div>';
-    const st = state || null;
-    let maxCols = 1;
-    for (const r of rungs)
-      for (const b of r.input_branches) maxCols = Math.max(maxCols, b.elements.length, 1);
-    const busR = BUS_L + maxCols * SLOT + 10;
-    const coilX = busR + 40;
-    const rightRail = coilX + COIL_W + 30;
-    const width = rightRail + 20;
-    let y = 0;
-    const parts = [];
-    rungs.forEach((rung, ri) => {
-      const nb = Math.max(rung.input_branches.length, 1);
-      const h = nb * ROW_H + PAD_TOP;
-      parts.push(drawRung(rung, ri, y, h, busR, coilX, rightRail, st));
-      y += h;
+    var rungs = (ladder && ladder.rungs) || [];
+    if (!rungs.length)
+      return '<div style="padding:20px;color:#8b94a3;font-size:13px">래더가 비어 있습니다.</div>';
+    var st = state || null;
+    var maxCols = 1;
+    rungs.forEach(function (r) {
+      r.input_branches.forEach(function (b) { maxCols = Math.max(maxCols, b.elements.length, 1); });
     });
-    return `<svg width="${width}" height="${y + 10}" xmlns="http://www.w3.org/2000/svg">${parts.join("")}</svg>`;
+    var busR = BUS_L + maxCols * SLOT + 14;
+    var coilX = busR + 36;
+    var rightRail = coilX + COIL_W + 34;
+    var width = rightRail + 26;
+    var y = 8, parts = [];
+    rungs.forEach(function (rung, ri) {
+      var rows = Math.max(rung.input_branches.length, 1, (rung.outputs || []).length);
+      var h = HEAD_H + rows * ROW_H + PAD_B;
+      parts.push(drawRung(rung, ri, y, h, busR, coilX, rightRail, st));
+      y += h + 6;
+    });
+    return '<svg width="' + width + '" height="' + (y + 8) +
+      '" xmlns="http://www.w3.org/2000/svg" ' +
+      'style="background:' + C_BG + ';border-radius:8px" ' +
+      'font-family="ui-monospace,Menlo,Consolas,monospace">' + parts.join("") + "</svg>";
   }
 
-  window.LadderRender = { svg };
+  window.LadderRender = { svg: svg };
 })();

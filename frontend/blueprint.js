@@ -201,6 +201,7 @@
 
     // ── 연결 — 배관(탱크) · 신호선(PLC) ───────────────────────────────────
     var wires = [];
+    var laneIdx = 0;
     (plant.connections || []).forEach(function (c) {
       if (c.kind === "pipe" && pos[c.src] && pos[c.dst]) {
         var a = pos[c.src], b = pos[c.dst];
@@ -213,14 +214,13 @@
         var dev = c.src === "PLC" ? c.dst : c.src;
         var p = pos[dev]; if (!p || termY[dev] == null) return;
         var isOut = c.src === "PLC";
-        var sx = isOut ? plcX : plcX + PLC_W - PLC_W;  // 출력=좌측단자, 입력=좌측까지 우회 없이
-        var tx2 = isOut ? plcX : plcX + PLC_W;
-        // 기기 → (수직) → 자기 단자 높이 → (수평) → PLC 단자
-        var startY = p.y + (p.role === "gauge" ? 0 : 0);
-        var dy = p.y < termY[dev] ? 30 : -30;
+        // 기기 → (자기 전용 레인으로 수직) → 단자 높이 → (수평) → PLC 단자.
+        // 레인을 기기별로 어긋나게 배선해 선 겹침을 없앤다(트레이식 정렬).
+        var lane = p.x + 30 + (laneIdx % 7) * 7;
+        laneIdx++;
         wires.push('<path class="sig' + (isOut ? " sigout" : "") + '" data-sig="' + esc(dev) +
-          '" d="M ' + (p.x + (isOut ? 20 : 20)) + " " + p.y +
-          " H " + (p.x + 46) + " V " + termY[dev] + " H " + (isOut ? plcX : tx2) + '"/>');
+          '" d="M ' + (p.x + 18) + " " + p.y +
+          " H " + lane + " V " + termY[dev] + " H " + plcX + '"/>');
       }
     });
     s.push("<g>" + wires.join("") + "</g>");
@@ -300,10 +300,72 @@
 
     var svg = container.querySelector("svg");
     var selSym = null;
-    svg.addEventListener("click", function (e) {
-      var gEl = e.target.closest ? e.target.closest(".dev") : null;
-      if (gEl && opts.onSelect) opts.onSelect(gEl.getAttribute("data-sym"));
+
+    // ── 팬/줌(휠·드래그·핀치 — 모바일 특화) — viewBox 변환 ────────────────────
+    var vb = { x: 0, y: 0, w: W, h: H };
+    function applyVB() {
+      svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+    }
+    svg.removeAttribute("width"); svg.removeAttribute("height");
+    svg.style.width = "100%"; svg.style.height = "100%";
+    svg.style.touchAction = "none"; svg.style.cursor = "grab";
+    applyVB();
+    function zoomAt(cx, cy, f) {
+      var nw = Math.max(W * .25, Math.min(W * 2.5, vb.w * f));
+      var k = nw / vb.w;
+      vb.x = cx - (cx - vb.x) * k; vb.y = cy - (cy - vb.y) * k;
+      vb.w = nw; vb.h = vb.h * k; applyVB();
+    }
+    function toLocal(e) {
+      var r = svg.getBoundingClientRect();
+      return { x: vb.x + (e.clientX - r.left) / r.width * vb.w,
+               y: vb.y + (e.clientY - r.top) / r.height * vb.h };
+    }
+    var ptrs = {}, moved = 0, pinD = 0;
+    svg.addEventListener("pointerdown", function (e) {
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      moved = 0; svg.setPointerCapture(e.pointerId);
+      var ids = Object.keys(ptrs);
+      if (ids.length === 2) {
+        var a = ptrs[ids[0]], b = ptrs[ids[1]];
+        pinD = Math.hypot(a.x - b.x, a.y - b.y);
+      }
     });
+    svg.addEventListener("pointermove", function (e) {
+      var p = ptrs[e.pointerId]; if (!p) return;
+      var ids = Object.keys(ptrs);
+      var r = svg.getBoundingClientRect();
+      if (ids.length === 2) {                       // 핀치 줌
+        ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+        var a = ptrs[ids[0]], b = ptrs[ids[1]];
+        var nd = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinD > 0 && nd > 0) {
+          var mid = { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 };
+          var lm = toLocal(mid);
+          zoomAt(lm.x, lm.y, pinD / nd);
+        }
+        pinD = nd; moved += 10; return;
+      }
+      var dx = e.clientX - p.x, dy = e.clientY - p.y;
+      moved += Math.abs(dx) + Math.abs(dy);
+      vb.x -= dx / r.width * vb.w; vb.y -= dy / r.height * vb.h;
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      applyVB();
+    });
+    function upPtr(e) {
+      delete ptrs[e.pointerId]; pinD = 0;
+      if (moved < 6) {                               // 클릭 = 기기 선택
+        var gEl = e.target.closest ? e.target.closest(".dev") : null;
+        if (gEl && opts.onSelect) opts.onSelect(gEl.getAttribute("data-sym"));
+      }
+    }
+    svg.addEventListener("pointerup", upPtr);
+    svg.addEventListener("pointercancel", upPtr);
+    svg.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      var lm = toLocal(e);
+      zoomAt(lm.x, lm.y, e.deltaY > 0 ? 1.12 : .9);
+    }, { passive: false });
 
     // 탱크 수위(연출) 상태
     var level = .35;

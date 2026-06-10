@@ -30,7 +30,7 @@ header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wr
  padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.4)}
 .tryrow{display:flex;gap:10px}
 #nl{flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:inherit;
- font-size:15.5px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
+ font-size:16px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
 #nl:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(88,166,255,.16)}
 .btn{border:0;cursor:pointer;font:inherit;font-weight:800;white-space:nowrap;
  background:linear-gradient(135deg,var(--acc),var(--acc2));color:#06101f;
@@ -59,6 +59,7 @@ header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wr
 .view.on{display:block}
 #v-cad{padding:0}
 #plantwrap{width:100%;height:520px}
+#cadwrap,#panelwrap{width:100%;height:520px}
 #v-ladder{padding:14px}
 #v-st{padding:14px}
 pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
@@ -67,7 +68,7 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
 .card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
 .lab{color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px}
 .simctl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
+.simbtn,.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
  border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
 .ins{display:flex;flex-wrap:wrap;gap:8px}
 .sw{display:flex;align-items:center;gap:7px;background:#0a0f17;border:1px solid var(--bd);
@@ -101,6 +102,11 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
 @media(max-width:1020px){
  #studio{flex-direction:column}
  .side{width:100%}
+ #plantwrap,#cadwrap,#panelwrap{height:48vh}
+ .view{min-height:0;max-height:58vh}
+ .tabs{overflow-x:auto;flex-wrap:nowrap;white-space:nowrap;padding-bottom:2px}
+ .tab{flex-shrink:0;padding:9px 14px}
+ .btn{padding:12px 14px}
 }
 </style></head>
 <body><div class="aurora"></div><div class="wrap">
@@ -128,11 +134,13 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
  <div class="canvasCol">
   <div class="tabs">
    <button class="tab on" data-v="cad">공장 도면 (P&ID)</button>
+   <button class="tab" data-v="panel">제어반</button>
    <button class="tab" data-v="3d">3D 가동</button>
    <button class="tab" data-v="ladder">래더</button>
    <button class="tab" data-v="st">ST 코드</button>
   </div>
   <div class="view on" id="v-cad"><div id="cadwrap"></div></div>
+  <div class="view" id="v-panel"><div id="panelwrap" style="height:520px"></div></div>
   <div class="view" id="v-3d"><div id="plantwrap"></div></div>
   <div class="view" id="v-ladder"><div id="ladder"></div></div>
   <div class="view" id="v-st"><pre id="st"></pre></div>
@@ -142,8 +150,21 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
   <div class="card">
    <div class="lab">가상 PLC — 실시간 스캔</div>
    <div class="simctl"><button id="simtoggle">■ 정지</button>
-    <span class="empty">도면의 기기를 클릭하면 상세·정밀테스트</span></div>
+    <button id="demotoggle">자동 시연 ●</button>
+    <span class="empty">기기 클릭=상세·정밀테스트</span></div>
    <div class="ins" id="ins"></div>
+  </div>
+  <div class="card" id="exportcard" style="display:none">
+   <div class="lab">내보내기 — 기계가독 산출물</div>
+   <div style="display:flex;gap:7px;flex-wrap:wrap">
+    <button class="simbtn" id="dl-xml">PLCopen XML</button>
+    <button class="simbtn" id="dl-il">LS XGK IL</button>
+    <button class="simbtn" id="dl-json">설계 JSON</button>
+   </div>
+  </div>
+  <div class="card" id="explaincard" style="display:none">
+   <div class="lab">로직 설명 (자동 생성)</div>
+   <div id="explain" style="font-size:12.5px;color:#c6d2e0"></div>
   </div>
   <div class="card" id="detail">
    <div class="lab">기기 상세 · 정밀 테스트</div>
@@ -160,6 +181,7 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
 <script src="/sim-engine.js"></script>
 <script src="/blueprint.js"></script>
 <script src="/precision.js"></script>
+<script src="/panel.js"></script>
 <script src="/vendor/three.min.js"></script>
 <script src="/plant3d.js"></script>
 <script>
@@ -174,14 +196,63 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cssesc=(s)=>String(s).replace(/["\\]/g,"\\$&");
 
-let RES=null,engine=null,bp=null,p3d=null,timer=null,running=false,selected=null;
+let RES=null,engine=null,bp=null,pnl=null,p3d=null,timer=null,running=false,selected=null;
 const forced={};
 const STEP=120;
+
+// ── 자동 시연 — 입력을 시차로 켜고 끄며 설계가 '스스로' 돌아가는 걸 보여준다 ──
+let demoOn=true,demoTimer=null,demoK=0;
+function setDemoBtn(){$("demotoggle").textContent=demoOn?"자동 시연 ●":"자동 시연 ○";
+ $("demotoggle").style.color=demoOn?"var(--ok)":"var(--mut)";}
+function startDemo(){
+ stopDemoTimer();if(!engine||!engine.inputs.length){return;}
+ demoK=0;
+ demoTimer=setInterval(()=>{
+  const ins=engine.inputs,n=ins.length,period=3*n+8;
+  const t=demoK%period;
+  ins.forEach((s,i)=>{
+   if(t===(3*i+1))setForced(s,true);
+   if(t===(3*i+1+5)%period)setForced(s,false);
+  });
+  demoK++;
+ },650);
+}
+function stopDemoTimer(){if(demoTimer){clearInterval(demoTimer);demoTimer=null;}}
+function toggleDemo(){demoOn=!demoOn;setDemoBtn();demoOn?startDemo():stopDemoTimer();}
+function setForced(s,v){
+ if(!(s in forced)||forced[s]===v)return;
+ forced[s]=v;
+ document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
+  el.classList.toggle("on",v));
+ if(selected===s)selectDevice(s);
+ if(!running)tick();
+}
 
 EXAMPLES.forEach((t)=>{const c=document.createElement("span");c.className="chip";
  c.textContent=t;c.onclick=()=>{$("nl").value=t;run();};$("chips").appendChild(c);});
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=()=>{running?stopSim():startSim();};
+$("demotoggle").onclick=toggleDemo;
+function download(name,text,mime){
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([text],{type:mime||"text/plain;charset=utf-8"}));
+ a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+$("dl-xml").onclick=async()=>{
+ if(!RES||!RES.structured_text)return;
+ const r=await(await fetch("/api/export/plcopen",{method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({st_code:RES.structured_text,title:$("nl").value.slice(0,40)})})).json();
+ if(r.ok)download("design_plcopen.xml",r.content,"application/xml");
+};
+$("dl-il").onclick=async()=>{
+ if(!RES||!RES.structured_text)return;
+ const r=await(await fetch("/api/emit",{method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({st_code:RES.structured_text,vendor:"LS_XGK"})})).json();
+ if(r.ok)download("design_ls_xgk.il",r.text);
+};
+$("dl-json").onclick=()=>{if(RES)download("design_payload.json",JSON.stringify(RES,null,1),"application/json");};
 window.addEventListener("resize",()=>{if(p3d)p3d.resize();});
 
 // 탭
@@ -226,11 +297,17 @@ async function run(){
  if(bp){bp=null;}
  bp=window.Blueprint?window.Blueprint.render($("cadwrap"),res.plant||{devices:[]},{
    title:text,verified:res.ok,dcFree:res.double_coil_free,onSelect:selectDevice}):null;
+ pnl=window.Panel?window.Panel.render($("panelwrap"),res.plant||{devices:[]},{
+   onSelect:selectDevice}):null;
  if(p3d){p3d.destroy();p3d=null;}
  if(viewOn("3d"))ensure3D();
+ $("exportcard").style.display="block";
+ if(res.explanation){$("explaincard").style.display="block";
+  $("explain").innerHTML=esc(res.explanation).replace(/\n/g,"<br>");}
+ else $("explaincard").style.display="none";
  renderDetailEmpty();
  buildSim(res.structured_text);
- setStatus("✓ 설계 완료 — 도면의 기기를 클릭해 정밀 테스트","ok");
+ setStatus("✓ 설계 완료 — 자동 시연 중 · 기기를 클릭해 정밀 테스트","ok");
 }
 
 function ensure3D(){
@@ -250,19 +327,18 @@ function buildSim(st){
  $("ins").querySelectorAll("[data-sw]").forEach((el)=>{
   el.onclick=()=>toggleForced(el.dataset.sw);});
  startSim();tick();
+ setDemoBtn();if(demoOn)startDemo();
 }
 function toggleForced(s){
  if(!(s in forced))return;
- forced[s]=!forced[s];
- document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
-  el.classList.toggle("on",forced[s]));
- if(selected===s)selectDevice(s); // 상세 패널 토글 상태 갱신
- if(!running)tick();
+ if(demoOn){demoOn=false;setDemoBtn();stopDemoTimer();} // 수동 조작 = 시연 종료
+ setForced(s,!forced[s]);
 }
 function tick(){
  if(!engine)return;
  const r=engine.step(forced,STEP);
  if(bp)bp.update(r);
+ if(pnl)pnl.update(r);
  if(p3d)p3d.update(r);
  if(viewOn("ladder")&&RES&&RES.ladder)
   $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);
@@ -280,7 +356,7 @@ function renderDetailEmpty(){
  $("detailbody").innerHTML="도면(P&ID)에서 기기 심볼을 클릭하세요 — 태그·PLC 주소·부품 명세(BOM)·연결을 보고, 그 기기만 골라 정밀 테스트를 돌립니다.";
 }
 function selectDevice(sym){
- selected=sym;if(bp)bp.select(sym);
+ selected=sym;if(bp)bp.select(sym);if(pnl)pnl.select(sym);
  const d=devOf(sym);if(!d){renderDetailEmpty();return;}
  const conns=(RES.plant.connections||[]).filter((c)=>c.src===sym||c.dst===sym)
   .map((c)=>c.kind==="pipe"?(c.src+" ⟶ "+c.dst+" (배관)"):(c.src+" ⤳ "+c.dst+" (신호)"));

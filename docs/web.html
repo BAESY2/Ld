@@ -29,7 +29,7 @@ header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wr
 .trybox{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:12px}
 .tryrow{display:flex;gap:10px}
 #nl{flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:inherit;
- font-size:15.5px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
+ font-size:16px;padding:12px 14px;border-radius:10px;outline:none;min-width:0}
 #nl:focus{border-color:var(--acc)}
 .btn{border:0;cursor:pointer;font:inherit;font-weight:800;white-space:nowrap;
  background:linear-gradient(135deg,var(--acc),var(--acc2));color:#06101f;
@@ -55,13 +55,14 @@ header.top{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;flex-wr
  overflow:auto;min-height:430px;max-height:72vh}
 .view.on{display:block}
 #plantwrap{width:100%;height:520px}
+#cadwrap,#panelwrap{width:100%;height:520px}
 #v-ladder,#v-st{padding:14px}
 pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;color:#cdd6e3}
 .side{width:368px;flex-shrink:0;display:flex;flex-direction:column;gap:12px}
 .card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
 .lab{color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px}
 .simctl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
+.simbtn,.simctl button{font:inherit;font-size:12.5px;background:#0a0f17;color:var(--fg);
  border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
 .ins{display:flex;flex-wrap:wrap;gap:8px}
 .sw{display:flex;align-items:center;gap:7px;background:#0a0f17;border:1px solid var(--bd);
@@ -90,7 +91,11 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
 .notice{background:rgba(210,153,34,.07);border:1px solid var(--amber);color:#f0c26b;
  border-radius:10px;padding:9px 12px;font-size:12px;margin-top:14px}
 #main{display:none}
-@media(max-width:1020px){#studio{flex-direction:column}.side{width:100%}}
+@media(max-width:1020px){#studio{flex-direction:column}.side{width:100%}
+ #plantwrap,#cadwrap,#panelwrap{height:48vh}
+ .view{min-height:0;max-height:58vh}
+ .tabs{overflow-x:auto;flex-wrap:nowrap;white-space:nowrap}
+ .tab{flex-shrink:0;padding:9px 14px}}
 </style></head>
 <body><div class="wrap">
 
@@ -131,11 +136,13 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
  <div class="canvasCol">
   <div class="tabs">
    <button class="tab on" data-v="cad">공장 도면 (P&ID)</button>
+   <button class="tab" data-v="panel">제어반</button>
    <button class="tab" data-v="3d">3D 가동</button>
    <button class="tab" data-v="ladder">래더</button>
    <button class="tab" data-v="st">ST 코드</button>
   </div>
   <div class="view on" id="v-cad"><div id="cadwrap"></div></div>
+  <div class="view" id="v-panel"><div id="panelwrap" style="height:520px"></div></div>
   <div class="view" id="v-3d"><div id="plantwrap"></div></div>
   <div class="view" id="v-ladder"><div id="ladder"></div></div>
   <div class="view" id="v-st"><pre id="st"></pre></div>
@@ -144,8 +151,21 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
   <div class="card">
    <div class="lab">가상 PLC — 실시간 스캔</div>
    <div class="simctl"><button id="simtoggle">■ 정지</button>
-    <span class="empty">도면의 기기를 클릭하면 상세·정밀테스트</span></div>
+    <button id="demotoggle">자동 시연 ●</button>
+    <span class="empty">기기 클릭=상세·정밀테스트</span></div>
    <div class="ins" id="ins"></div>
+  </div>
+  <div class="card" id="exportcard" style="display:none">
+   <div class="lab">내보내기 — 기계가독 산출물</div>
+   <div style="display:flex;gap:7px;flex-wrap:wrap">
+    <button class="simbtn" id="dl-xml">PLCopen XML</button>
+    <button class="simbtn" id="dl-il">LS XGK IL</button>
+    <button class="simbtn" id="dl-json">설계 JSON</button>
+   </div>
+  </div>
+  <div class="card" id="explaincard" style="display:none">
+   <div class="lab">로직 설명 (자동 생성)</div>
+   <div id="explain" style="font-size:12.5px;color:#c6d2e0"></div>
   </div>
   <div class="card" id="detail">
    <div class="lab">기기 상세 · 정밀 테스트</div>
@@ -166,9 +186,10 @@ pre{margin:0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Menlo,Consolas,mo
 const RAW="https://raw.githubusercontent.com/baesy2/ld/claude/nlang-plc-design-8oYP1";
 const PYODIDE_CDN="https://cdn.jsdelivr.net/pyodide/v314.0.0/full/";
 const APP_MODULES=["__init__","models","korean","intent","compile_frame","synth",
- "verifier","transpiler","plant","memory_map","wizard","boolexpr"];
+ "verifier","transpiler","plant","memory_map","wizard","boolexpr","explain","safety"];
 const VENDOR_MODULES=["__init__","profiles"];
-const JS_MODULES=["ladder-render.js","sim-engine.js","blueprint.js","precision.js"];
+const PKG_MODULES={"export":["__init__","plcopen"],"emit":["__init__","ladder_il"]};
+const JS_MODULES=["ladder-render.js","sim-engine.js","blueprint.js","precision.js","panel.js"];
 const EXAMPLES=[
  "버튼 누르면 모터 돌고 정지 누르면 멈춰",
  "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",
@@ -180,8 +201,34 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cssesc=(s)=>String(s).replace(/["\\]/g,"\\$&");
 
-let PY=null,COMPILE=null,RES=null,engine=null,bp=null,p3d=null,timer=null,running=false,selected=null;
+let PY=null,COMPILE=null,RES=null,engine=null,bp=null,pnl=null,p3d=null,timer=null,running=false,selected=null;
 const forced={};const STEP=120;
+let demoOn=true,demoTimer=null,demoK=0;
+function setDemoBtn(){$("demotoggle").textContent=demoOn?"자동 시연 ●":"자동 시연 ○";
+ $("demotoggle").style.color=demoOn?"var(--ok)":"var(--mut)";}
+function startDemo(){
+ stopDemoTimer();if(!engine||!engine.inputs.length)return;
+ demoK=0;
+ demoTimer=setInterval(()=>{
+  const ins=engine.inputs,n=ins.length,period=3*n+8;
+  const t=demoK%period;
+  ins.forEach((s,i)=>{
+   if(t===(3*i+1))setForced(s,true);
+   if(t===(3*i+1+5)%period)setForced(s,false);
+  });
+  demoK++;
+ },650);
+}
+function stopDemoTimer(){if(demoTimer){clearInterval(demoTimer);demoTimer=null;}}
+function toggleDemo(){demoOn=!demoOn;setDemoBtn();demoOn?startDemo():stopDemoTimer();}
+function setForced(s,v){
+ if(!(s in forced)||forced[s]===v)return;
+ forced[s]=v;
+ document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
+  el.classList.toggle("on",v));
+ if(selected===s)selectDevice(s);
+ if(!running)tick();
+}
 
 // raw 는 text/plain(nosniff)이라 <script src> 가 막힌다 → fetch 후 blob 으로 주입.
 async function loadScriptRaw(path){
@@ -204,12 +251,18 @@ async function boot(){
   await PY.loadPackage("pydantic");
   step(3,"done");step(4,"on");prog(72,"엔진 소스(app/*.py) 불러오는 중…");
   PY.FS.mkdir("/work");PY.FS.mkdir("/work/app");PY.FS.mkdir("/work/app/vendors");
+  for(const pkg in PKG_MODULES)PY.FS.mkdir("/work/app/"+pkg);
   await Promise.all(APP_MODULES.map(async(m)=>{
    const t=await(await fetch(RAW+"/app/"+m+".py")).text();
    PY.FS.writeFile("/work/app/"+m+".py",t);}));
   await Promise.all(VENDOR_MODULES.map(async(m)=>{
    const t=await(await fetch(RAW+"/app/vendors/"+m+".py")).text();
    PY.FS.writeFile("/work/app/vendors/"+m+".py",t);}));
+  for(const pkg in PKG_MODULES){
+   await Promise.all(PKG_MODULES[pkg].map(async(m)=>{
+    const t=await(await fetch(RAW+"/app/"+pkg+"/"+m+".py")).text();
+    PY.FS.writeFile("/work/app/"+pkg+"/"+m+".py",t);}));
+  }
   step(4,"done");step(5,"on");prog(88,"엔진 기동·예열…");
   PY.runPython(`
 import sys, json
@@ -220,6 +273,10 @@ from app.synth import synthesize_st
 from app.verifier import verify
 from app.transpiler import transpile_st
 from app.plant import plant_from_spec
+from app.explain import explain_all
+from app.export import to_plcopen_xml
+from app.emit import emit as emit_il
+from app.vendors import LS_XGK
 
 def compile_text(text):
     frame = extract(text)
@@ -237,6 +294,9 @@ def compile_text(text):
         "ladder": ladder.model_dump(),
         "plant": plant_from_spec(r.spec).model_dump(),
         "double_coil_free": not any(i.code == "DOUBLE_COIL" for i in rep.issues),
+        "explanation": explain_all(r.spec, ladder, rep),
+        "plcopen_xml": to_plcopen_xml(r.spec, st),
+        "vendor_il": emit_il(ladder, LS_XGK),
         "issues": [{"code": i.code, "severity": i.severity, "message": i.message}
                    for i in rep.issues],
     })
@@ -286,6 +346,12 @@ async function run(){
  $("ladder").innerHTML=(window.LadderRender&&res.ladder)?window.LadderRender.svg(res.ladder):"";
  bp=window.Blueprint?window.Blueprint.render($("cadwrap"),res.plant||{devices:[]},{
    title:text,verified:res.ok,onSelect:selectDevice}):null;
+ pnl=window.Panel?window.Panel.render($("panelwrap"),res.plant||{devices:[]},{
+   onSelect:selectDevice}):null;
+ $("exportcard").style.display="block";
+ if(res.explanation){$("explaincard").style.display="block";
+  $("explain").innerHTML=esc(res.explanation).replace(/\n/g,"<br>");}
+ else $("explaincard").style.display="none";
  if(p3d){p3d.destroy();p3d=null;}
  if(viewOn("3d"))ensure3D();
  renderDetailEmpty();
@@ -330,19 +396,18 @@ function buildSim(st){
   :'<span class="empty">외부 입력이 없습니다(자동 동작).</span>';
  $("ins").querySelectorAll("[data-sw]").forEach((el)=>{el.onclick=()=>toggleForced(el.dataset.sw);});
  startSim();tick();
+ setDemoBtn();if(demoOn)startDemo();
 }
 function toggleForced(s){
  if(!(s in forced))return;
- forced[s]=!forced[s];
- document.querySelectorAll('[data-sw="'+cssesc(s)+'"]').forEach((el)=>
-  el.classList.toggle("on",forced[s]));
- if(selected===s)selectDevice(s);
- if(!running)tick();
+ if(demoOn){demoOn=false;setDemoBtn();stopDemoTimer();}
+ setForced(s,!forced[s]);
 }
 function tick(){
  if(!engine)return;
  const r=engine.step(forced,STEP);
  if(bp)bp.update(r);
+ if(pnl)pnl.update(r);
  if(p3d)p3d.update(r);
  if(viewOn("ladder")&&RES&&RES.ladder)
   $("ladder").innerHTML=window.LadderRender.svg(RES.ladder,r.table);
@@ -358,7 +423,7 @@ function renderDetailEmpty(){
  $("detailbody").innerHTML="도면(P&ID)에서 기기 심볼을 클릭하세요 — 태그·PLC 주소·부품 명세(BOM)·연결을 보고, 그 기기만 골라 정밀 테스트를 돌립니다.";
 }
 function selectDevice(sym){
- selected=sym;if(bp)bp.select(sym);
+ selected=sym;if(bp)bp.select(sym);if(pnl)pnl.select(sym);
  const d=devOf(sym);if(!d){renderDetailEmpty();return;}
  const conns=(RES.plant.connections||[]).filter((c)=>c.src===sym||c.dst===sym)
   .map((c)=>c.kind==="pipe"?(c.src+" ⟶ "+c.dst+" (배관)"):(c.src+" ⤳ "+c.dst+" (신호)"));
@@ -425,6 +490,15 @@ async function runPrecision(targets,btn){
 $("go").onclick=run;
 $("nl").addEventListener("keydown",(e)=>{if(e.key==="Enter")run();});
 $("simtoggle").onclick=()=>{running?stopSim():startSim();};
+$("demotoggle").onclick=toggleDemo;
+function download(name,text,mime){
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([text],{type:mime||"text/plain;charset=utf-8"}));
+ a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+$("dl-xml").onclick=()=>{if(RES&&RES.plcopen_xml)download("design_plcopen.xml",RES.plcopen_xml,"application/xml");};
+$("dl-il").onclick=()=>{if(RES&&RES.vendor_il)download("design_ls_xgk.il",RES.vendor_il);};
+$("dl-json").onclick=()=>{if(RES)download("design_payload.json",JSON.stringify(RES,null,1),"application/json");};
 window.addEventListener("resize",()=>{if(p3d)p3d.resize();});
 boot();
 </script>

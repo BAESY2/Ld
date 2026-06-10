@@ -108,6 +108,15 @@ def test_bom_parts_per_device() -> None:
     assert any("푸시버튼" in p for p in start.parts)
 
 
+def test_motor_family_power_chain_complete() -> None:
+    """전동기 계열 BOM 에 동력 체인 전부(MCCB·인버터·MC·EOCR) — 제어반 단선도의 원천."""
+    layout = plant_from_spec(frame_to_spec("펌프 켜고 컨베이어 돌려").spec)
+    for sym in ("PUMP", "CONVEYOR"):
+        parts = " ".join(_by_symbol(layout, sym).parts)
+        for comp in ("MCCB", "인버터", "전자접촉기", "열동계전기"):
+            assert comp in parts, f"{sym} BOM 에 {comp} 누락"
+
+
 def test_plc_addresses_assigned_to_io() -> None:
     """IO 기기에 LS 디바이스 주소(P…)가 결정론 부여된다(탱크는 IO 아님→빈 값)."""
     r = frame_to_spec("저수위 되면 펌프 켜고 고수위 되면 펌프 꺼")
