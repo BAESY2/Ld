@@ -41,3 +41,16 @@ def test_errorcodes_doc_in_sync() -> None:
 
     committed = (Path(__file__).resolve().parent.parent / "docs" / "ERRORCODES.md")
     assert committed.read_text(encoding="utf-8") == build()
+
+
+def test_error_kb_importable_first() -> None:
+    """회귀(순환 임포트): app.error_kb 를 먼저 import 해도 안전해야 한다."""
+    import subprocess
+    import sys
+
+    code = "import app.error_kb; import app.error_codes; " \
+           "print(len(app.error_codes.DB.search('')))"
+    out = subprocess.run([sys.executable, "-c", code],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert int(out.stdout.strip()) >= 100

@@ -536,6 +536,7 @@ SEED: list[ErrorCode] = [
 ]
 
 # 연구·실무 인용 기반 확장 지식베이스(error_kb)를 합류시킨다 — 같은 수집 원칙.
-from app.error_kb import KB_ENTRIES  # noqa: E402  (스키마 정의 후 의도적 후행 임포트)
+# (지연 팩토리 호출 — error_kb 토플레벨은 이 모듈을 import 하지 않아 순환이 없다.)
+from app.error_kb import build_entries  # noqa: E402
 
-DB = ErrorCodeDB(SEED + KB_ENTRIES)
+DB = ErrorCodeDB(SEED + build_entries())
