@@ -280,7 +280,24 @@ function metricsInit(plant){
  MET={rows:{}};
  (plant&&plant.devices||[]).filter((d)=>d.role==="output").forEach((d)=>{
   MET.rows[d.symbol]={kind:d.kind,tag:d.tag,rated:d.rated_a||null,run:0,starts:0,prev:false,amp:0};});
+ metTick=0;
  $("metricscard").style.display=Object.keys(MET.rows).length?"block":"none";
+ renderMetrics();   // 4틱 기다리지 말고 즉시 1회 렌더(빈 표 방지)
+}
+function renderMetrics(){
+ if(!MET)return;
+ const tb=$("metrics")&&$("metrics").querySelector("tbody");
+ if(!tb)return;
+ tb.innerHTML=Object.keys(MET.rows).map((sym)=>{
+  const m=MET.rows[sym],rated=m.rated||RATED[m.kind]||1.5;
+  const load=Math.min(110,m.amp/rated*100);
+  const onCls=m.prev?'style="color:var(--ok);font-weight:700"':'style="color:var(--mut)"';
+  return '<tr><td style="padding:2px 4px">'+esc(m.tag||sym)+'</td>'+
+   '<td '+onCls+'>'+(m.prev?"RUN":"STOP")+'</td>'+
+   '<td>'+fmtDur(m.run)+'</td><td>'+m.starts+'</td>'+
+   '<td>'+m.amp.toFixed(1)+'A</td>'+
+   '<td>'+(m.prev?load.toFixed(0)+"%":"—")+'</td></tr>';
+ }).join("");
 }
 function fmtDur(s){const m=Math.floor(s/60),ss=Math.floor(s%60);
  return (m?m+"m ":"")+ss+"s";}
@@ -297,17 +314,7 @@ function metricsTick(r){
   m.amp+=(tgt-m.amp)*.25;
  }
  if(++metTick%4)return;       // 표 갱신은 ~0.5s 주기
- const tb=$("metrics").querySelector("tbody");
- tb.innerHTML=Object.keys(MET.rows).map((sym)=>{
-  const m=MET.rows[sym],rated=m.rated||RATED[m.kind]||1.5;
-  const load=Math.min(110,m.amp/rated*100);
-  const onCls=m.prev?'style="color:var(--ok);font-weight:700"':'style="color:var(--mut)"';
-  return '<tr><td style="padding:2px 4px">'+esc(m.tag||sym)+'</td>'+
-   '<td '+onCls+'>'+(m.prev?"RUN":"STOP")+'</td>'+
-   '<td>'+fmtDur(m.run)+'</td><td>'+m.starts+'</td>'+
-   '<td>'+m.amp.toFixed(1)+'A</td>'+
-   '<td>'+(m.prev?load.toFixed(0)+"%":"—")+'</td></tr>';
- }).join("");
+ renderMetrics();
 }
 
 function setForced(s,v){
@@ -472,7 +479,7 @@ function tick(){
  const r=engine.step(forced,STEP);
  if(bp)bp.update(r);
  if(pnl)pnl.update(r);
- metricsTick(r);
+ try{metricsTick(r);}catch(e){console.error('metrics',e);}
  if(p3d)p3d.update(r);
  ladderTable=r.table;
  if(viewOn("ladder"))renderLadder();

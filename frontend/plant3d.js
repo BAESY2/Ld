@@ -571,10 +571,19 @@
     for (var i = 0; i < n; i++) {                                // 라인 전체를 흐르는 제품
       var it = cyl(.085, .085, .26, mat(COL.glass, { alpha: .55, rough: .15, metal: .1 }));
       var cap = cyl(.05, .05, .05, mat(COL.blue, { metal: .4 })); cap.position.y = .155; it.add(cap);
-      it.position.set(x0 + .4 + i * (len - .8) / n, .78, z); g.add(it); items.push(it);
+      it.position.set(x0 + .4 + i * (len - .8) / n, .78, z); g.add(it);
+      it.userData = { ej: false, vz: 0, vy: 0, passed: false };
+      items.push(it);
+    }
+    // 배출 슈트(ejector 위치 옆 경사판) — 밀려난 제품이 떨어지는 곳
+    var ejDev = lineDevs.filter(function (d) { return d.kind === "ejector"; })[0];
+    var ejX = ejDev ? ejDev.x : null;
+    if (ejX != null) {
+      var chute = box(.5, .02, .6, mat(COL.steelDark, { metal: .55, rough: .4 }));
+      chute.position.set(ejX, .5, z + .8); chute.rotation.x = -0.5; g.add(chute);
     }
     scene.add(g);
-    return { x0: x0 + .3, x1: x1 - .3, items: items };
+    return { x0: x0 + .3, x1: x1 - .3, z: z, ejX: ejX, baseY: .78, items: items };
   }
 
   function deviceOn(d, r) {
@@ -901,11 +910,35 @@
       plcEnv.leds.forEach(function (led, i) {
         led.material.emissiveIntensity = .3 + (Math.sin(t * (2 + i)) > 0 ? .9 : 0);
       });
-      if (line) {                                   // 라인 제품 — 전 구간 관통 흐름
+      if (line) {                                   // 라인 물류 — 흐름 + 배출 서사
         var lineOn = !!latest && lineDevs.some(function (d) { return latest.outputs[d.symbol]; });
-        if (lineOn) line.items.forEach(function (it) {
-          it.position.x += dt * 1.05;
-          if (it.position.x > line.x1) it.position.x = line.x0;
+        var ejOn = !!latest && (latest.outputs.EJECT || latest.outputs.PUSHER ||
+          (latest.table && latest.table.EJECT));
+        line.items.forEach(function (it) {
+          var u = it.userData;
+          if (u.ej) {                               // 배출 중 — 옆으로 밀리며 낙하
+            it.position.z += u.vz * dt; u.vy -= 6 * dt; it.position.y += u.vy * dt;
+            it.rotation.x += dt * 4;
+            if (it.position.y < -1) {               // 슈트 아래로 사라지면 입구로 재투입(양품화)
+              u.ej = false; u.vy = 0; u.vz = 0; u.passed = false;
+              it.position.set(line.x0, line.baseY, line.z); it.rotation.set(0, 0, 0);
+              it.children.forEach(function (c) { if (c.material) c.material.color.set(COL.blue); });
+            }
+            return;
+          }
+          if (!lineOn) return;
+          it.position.x += dt * 1.05;               // 라인 따라 이송
+          // 배출기 통과 순간 EJECT 가 켜져 있으면 → 불량 판정·라인 밖으로 밀어냄
+          if (line.ejX != null && !u.passed && it.position.x >= line.ejX) {
+            u.passed = true;
+            if (ejOn) {
+              u.ej = true; u.vz = 1.6; u.vy = 1.2;  // 측면 푸시 + 살짝 튀어오름
+              it.children.forEach(function (c) { if (c.material) c.material.color.set(COL.red); });
+            }
+          }
+          if (it.position.x > line.x1) {            // 끝까지 간 양품 — 입구로 순환
+            it.position.x = line.x0; u.passed = false;
+          }
         });
       }
       renderer.render(scene, cam);
