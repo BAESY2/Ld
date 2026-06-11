@@ -341,6 +341,101 @@ const BUILDERS={
     const q=W2T(12.65,3.55,0.62+h/2);gauge.position.set(q[0],q[1],q[2]);
   };
  }
+,
+ fwd_rev(env){
+  for(const dy of[0.0,0.6])
+    env.set.add(at(box(11.4,0.09,0.07,mat(0x566472,{metalness:0.5})),7.6,2.9+dy+0.05,0.14));
+  for(let x=2;x<=12.8;x+=0.85)
+    env.set.add(at(box(0.5,0.05,0.74,mat(0x2a323c)),x+0.25,3.25,0.025));
+  env.set.add(at(box(1.3,0.55,1.4,mat(0x37424f)),1.2,3.3,0.28));
+  env.set.add(at(box(1.4,0.55,1.4,mat(0x37424f)),14.15,3.3,0.28));
+  for(const[wx,tx]of[[1.1,"M-202"],[13.7,"M-201"]]){
+    env.set.add(at(box(0.45,0.5,0.45,mat(0x44528a)),wx,3.97,0.25));
+    const lb2=labelSprite(tx,"#8ec9ff");at(lb2,wx,3.97,1.1);env.set.add(lb2);
+  }
+  const car=new (T()).Group();env.set.add(car);
+  const body=box(1.5,0.42,1.0,mat(0x3a4656));body.position.y=0.35;car.add(body);
+  const crate=box(0.85,0.6,0.8,mat(0x7a5c2e));crate.position.y=0.86;car.add(crate);
+  const bk=new (T()).PointLight(0x58a6ff,0,3);bk.position.y=1.1;car.add(bk);
+  const lb=labelSprite("SH-201","#dce4f0");env.set.add(lb);
+  const stack=[];
+  for(let i=0;i<7;i++){
+    const b2=box(0.55,0.42,0.55,mat(0x7a5c2e));b2.visible=false;env.set.add(b2);stack.push(b2);
+  }
+  env.upd=(L,dt,t)=>{
+    const st=L.sst;
+    const q=W2T(st.pos,3.25,0);car.position.set(q[0],q[1],q[2]);
+    crate.visible=st.carry||st.anim>0;
+    const f=L.plc.val("MOTOR_FWD"),r2=L.plc.val("MOTOR_REV");
+    bk.color.setHex(f?0x58a6ff:0x9b7bff);
+    bk.intensity=(f||r2)?1.4:0;
+    lb.position.set(q[0],1.7,q[2]);
+    stack.forEach((b2,i)=>{
+      b2.visible=i<st.stackN;
+      const q2=W2T(13.7+(i%2)*0.62,2.85+((i/2|0)%2)*0.62,0.76+(i/4|0)*0.45);
+      b2.position.set(q2[0],q2[1],q2[2]);
+    });
+  };
+ },
+ car_wash(env){
+  env.set.add(at(box(17.2,0.06,2.1,mat(0x1a212a)),8.9,2.95,0.03));
+  const arches=[];
+  for(const[x,c,tx]of[[5,0x58a6ff,"V-301"],[8,0x7c5cff,"P-301"],[11,0xd9a514,"FN-301"]]){
+    const am=mat(0x2c3743);
+    for(const ay of[1.75,3.75])env.set.add(at(box(0.28,2.45,0.28,am),x,ay,1.225));
+    const beam=box(0.4,0.3,2.28,new (T()).MeshStandardMaterial({color:0x2c3743,emissive:0x000000}));
+    at(beam,x,2.75,2.6);env.set.add(beam);
+    const lb2=labelSprite(tx,"#9fb3c8");at(lb2,x,2.0,3.2);env.set.add(lb2);
+    arches.push({c,beam});
+  }
+  const car=new (T()).Group();env.set.add(car);
+  const body=box(4.3,0.6,1.7,mat(0xa83248,{metalness:0.5,roughness:0.4}));
+  body.position.y=0.62;car.add(body);
+  const cabin=box(2.05,0.55,1.5,mat(0x1d2a3a,{metalness:0.7,roughness:0.25}));
+  cabin.position.set(0.1,1.2,0);car.add(cabin);
+  for(const[wx,wz]of[[-1.3,-0.85],[1.3,-0.85],[-1.3,0.85],[1.3,0.85]]){
+    const wh=cyl(0.32,0.24,mat(0x11161d));wh.rotation.x=Math.PI/2;
+    wh.position.set(wx,0.32,wz);car.add(wh);
+  }
+  env.upd=(L,dt)=>{
+    const st=L.sst;
+    const q=W2T(st.carX,2.95,0);car.position.set(q[0],q[1],q[2]);
+    car.visible=st.carX>-3.5&&st.carX<19.5;
+    const on=[L.plc.val("SOAP"),L.plc.val("RINSE"),L.plc.val("DRY")];
+    arches.forEach((a2,i)=>a2.beam.material.emissive.setHex(on[i]?a2.c:0x000000));
+  };
+ },
+ batch_fill_mix_drain(env){
+  for(const[lx,ly]of[[5.2,2.0],[6.9,2.0],[5.2,3.3],[6.9,3.3]])
+    env.set.add(at(box(0.14,0.55,0.14,mat(0x39434f)),lx,ly,0.28));
+  const tank=cyl(1.05,2.1,mat(0x46535f,{roughness:0.45,metalness:0.3}));
+  at(tank,6.05,2.66,1.6);env.set.add(tank);
+  const liquid=new (T()).Mesh(new (T()).CylinderGeometry(0.98,0.98,1,24),
+    new (T()).MeshStandardMaterial({color:0x2e7ec8,transparent:true,opacity:0.55}));
+  env.set.add(liquid);
+  env.set.add(at(box(0.5,0.42,0.45,mat(0x44528a)),6.0,2.6,2.86));
+  const shaft=cyl(0.04,1.8,mat(0x9aa7b5,{metalness:0.7}));
+  at(shaft,6.05,2.66,1.7);env.set.add(shaft);
+  const fillPipe=new (T()).Mesh(new (T()).CylinderGeometry(0.05,0.05,4.6,10),
+    new (T()).MeshStandardMaterial({color:0x566472,emissive:0x000000,metalness:0.5}));
+  fillPipe.rotation.z=Math.PI/2;at(fillPipe,3.7,2.6,3.3);env.set.add(fillPipe);
+  const drainPipe=new (T()).Mesh(new (T()).CylinderGeometry(0.05,0.05,1.9,10),
+    new (T()).MeshStandardMaterial({color:0x566472,emissive:0x000000,metalness:0.5}));
+  drainPipe.rotation.z=Math.PI/2;at(drainPipe,7.9,3.32,0.5);env.set.add(drainPipe);
+  const drum=cyl(0.4,0.92,mat(0x2e5e8e));env.set.add(drum);
+  const lb=labelSprite("TK-501","#9fb3c8");at(lb,6.05,2.66,3.4);env.set.add(lb);
+  env.upd=(L,dt,t)=>{
+    const st=L.sst;
+    const h=Math.max(0.02,st.level*1.9);
+    liquid.scale.y=h;
+    const q=W2T(6.05,2.66,0.6+h/2);liquid.position.set(q[0],q[1],q[2]);
+    if(L.plc.val("MIXER"))shaft.rotation.y+=dt*9;
+    fillPipe.material.emissive.setHex(L.plc.val("FILL_VALVE")?0x1a4a6e:0x000000);
+    drainPipe.material.emissive.setHex(L.plc.val("DRAIN_VALVE")?0x1a5e34:0x000000);
+    const q2=W2T(st.drumX,3.45,0.46);drum.position.set(q2[0],q2[1],q2[2]);
+    drum.scale.y=0.3+0.7*Math.max(0.05,st.drum);
+  };
+ }
 };
 
 const Twin3D={
