@@ -34,11 +34,6 @@ class TestCmpParse:
             with pytest.raises(ValueError):
                 parse(bad)
 
-    def test_dnf_rejects_comparison_explicitly(self) -> None:
-        with pytest.raises(ValueError, match="비교식"):
-            to_dnf(parse("LEVEL < 300"))
-        with pytest.raises(ValueError, match="비교식"):
-            to_dnf(parse("NOT (LEVEL < 300)"))
 
 
 class TestAnalogSimulate:
@@ -124,3 +119,29 @@ class TestZ3Arithmetic:
         solver.add(f)
         assert solver.check() == z3.sat
         assert "RUN" in bools and "LEVEL" in ints
+
+
+class TestCmpLadder:
+    def test_dnf_emits_comparison_literal(self) -> None:
+        terms = to_dnf(parse("RUN AND LEVEL < 300"))
+        assert terms == [frozenset({("RUN", False), ("LEVEL < 300", False)})]
+
+    def test_negated_comparison_becomes_inverted_literal(self) -> None:
+        terms = to_dnf(parse("NOT (LEVEL < 300)"))
+        assert terms == [frozenset({("LEVEL >= 300", False)})]
+
+    def test_transpile_st_creates_comparison_contact(self) -> None:
+        from app.transpiler import transpile_st
+
+        lad = transpile_st(
+            "PUMP := ((LEVEL < 300) OR PUMP) AND NOT ((LEVEL >= 700));",
+            title="수위 채움 펌프",
+        )
+        syms = {
+            e.symbol
+            for r in lad.rungs
+            for b in r.input_branches
+            for e in b.elements
+        }
+        assert "LEVEL < 300" in syms
+        assert "LEVEL < 700" in syms  # NOT(>=700)이 NNF 에서 <700 NO 접점으로 정규화
