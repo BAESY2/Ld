@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>BNS ROBO — 입으로 공장을 설계한다</title>
+<title>BNS ROBO Hands — 공장 디지털트윈 플랫폼</title>
 <style>
 :root{
  --bg:#070b11;--bg2:#0b1019;--panel:rgba(20,27,36,.72);--bd:#26303d;
@@ -230,10 +230,10 @@ table.io td.mut{color:var(--mut)}
  <span class="logo"><span class="dot"></span>BNS ROBO</span>
  <span class="sp"></span>
  <a class="lnk" href="#why">왜 어려운가</a>
- <a class="lnk" href="#demo">체험</a>
+ <a class="lnk" href="#demo">가동 현황</a>
  <a class="lnk" href="#vs">vs 지멘스</a>
  <a class="lnk" href="https://github.com/BAESY2/Ld/blob/main/docs/WHITEPAPER.md" target="_blank">백서·산식</a>
- <a class="btn" href="#demo">데모 보기 ▶</a>
+ <a class="btn" href="#demo">공장 가동 ▶</a>
 </div></nav>
 
 <header class="hero"><div class="aurora"></div><div class="wrap">
@@ -294,14 +294,14 @@ table.io td.mut{color:var(--mut)}
     <div class="pnode det" style="left:675px;top:250px"><b>⑦ 디지털트윈</b><span>스캔 시뮬레이터 가상가동. 실제 OpenPLC와 bit-for-bit 차분검증</span></div>
     <div class="pnode det" style="left:485px;top:250px"><b>⑧ 안전 커널</b><span>검증 통과분만 게이트 통과. 미검증 로직은 기계로 못 나감</span></div>
     <div class="pnode hw" style="left:295px;top:250px"><b>⑨ 실기 제어</b><span>LS XGT 프로토콜·Modbus로 PLC 직결. 5개 벤더 덱 출력</span></div>
-    <div class="pnode" style="left:105px;top:250px"><b>현장 가동</b><span>모터·컨베이어·세차기… 아래 데모에서 직접 움직여 보세요 ↓</span></div>
+    <div class="pnode" style="left:105px;top:250px"><b>현장 가동</b><span>모터·컨베이어·세차기… 아래 가동 화면에서 직접 운전해 보세요 ↓</span></div>
    </div>
   </div>
   <p class="sub" style="margin-top:18px;text-align:center;max-width:none">초록 단계 = <b>LLM 손 안 댐(결정론)</b> · 파랑 = LLM(추출만) · 노랑 = 실기. 환각이 기계에 닿지 못하는 구조입니다.</p>
  </section>
 
  <section id="demo" class="reveal">
-  <h2>지금 바로 체험 — 말로 만든 설계가 진짜로 움직인다</h2>
+  <h2>공장 가동 현황 — 말로 만든 설계가 실제로 운전된다</h2>
   <p class="sub">아래 3D 라인은 그림이 아닙니다. <b>엔진이 합성·검증한 래더 그대로</b>를 브라우저 가상 PLC가 매 스캔 실행하고,
    그 출력이 설비를 움직입니다. <b>버튼을 직접 눌러보세요</b> — 신호가 배선을 타고 PLC를 거쳐 설비로 흐르는 게 보입니다.</p>
   <p class="sub" style="margin-bottom:10px"><b>9개 라인이 지금 전부 백그라운드에서 동시 가동 중</b>입니다(가상 PLC 9대 병렬 스캔 + 자동 시연).
@@ -362,7 +362,7 @@ table.io td.mut{color:var(--mut)}
 
 <footer>
  BNS ROBO · 'Hands' 결정론 제어 엔진 — 자연어 → 검증 → 가상테스트 → 제어<br/>
- ※ 본 데모의 검증은 논리 보조이며 기능안전 인증이 아닙니다(E-stop·가드는 하드와이어, ISO 13849/IEC 62061).
+ ※ 본 시스템의 검증은 논리 보조이며 기능안전 인증이 아닙니다(E-stop·가드는 하드와이어, ISO 13849/IEC 62061).
 </footer>
 
 <script>
@@ -2154,7 +2154,7 @@ function cosimPump(L,dt){
   }
 }
 
-/* ---- 평문 입력 → 키워드 매칭(엔진 nlmatch 정신 데모) ---- */
+/* ---- 평문 입력 → 키워드 매칭(엔진 nlmatch 연동) ---- */
 const KW={motor_start_stop:["모터","기동","버튼","돌","멈"],
          fwd_rev:["정역","정방향","역방향","전진","후진","방향","대차"],
          car_wash:["세차","비누","헹굼","건조"],
