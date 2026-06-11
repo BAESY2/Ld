@@ -336,6 +336,35 @@ function buildSettings(){
     nt.textContent="슬라이더 값은 PLC 설정 레지스터(D0100~)에 기록되어 IO 표에 실시간 표시됩니다.";
     sl.appendChild(nt);
   }
+  /* 공정 파라미터(프리셋) — TON/CTU 를 직접 편집, 다음 사이클부터 즉시 반영(실셋업 변경) */
+  const tEnts=Object.entries(cur.plc.timers),cEnts=Object.entries(cur.plc.counters);
+  if(tEnts.length||cEnts.length){
+    const pw=document.createElement("div");
+    pw.style.cssText="width:100%;margin-top:10px";
+    pw.innerHTML='<small style="color:#8b98a8;font-weight:700">공정 파라미터(프리셋) — 변경 즉시 사이클에 반영</small>';
+    const grid=document.createElement("div");
+    grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin-top:6px";
+    const INP="width:64px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px;font:11px ui-monospace,monospace";
+    tEnts.forEach(([s,tm])=>{
+      const d2=document.createElement("label");
+      d2.style.cssText="font:11px ui-monospace,monospace;color:#9aa7b5";
+      d2.innerHTML=`${s} ${(cur.m.desc[s]||"").split("(")[0].slice(0,12)}<br/><input type="number" step="0.5" min="0.5" value="${tm.preset}" style="${INP}"/> s`;
+      d2.querySelector("input").onchange=e=>{
+        const v=parseFloat(e.target.value);
+        if(v>0){tm.preset=v;logEv("op","셋업 변경 — "+s+" 프리셋 → "+v+"s (즉시 반영)");}};
+      grid.appendChild(d2);
+    });
+    cEnts.forEach(([s,cn])=>{
+      const d2=document.createElement("label");
+      d2.style.cssText="font:11px ui-monospace,monospace;color:#9aa7b5";
+      d2.innerHTML=`${s} ${(cur.m.desc[s]||"").split("(")[0].slice(0,12)}<br/><input type="number" step="1" min="1" value="${cn.preset}" style="${INP}"/> EA`;
+      d2.querySelector("input").onchange=e=>{
+        const v=parseInt(e.target.value,10);
+        if(v>0){cn.preset=v;logEv("op","셋업 변경 — "+s+" 목표 → "+v+"EA (즉시 반영)");}};
+      grid.appendChild(d2);
+    });
+    pw.appendChild(grid);sl.appendChild(pw);
+  }
   const ff=document.getElementById("setfaults");ff.innerHTML="";
   (cur.m.faults||[]).forEach(f=>{
     const fb=document.createElement("button");
@@ -405,7 +434,9 @@ duty_standby:{unit:"㎥",w:1000,tt:3},
  fnb_fill_cutoff:{unit:"병",w:0.5,tt:6},
  motion_home_move:{unit:"파레트",w:650,tt:18},
  cascade_conveyor:{unit:"박스",w:8.0,tt:2.1},
- transfer_line:{unit:"차체",w:310,tt:15}
+ transfer_line:{unit:"차체",w:310,tt:15},
+ oht_transport:{unit:"FOUP",w:8.4,tt:16},
+ battery_formation:{unit:"트레이",w:96,tt:42}
 };
 
 /* ============================================================
@@ -2202,6 +2233,127 @@ bodyline:{
      val("TRANSFER"),val("WELD_A")||val("WELD_B")||val("CLAMP"));
    ledBoard(2.4,0.9,"완성 차체",String(st.count).padStart(4,"0"));
    ledBoard(13.2,0.95,"재공 WIP",String(st.bodies.length));
+ }},
+
+/* ---- 반도체 팹 베이: OHT 천장반송(FOUP) ---- */
+fab:{
+ label:"반도체 팹 베이 — OHT 천장반송(FOUP) · LP-01 픽업 → LP-02 하역",
+ overhead:"piping",
+ wiresOut:[["TRAVERSE",[[14.72,5.0],[8.0,4.6],[8.0,3.4]]]],
+ init:()=>({pos:3.2,z:2.6,carry:true,dropped:false,pick:0,count:0}),
+ sense(st,plc){plc.set("CARRIER_PRESENT",st.carry);},
+ tick(st,o,dt){
+   const tU=cur.plc.timers.T0,tT=cur.plc.timers.T1,tD=cur.plc.timers.T2;
+   if(o.HOIST_UP&&tU)st.z=1.15+1.45*Math.min(1,tU.acc/tU.preset);
+   if(o.TRAVERSE&&tT)st.pos=3.2+9.6*Math.min(1,tT.acc/tT.preset);
+   if(o.HOIST_DOWN&&tD){
+     st.z=2.6-1.45*Math.min(1,tD.acc/tD.preset);
+     if(tD.acc/tD.preset>0.93&&!st.dropped&&st.carry){st.dropped=true;st.carry=false;st.count++;}
+   }
+   const idle=!o.HOIST_UP&&!o.TRAVERSE&&!o.HOIST_DOWN;
+   if(idle&&st.dropped){ /* 공차 복귀 → LP-01 신규 FOUP 픽업 */
+     if(st.pick===0){
+       if(st.z<2.6)st.z=Math.min(2.6,st.z+dt*1.3);
+       else if(st.pos>3.2)st.pos=Math.max(3.2,st.pos-dt*2.6);
+       else st.pick=1;
+     }else if(st.pick===1){
+       st.z=Math.max(1.15,st.z-dt*1.3);
+       if(st.z<=1.16){st.carry=true;st.pick=2;}
+     }else{
+       st.z=Math.min(2.6,st.z+dt*1.3);
+       if(st.z>=2.59){st.pick=0;st.dropped=false;}
+     }
+   }
+ },
+ draw(ctx,st,val,t){
+   face(ctx,[P(1.2,1.6,0.006),P(15.6,1.6,0.006),P(15.6,4.6,0.006),P(1.2,4.6,0.006)],"rgba(210,228,248,.08)");
+   /* 천장 주행 레일 */
+   box3(2.4,2.85,2.78,11.6,0.3,0.1,"#46535f");
+   box3(2.4,2.85,2.66,11.6,0.06,0.12,"#39434f");
+   /* 공정 장비(EFEM) 2식 + 로드포트 */
+   const eq=(x,tg)=>{
+     sh(x-1.0,1.7,2.0,1.0,0.26);
+     box3(x-1.0,1.75,0,2.0,0.9,1.8,"#3c4854");
+     box3(x-0.9,1.8,1.8,1.8,0.8,0.1,"#46535f");
+     tag3(x,1.9,2.25,tg,"공정 장비(EFEM)","#8ec9ff",2);
+     box3(x-0.35,2.72,0,0.7,0.6,0.95,"#39434f");
+   };
+   eq(3.2,"EQ-71");eq(12.8,"EQ-72");
+   tag3(3.2,3.0,1.4,"LP-01","로드포트(픽업)","#7ee787",2);
+   tag3(12.8,3.0,1.4,"LP-02","로드포트(하역)","#f0c26b",2);
+   const foup=(x,y,z)=>{
+     box3(x-0.26,y-0.24,z,0.52,0.48,0.45,"#cdd5de");
+     box3(x-0.2,y-0.26,z+0.2,0.4,0.05,0.12,"#8a93a0");
+   };
+   /* LP-01 대기 FOUP(비클이 비었을 때) · LP-02 하역 스택 */
+   if(!st.carry&&st.pick<2)foup(3.2,3.0,0.95);
+   for(let i=0;i<Math.min(3,st.count);i++)foup(12.8+0.0,3.0-0.0,0.95+i*0.5);
+   /* OHT 비클 + 호이스트 벨트 */
+   const vx=st.pos;
+   box3(vx-0.45,2.7,2.48,0.9,0.3,0.18,"#2e5e8e");
+   dq(vx+2.85+2.6,c2=>{
+     seg(c2,P(vx-0.18,2.85,2.48),P(vx-0.18,2.85,st.z+0.46),"#9aa7b5",1.2);
+     seg(c2,P(vx+0.18,2.85,2.48),P(vx+0.18,2.85,st.z+0.46),"#9aa7b5",1.2);
+   });
+   if(st.carry)foup(vx,2.85,st.z);
+   else box3(vx-0.3,2.64,st.z+0.34,0.6,0.42,0.1,"#46535f");
+   dq(vx+3.2,c2=>lamp(c2,P(vx+0.42,2.7,2.6),2.2,val("TRAVERSE")?"#58e0ff":"#27313c",val("TRAVERSE")&&(t*3%1)<0.6));
+   tag3(vx,2.85,3.1,"OHT-71","천장반송 비클",val("TRAVERSE")?"#58e0ff":"#9fb3c8");
+   stackLight(14.9,4.35,false,false,val("HOIST_UP")||val("TRAVERSE")||val("HOIST_DOWN"));
+   ledBoard(7.4,1.2,"반송 FOUP",String(st.count).padStart(4,"0"));
+ }},
+
+/* ---- 배터리 화성(포메이션) — 아날로그 폐루프 ---- */
+battery:{
+ label:"배터리 화성 라인 — CV 4200mV 컷오프 · 과열 45℃ 차단(아날로그 폐루프)",
+ overhead:"piping",
+ wiresOut:[["CHARGER",[[14.72,5.0],[7.6,4.7],[7.6,3.6]]]],
+ init:()=>({v:3500,temp:25,count:0,trayX:0,phase:"chg"}),
+ sense(st,plc){
+   plc.set("CELL_V",Math.round(st.v));
+   plc.set("CELL_TEMP",Math.round(cur.faults.hotCell?60:st.temp));
+ },
+ tick(st,o,dt){
+   if(o.CHARGER){st.v=Math.min(4400,st.v+24*dt);st.temp=Math.min(58,st.temp+1.0*dt);}
+   else st.temp=Math.max(25,st.temp-2.2*dt);
+   if(st.phase==="chg"&&st.v>=4195&&!o.CHARGER)st.phase="out";
+   if(st.phase==="out"){
+     st.trayX+=dt*1.6;
+     if(st.trayX>5){st.count++;st.v=3500;st.temp=25;st.trayX=-5;st.phase="in";}
+   }else if(st.phase==="in"){
+     st.trayX=Math.min(0,st.trayX+dt*1.6);
+     if(st.trayX>=0)st.phase="chg";
+   }
+ },
+ draw(ctx,st,val,t){
+   /* 화성 랙 캐비닛 */
+   sh(5.5,1.75,4.8,1.5,0.3);
+   box3(5.6,1.85,0,4.6,1.3,2.5,"#37424f");
+   box3(5.6,1.85,2.5,4.6,1.3,0.1,"#46535f");
+   for(let i=0;i<4;i++)
+     dq(5.9+i*1.15+1.85+1.3,c2=>lamp(c2,P(6.1+i*1.15,1.86,2.1),2,val("CHARGER")?"#58e0ff":"#27313c",val("CHARGER")));
+   tag3(7.9,1.95,2.9,"FM-810","화성 랙 8채널 · CHG-810","#9fb3c8");
+   /* 셀 트레이(8셀) — 진입/충전/배출 */
+   const tx2=7.9+st.trayX;
+   if(st.trayX>-4.9&&st.trayX<4.9){
+     sh(tx2-1.35,3.4,2.7,0.95,0.26);
+     box3(tx2-1.35,3.45,0.55,2.7,0.85,0.12,"#4a5563");
+     for(let i=0;i<8;i++){
+       const full=st.v>4150;
+       cyl3(tx2-1.15+i*0.31,3.87,0.67,0.115,0.5,full?"#3f8d5c":val("CHARGER")?"#3f6fae":"#5a6675");
+     }
+     tag3(tx2,3.87,1.4,"TRAY",`셀 트레이 ${st.phase==="chg"?"화성 중":"이송"}`,"#8ec9ff",2);
+   }
+   /* 충전 버스바 케이블 */
+   dq(7.9+3.4+1,c2=>{
+     const a=P(7.9,3.15,1.6),b=P(7.9,3.45,1.15);
+     seg(c2,a,b,val("CHARGER")?"#d9821c":"#566472",val("CHARGER")?2.4:1.6);
+   });
+   ledBoard(4.3,1.1,"셀 전압 mV",String(Math.round(st.v)),st.v>=4195?"#7ee787":"#8ec9ff");
+   ledBoard(11.2,1.1,"셀 온도 ℃",String(Math.round(cur.faults.hotCell?60:st.temp)),
+     (cur.faults.hotCell?60:st.temp)>45?"#f5b14c":"#7ee787");
+   stackLight(12.6,2.0,(cur.faults.hotCell?60:st.temp)>45,false,val("CHARGER"));
+   ledBoard(7.6,0.95,"완료 트레이",String(st.count).padStart(4,"0"));
  }}
 };
 
@@ -2233,6 +2385,9 @@ SCENES.agv.avail=()=>1;
 SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCENES.cascade.speed=st=>Math.max(...st.spd);
 SCENES.bodyline.prod=st=>st.count; SCENES.bodyline.wip=st=>st.bodies.length;
 SCENES.bodyline.avail=()=>1;
+SCENES.fab.prod=st=>st.count; SCENES.fab.wip=st=>st.carry?1:0; SCENES.fab.avail=()=>1;
+SCENES.battery.prod=st=>st.count; SCENES.battery.wip=st=>st.trayX>-4.9&&st.trayX<4.9?1:0;
+SCENES.battery.avail=()=>1;
 
 SCENES.counter.quality=st=>(st.good+st.ejected)>0?st.good/(st.good+st.ejected):1;
 SCENES.counter.avail=()=>1; /* 검수 라인 벨트는 상시 가동(배출 실린더는 간헐 작동) */
@@ -2313,7 +2468,7 @@ const LINES={};
 const OV={motor_start_stop:"포장 컨베이어",fwd_rev:"이송 대차",car_wash:"세차 터널",
   count_eject:"검수 카운트",conveyor_divert:"비전 분기",weld_cell:"용접 셀",
   batch_fill_mix_drain:"배치 플랜트",duty_standby:"급수 펌프장",fnb_fill_cutoff:"정량 충전 라인",cascade_conveyor:"다단 반송",motion_home_move:"AGV 물류 섹터",
-  transfer_line:"차체 트랜스퍼 라인"};
+  transfer_line:"차체 트랜스퍼 라인",oht_transport:"반도체 OHT 베이",battery_formation:"배터리 화성 라인"};
 
 /* ---- 자동 시연 오토파일럿: 라인별 가상 조작 시퀀스 ---- */
 const AUTO={
@@ -2350,6 +2505,14 @@ const AUTO={
  transfer_line(L){
    const busy=["CLAMP","WELD_A","WELD_B","TRANSFER"].some(x=>L.plc.val(x));
    if(!busy&&L.sst.bodies.includes(0))return["LINE_START",0.3,2];
+ },
+ oht_transport(L){
+   const busy=["HOIST_UP","TRAVERSE","HOIST_DOWN"].some(x=>L.plc.val(x));
+   if(!busy&&L.sst.carry&&!L.sst.dropped&&L.sst.pos<=3.25)return["OHT_START",0.3,2];
+ },
+ battery_formation(L){
+   if(L.sst.phase==="chg"&&!L.plc.val("CHARGER")&&L.sst.v<4190&&!L.faults.hotCell)
+     return["CHG_START",0.4,3];
  }
 };
 function autopilot(L,dt){
@@ -3389,7 +3552,8 @@ function makeLine(id){
     cpu:({motor_start_stop:"XGK-CPUE",fwd_rev:"FX5U-32MR/ES",car_wash:"CP1L-EM30",
       count_eject:"XBC-DR32H",conveyor_divert:"NX1P2-1140DT",weld_cell:"R04CPU",
       batch_fill_mix_drain:"CJ2M-CPU31",duty_standby:"CPU 1214C",
-      cascade_conveyor:"XGK-CPUH",transfer_line:"CPU 1515-2 PN"})[id]||"XGK-CPUH",
+      cascade_conveyor:"XGK-CPUH",transfer_line:"CPU 1515-2 PN",
+      oht_transport:"NX1P2-1140DT",battery_formation:"Q03UDECPU"})[id]||"XGK-CPUH",
     devCfg:{}};
   L.sst=L.scene.init();
   d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
@@ -3523,6 +3687,35 @@ function removeLine(uid){
   USER_LINES=USER_LINES.filter(u=>u.uid!==uid);persistLines();
   updateOverview();
 }
+/* 내장 산업 라인 — 엔진 합성·검증 산출물(DEMO_ALL)에서 등록(반도체·이차전지) */
+function registerBuiltin(rid,meta){
+  const src=window.DEMO_ALL&&window.DEMO_ALL[rid];
+  if(!src||DEMO[rid])return;
+  DEMO[rid]={title:src.title,st:src.st,ladder:src.ladder,
+    explain:src.explain,passed:true,sim:src.sim};
+  META[rid]=Object.assign({addr:src.addr,desc:src.desc},meta);
+  ids.push(rid);
+}
+registerBuiltin("oht_transport",{scene:"fab",
+  buttons:[{sym:"OHT_START",label:"반송 시작",c:"#1f9d4d"},{sym:"OHT_STOP",label:"정지",c:"#c93c3c"}],
+  autoInputs:{CARRIER_PRESENT:"FOUP 파지 · 자동"},
+  tags:{HOIST_UP:{tag:"HO-701",name:"호이스트 권상",rated:2.4},
+        TRAVERSE:{tag:"OHT-71",name:"OHT 주행 구동",rated:4.2},
+        HOIST_DOWN:{tag:"HO-702",name:"호이스트 권하",rated:2.4}},
+  faults:[{id:"tripOht",label:"OHT-71 주행 트립",sym:"TRAVERSE",type:"trip"}],
+  verify:["캐리어 인터록 — FOUP 미파지 시 반송 진입 불가(낙하 방지)",
+          "단계 배타 — 상승/주행/하강 one-hot 시퀀스",
+          "OHT_STOP 지배성 · TON 3단 도달성","OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+registerBuiltin("battery_formation",{scene:"battery",
+  buttons:[{sym:"CHG_START",label:"충전 시작",c:"#1f9d4d"}],
+  autoInputs:{CELL_V:"셀 전압 · 아날로그(폐루프)",CELL_TEMP:"셀 온도 · 아날로그(폐루프)"},
+  tags:{CHARGER:{tag:"CHG-810",name:"화성 충전기 출력",rated:42}},
+  faults:[{id:"hotCell",label:"셀 과열 주입(60℃)",type:"custom"}],
+  analog:{D0010:{name:"셀 전압",unit:"mV",get:st=>Math.round(st.v)},
+          D0011:{name:"셀 온도",unit:"℃",get:st=>Math.round(cur.faults.hotCell?60:st.temp)}},
+  verify:["CV 컷오프 — CELL_V ≥ 4200 도달 시 충전 차단(비교 접점, Z3 Int 검증)",
+          "과열 차단 — CELL_TEMP > 45 즉시 차단(이중 조건 OR)",
+          "이중 코일 0건 · 도달성 검사 통과","OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
 USER_LINES=USER_LINES.filter(u=>registerUserLine(u));
 USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});
