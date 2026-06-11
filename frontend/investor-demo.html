@@ -568,6 +568,23 @@ function buildPlcSel(){
   renderFit();
 }
 
+/* D 레지스터 맵 — 설정 SP(HMI 기록) + 공정 데이터(비전·카운트) */
+function dRegs(L){
+  const r=[];
+  if(L.scene.speedCtl)r.push(["D0100","생산속도 설정 SP",()=>Math.round(L.speedF*100),"%","sp"]);
+  if(L.scene.ngCtl)r.push(["D0101","불량 주입률 SP",()=>L.ngRate,"%","sp"]);
+  if(L.scene.demandCtl)r.push(["D0102","수요 부하 SP",()=>Math.round(L.demandF*100),"%","sp"]);
+  if(L.id==="conveyor_divert")r.push(
+    ["D0110","비전 검사수량",()=>L.sst.insp,"EA","dt"],
+    ["D0111","양품 카운트",()=>L.sst.ok,"EA","dt"],
+    ["D0112","불량 카운트",()=>L.sst.ng,"EA","dt"]);
+  if(L.id==="count_eject")r.push(
+    ["D0110","양품 카운트",()=>L.sst.good,"EA","dt"],
+    ["D0111","배출 카운트",()=>L.sst.ejected,"EA","dt"]);
+  if(L.scene.prod)r.push(["D0120","생산수량 누계",()=>L.scene.prod(L.sst),"EA","dt"]);
+  return r;
+}
+
 /* 설정 드로어 — 기종·운전 파라미터·고장 주입(라인별) */
 function buildSettings(){
   document.getElementById("settitle").textContent=OV[cur.id]||cur.d.title;
@@ -590,6 +607,12 @@ function buildSettings(){
     v=>{cur.demandF=v/100;logEv("op","공정 수요 부하 변경 → "+v+"%");});
   if(!cur.scene.speedCtl&&!cur.scene.ngCtl&&!cur.scene.demandCtl)
     sl.innerHTML='<span class="hint" style="font-size:12px;color:var(--mut)">이 라인은 조정 파라미터가 없습니다.</span>';
+  else{
+    const nt=document.createElement("div");
+    nt.className="hint";nt.style.cssText="font-size:11.5px;color:var(--mut);width:100%";
+    nt.textContent="슬라이더 값은 PLC 설정 레지스터(D0100~)에 기록되어 IO 표에 실시간 표시됩니다.";
+    sl.appendChild(nt);
+  }
   const ff=document.getElementById("setfaults");ff.innerHTML="";
   (cur.m.faults||[]).forEach(f=>{
     const fb=document.createElement("button");
@@ -2134,6 +2157,10 @@ function updateDOM(r,dt,t){
     const el2=document.getElementById("an_"+addr);
     if(el2)el2.textContent=String(a.get(cur.sst,cur));
   }
+  for(const[addr,,get]of dRegs(cur)){
+    const el2=document.getElementById("an_"+addr);
+    if(el2)el2.textContent=String(get());
+  }
   if(devOpen)renderDev();
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
@@ -2414,6 +2441,11 @@ function show(id){
     d.sim.outputs.map(s2=>ioRow(s2,"출력 P",m)).join("")+
     Object.keys(cur.plc.timers).map(s2=>fbRow(s2,m)).join("")+
     Object.keys(cur.plc.counters).map(s2=>fbRow(s2,m)).join("")+
+    dRegs(cur).map(([addr,nm,get,unit,kind])=>
+      `<tr><td><span class="dot on-i" style="background:${kind==="sp"?"#d9a514":"#7c5cff"};box-shadow:0 0 8px ${kind==="sp"?"#d9a514":"#7c5cff"}"></span></td>`+
+      `<td><b>${addr}</b></td><td class="mut">${nm}</td>`+
+      `<td colspan="2"><b id="an_${addr}" style="color:${kind==="sp"?"#f0c26b":"#b9a3ff"}">${get()}</b> `+
+      `<span class="mut">${unit} · ${kind==="sp"?"설정 D(HMI 기록)":"데이터 D(공정 누계)"}</span></td></tr>`).join("")+
     Object.entries(m.analog||{}).map(([addr,a])=>
       `<tr><td><span class="dot on-i" style="background:#7c5cff;box-shadow:0 0 8px #7c5cff"></span></td>`+
       `<td><b>${addr}</b></td><td class="mut">${a.name}</td>`+
