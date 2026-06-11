@@ -2729,6 +2729,11 @@ document.getElementById("setbtn").onclick=()=>{
   sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";sb.title="WebGL은 베타 — 자유 회전/그림자";
   document.querySelector(".scol").insertBefore(sb,document.getElementById("viewbtn"));
   sb.onclick=()=>{exitFactory();setRenderer(!GL3D.on);};
+  const db=document.createElement("button");
+  db.className="xbtn";db.textContent="📦 납품 문서";
+  db.title="검증 리포트·I/O 할당표·ST·기종 니모닉(.il)·결선도 — 인쇄/PDF";
+  document.querySelector(".scol").appendChild(db);
+  db.onclick=()=>openDeliveryDoc();
   /* 래더 탭 → 엔지니어링 SW 진입 */
   const lv=document.getElementById("w-ladder");
   if(lv){
@@ -3532,6 +3537,73 @@ USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});
 show(ids[0]);
 
+/* ── 납품 패키지: 현장 검토용 문서(인쇄/PDF) + 대상 기종 니모닉(.il) 다운로드 ── */
+function ilFor(L){
+  const DA=window.DEMO_ALL||{};
+  if(DA[L.id]&&DA[L.id].il_xgk)return DA[L.id].il_xgk;
+  const u=USER_LINES.find(x=>x.uid===L.id);
+  return (u&&DA[u.recipe]&&DA[u.recipe].il_xgk)||null;
+}
+function openDeliveryDoc(){
+  const m=PLC_CATALOG.find(x=>x.model===cur.cpu)||PLC_CATALOG[1];
+  const f=fitCheck(cur,m);
+  const il=ilFor(cur);
+  const pj=((document.getElementById("pjname")||{}).value)||"공장 프로젝트";
+  const esc=v=>String(v).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const rowsIO=cur.d.sim.inputs.map(s=>[cur.m.addr[s]||"",s,"입력",cur.m.desc[s]||""])
+    .concat(cur.d.sim.outputs.map(s=>[cur.m.addr[s]||"",s,"출력",cur.m.desc[s]||""]))
+    .concat(Object.keys(cur.plc.timers).map(s=>[cur.m.addr[s]||"",s,"TON",cur.m.desc[s]||""]))
+    .concat(Object.keys(cur.plc.counters).map(s=>[cur.m.addr[s]||"",s,"CTU",cur.m.desc[s]||""]));
+  const w=window.open("","_blank");
+  if(!w){logEv("warn","팝업 차단 — 납품 문서 창을 허용해 주세요");return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>납품 패키지 — ${esc(cur.d.title)}</title>
+<style>body{font:13px/1.6 'Segoe UI','Malgun Gothic',sans-serif;color:#1a232e;max-width:880px;margin:24px auto;padding:0 18px}
+h1{font-size:20px;border-bottom:3px solid #1a232e;padding-bottom:8px}
+h2{font-size:15px;margin-top:26px;border-left:4px solid #2b86c8;padding-left:8px}
+table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #b9c2cc;padding:4px 8px;text-align:left}
+th{background:#eef2f6}pre{background:#f4f6f8;border:1px solid #d6dde4;padding:10px;font:11px/1.5 Consolas,monospace;white-space:pre-wrap}
+.meta td{border:0;padding:2px 8px}.warn{background:#fff7e6;border:1px solid #e8c878;padding:10px;font-size:12px;margin-top:20px}
+@media print{button{display:none}}</style></head><body>
+<button onclick="print()" style="float:right">🖨 인쇄 / PDF 저장</button>
+<h1>제어 설계 납품 패키지</h1>
+<table class="meta"><tr><td>프로젝트</td><td><b>${esc(pj)}</b></td><td>라인</td><td><b>${esc(cur.d.title)}</b></td></tr>
+<tr><td>대상 기종</td><td><b>${m.v} ${m.model}</b> · ${m.prof}</td><td>발행</td><td>${new Date().toLocaleString("ko-KR")}</td></tr>
+<tr><td>설계 규모</td><td>I/O ${f.io}점 · TON ${f.tmr} · CTU ${f.cnt} · 추정 ${f.st2}스텝</td><td>통신</td><td>${m.comm}</td></tr></table>
+<h2>1. 자동 검증 결과</h2><ul>${cur.m.verify.map(v=>`<li>${esc(v)}</li>`).join("")}</ul>
+<h2>2. I/O 할당표</h2><table><tr><th>디바이스</th><th>심볼</th><th>구분</th><th>설명</th></tr>
+${rowsIO.map(r2=>`<tr><td>${r2[0]}</td><td>${r2[1]}</td><td>${r2[2]}</td><td>${esc(r2[3])}</td></tr>`).join("")}</table>
+<h2>3. 구조화 텍스트(ST · IEC 61131-3)</h2><pre>${esc(cur.d.st)}</pre>
+${il?`<h2>4. ${m.v} 니모닉(IL) — 동봉 .il 파일</h2><pre>${esc(il)}</pre>`:""}
+<h2>${il?5:4}. 결선도(직배선)</h2><div style="background:#0d1117;padding:12px;border-radius:8px">${wiringSvg(cur)}</div>
+<div class="warn">⚠ 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은
+하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061).</div>
+</body></html>`);
+  w.document.close();
+  if(il)dl(cur.id+"_xgk.il",il,"text/plain");
+  logEv("op","납품 패키지 발행 — "+cur.d.title+" ("+m.model+")");
+}
+
+/* ── 공장 템플릿: 실공장형 라인 구성을 일괄 생성 ── */
+const TEMPLATES=[
+ {name:"자동차 보디샵",desc:"차체 트랜스퍼 → 용접 셀 → 도장부스",
+  lines:["transfer_line","weld_cell","paint_booth"]},
+ {name:"음료 보틀링 공장",desc:"정량 충전 → 비전 검사 → 파레타이저 → 랩핑",
+  lines:["fnb_fill_cutoff","conveyor_divert","palletizer","stretch_wrap"]},
+ {name:"제약 패키징 공장",desc:"중량 선별 → 병입 카운트 → 층 적재",
+  lines:["pill_inspect","tablet_count_bottle","palletizer"]},
+ {name:"물류 센터",desc:"다단 반송 → 검수 카운트 → 랩핑",
+  lines:["cascade_conveyor","count_eject","stretch_wrap"]},
+ {name:"반도체 팹 물류",desc:"천장 반송 OHT → AGV 섹터",
+  lines:["oht_transport","motion_home_move"]}];
+function applyTemplate(ti){
+  const t2=TEMPLATES[ti];if(!t2)return;
+  let made=0;
+  t2.lines.forEach(rid=>{
+    if(window.DEMO_ALL&&window.DEMO_ALL[rid]){addLine(rid);made++;}
+  });
+  logEv("op","공장 템플릿 적용 — "+t2.name+" ("+made+"개 라인 생성)");
+}
+
 /* 프로젝트 바 */
 (function(){
   const pn=document.getElementById("pjname");
@@ -3570,6 +3642,24 @@ show(ids[0]);
     document.getElementById("addwrap").style.display="none";
     document.getElementById("scene").scrollIntoView({behavior:"smooth",block:"center"});
   };
+  /* 공장 템플릿 — 실공장형 다중 라인 일괄 생성 */
+  const ap=document.getElementById("addpanel");
+  if(ap){
+    const tw=document.createElement("div");
+    tw.innerHTML='<div style="font:700 11.5px ui-monospace,monospace;color:#8b98a8;margin:14px 0 6px">또는 공장 템플릿으로 일괄 생성</div>';
+    const grid=document.createElement("div");
+    grid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px";
+    TEMPLATES.forEach((t2,i)=>{
+      const b=document.createElement("button");
+      b.className="xbtn";b.style.textAlign="left";
+      b.innerHTML=`<b>${t2.name}</b><br/><small style="color:var(--mut)">${t2.desc}</small>`;
+      b.onclick=()=>{applyTemplate(i);
+        document.getElementById("addwrap").style.display="none";
+        document.getElementById("scene").scrollIntoView({behavior:"smooth",block:"center"});};
+      grid.appendChild(b);
+    });
+    tw.appendChild(grid);ap.appendChild(tw);
+  }
   document.getElementById("pjexport").onclick=()=>{
     dl((pn.value||"project")+".hands.json",JSON.stringify({
       name:pn.value,lines:USER_LINES,layout:LAYOUT,

@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.emit import render_for_vendor
 from app.explain import explain_all
 from app.memory_map import DeviceAllocator
 from app.models import DataType, DeviceClass, IODirection
@@ -81,6 +82,7 @@ def build_payload() -> dict[str, dict[str, Any]]:
             "explain": explain_all(spec, ladder, report),
             "passed": True,
             "addr": addr,
+            "il_xgk": render_for_vendor(st, spec),
             "analog_inputs": analog_ins,
             "desc": {p.symbol: p.description for p in spec.io_points},
             "sim": {
