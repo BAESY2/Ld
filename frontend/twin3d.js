@@ -100,6 +100,8 @@ function pfRobot(){
   return {group:g,sh,el,arc};
 }
 
+function tagObj(o,tag){o.userData.devTag=tag;return o;}
+
 function makePartsPool(env,n){
   const pool=[];
   for(let i=0;i<n;i++){
@@ -117,8 +119,9 @@ const BUILDERS={
   for(const[lx,ly]of[[1.8,1.85],[3.0,1.85],[1.8,2.75],[3.0,2.75]])
     env.set.add(at(box(0.14,1.55,0.14,mat(0x39434f)),lx,ly,0.78));
   env.set.add(at(box(1.0,0.5,0.95,mat(0x54442a)),12.4,2.32,0.25));
-  const motor=at(box(0.4,0.26,0.3,mat(0x44528a,{metalness:0.4})),12.3,2.8,0.69);
+  const motor=tagObj(at(box(0.4,0.26,0.3,mat(0x44528a,{metalness:0.4})),12.3,2.8,0.69),"M-101");
   env.set.add(motor);
+  const lbm=labelSprite("M-101","#8ec9ff");at(lbm,12.3,2.8,1.25);env.set.add(lbm);
   const lamp1=new (T()).PointLight(0x3fb950,0,4);
   at(lamp1,12.85,1.65,1.4);env.set.add(lamp1);
   const lb=labelSprite("CV-101","#8ec9ff");at(lb,7,2.3,1.7);env.set.add(lb);
@@ -156,7 +159,7 @@ const BUILDERS={
     at(beam,sx,2.95,1.75);env.set.add(beam);
     sensors.push({x:sx,beam});
   }
-  const agv=pfAGV();env.set.add(agv.group);
+  const agv=pfAGV();tagObj(agv.group,"AGV-901");env.set.add(agv.group);
   const stack=[];
   for(let i=0;i<6;i++){
     const b2=box(0.55,0.42,0.55,mat(0x7a5c2e));b2.visible=false;env.set.add(b2);stack.push(b2);
@@ -183,7 +186,7 @@ const BUILDERS={
     pfBelt(env.set,5.35,2.05,1.7,0.75),
     pfBelt(env.set,8.0,2.05,1.55,0.75)];
   env.set.add(at(box(0.66,0.78,0.66,mat(0x3a4654)),7.6,2.28,0.39));
-  const rob=pfRobot();
+  const rob=pfRobot();tagObj(rob.group,"RB-401");
   const q0=W2T(6.3,2.95,0);rob.group.position.set(q0[0],q0[1],q0[2]);
   env.set.add(rob.group);
   const part=box(0.6,0.13,0.42,mat(0x7e8894,{metalness:0.6,roughness:0.4}));
@@ -255,7 +258,8 @@ const BUILDERS={
   const beam=new (T()).Mesh(new (T()).CylinderGeometry(0.015,0.015,0.86,8),
     new (T()).MeshBasicMaterial({color:0xff5b5b,transparent:true,opacity:0.25}));
   beam.rotation.x=Math.PI/2;at(beam,9.19,2.31,0.92);env.set.add(beam);
-  const cylBody=at(box(0.56,0.32,0.4,mat(0x37424f)),10.7,1.62,0.78);env.set.add(cylBody);
+  const cylBody=tagObj(at(box(0.56,0.32,0.4,mat(0x37424f)),10.7,1.62,0.78),"CY-101");env.set.add(cylBody);
+  const lbc=labelSprite("CY-101","#f5b14c");at(lbc,10.7,1.62,1.35);env.set.add(lbc);
   const rod=box(0.16,0.14,0.8,mat(0x9aa7b5,{metalness:0.6}));env.set.add(rod);
   env.set.add(at(box(0.78,0.5,0.78,mat(0x6e532a)),10.71,3.95,0.25));
   env.set.add(at(box(0.9,0.5,0.85,mat(0x54442a)),13.4,2.32,0.25));
@@ -278,7 +282,7 @@ const BUILDERS={
   for(const dy of[-0.14,0.7])
     env.set.add(at(box(0.07,1.62,0.07,mat(0x39434f)),8.55,2.0+dy+0.14,0.81));
   env.set.add(at(box(0.3,0.22,0.95,mat(0x2c3743)),8.55,2.3,1.7));
-  env.set.add(at(box(0.16,0.28,0.3,mat(0x1a212b)),8.55,2.33,1.42));
+  env.set.add(tagObj(at(box(0.16,0.28,0.3,mat(0x1a212b)),8.55,2.33,1.42),"VS-701"));
   const cone=new (T()).Mesh(new (T()).ConeGeometry(0.38,0.62,4),
     new (T()).MeshBasicMaterial({color:0xbfe3ff,transparent:true,opacity:0}));
   at(cone,8.55,2.33,1.05);env.set.add(cone);
@@ -333,7 +337,7 @@ const BUILDERS={
   at(water,2.45,3.0,0.46);env.set.add(water);
   const pumps=[];
   for(const[py,sym,tx]of[[2.35,"PUMP_LEAD","P-801A"],[3.55,"PUMP_LAG","P-801B"]]){
-    env.set.add(at(box(0.6,0.5,0.6,mat(0x44528a)),4.75,py,0.25));
+    env.set.add(tagObj(at(box(0.6,0.5,0.6,mat(0x44528a)),4.75,py,0.25),tx));
     const vol=cyl(0.26,0.45,mat(0x3a4654));at(vol,5.3,py,0.22);env.set.add(vol);
     const pl=new (T()).PointLight(0x3fb950,0,2.5);at(pl,5.3,py,0.7);env.set.add(pl);
     const lb2=labelSprite(tx,"#8ec9ff");at(lb2,4.95,py,1.25);env.set.add(lb2);
@@ -344,7 +348,7 @@ const BUILDERS={
     at(rise,5.6,py,1.5);env.set.add(rise);
     pumps.push({sym,pl,pm:pipe.material});
   }
-  const tank=cyl(1.05,2.3,mat(0x46535f,{roughness:0.5}));at(tank,11.5,3.0,1.7);env.set.add(tank);
+  const tank=tagObj(cyl(1.05,2.3,mat(0x46535f,{roughness:0.5})),"TK-801");at(tank,11.5,3.0,1.7);env.set.add(tank);
   for(const[lx,ly]of[[10.6,2.3],[12.4,2.3],[10.6,3.7],[12.4,3.7]])
     env.set.add(at(box(0.16,0.55,0.16,mat(0x39434f)),lx,ly,0.28));
   const gauge=new (T()).Mesh(new (T()).BoxGeometry(0.08,1.94,0.04),
@@ -376,7 +380,7 @@ const BUILDERS={
     const lb2=labelSprite(tx,"#8ec9ff");at(lb2,wx,3.97,1.1);env.set.add(lb2);
   }
   const car=new (T()).Group();env.set.add(car);
-  const body=box(1.5,0.42,1.0,mat(0x3a4656));body.position.y=0.35;car.add(body);
+  const body=box(1.5,0.42,1.0,mat(0x3a4656));body.position.y=0.35;car.add(body);tagObj(car,"SH-201");
   const crate=box(0.85,0.6,0.8,mat(0x7a5c2e));crate.position.y=0.86;car.add(crate);
   const bk=new (T()).PointLight(0x58a6ff,0,3);bk.position.y=1.1;car.add(bk);
   const lb=labelSprite("SH-201","#dce4f0");env.set.add(lb);
@@ -430,7 +434,7 @@ const BUILDERS={
  batch_fill_mix_drain(env){
   for(const[lx,ly]of[[5.2,2.0],[6.9,2.0],[5.2,3.3],[6.9,3.3]])
     env.set.add(at(box(0.14,0.55,0.14,mat(0x39434f)),lx,ly,0.28));
-  const tank=cyl(1.05,2.1,mat(0x46535f,{roughness:0.45,metalness:0.3}));
+  const tank=tagObj(cyl(1.05,2.1,mat(0x46535f,{roughness:0.45,metalness:0.3})),"TK-501");
   at(tank,6.05,2.66,1.6);env.set.add(tank);
   const liquid=new (T()).Mesh(new (T()).CylinderGeometry(0.98,0.98,1,24),
     new (T()).MeshStandardMaterial({color:0x2e7ec8,transparent:true,opacity:0.55}));
@@ -464,7 +468,7 @@ const Twin3D={
  supported:Object.keys(BUILDERS),
  active:null,
  _r:null,_scene:null,_cam:null,_env:null,_orbit:{th:0.95,ph:0.42,d:12},
- mount(container,L){
+ mount(container,L,opts){
   const TT=T();
   this.destroy();
   const W=container.clientWidth,H=container.clientHeight;
@@ -506,20 +510,49 @@ const Twin3D={
   const env={set:new TT.Group(),upd:null};
   sc.add(env.set);
   BUILDERS[L.id](env);
-  this._r=r;this._scene=sc;this._cam=cam;this._env=env;this.active=L.id;
+  this._r=r;this._scene=sc;this._cam=cam;this._env=env;this.active=L.id;this._opts=opts||this._opts||{};
   this._bindOrbit(container);
   this._camUpd();
  },
  _bindOrbit(el){
-  let drag=null;
-  el.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY};};
+  let drag=null,moved=0;
+  el.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY};moved=0;};
   el.onpointermove=e=>{if(!drag)return;
+    moved+=Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y);
     this._orbit.th+=(e.clientX-drag.x)*0.005;
     this._orbit.ph=Math.min(1.4,Math.max(0.08,this._orbit.ph+(e.clientY-drag.y)*0.004));
     drag={x:e.clientX,y:e.clientY};};
-  el.onpointerup=()=>{drag=null;};
+  el.onpointerup=e=>{
+    if(drag&&moved<6)this._pick(el,e);
+    drag=null;};
   el.onwheel=e=>{e.preventDefault();
     this._orbit.d=Math.min(34,Math.max(3.5,this._orbit.d*Math.exp(e.deltaY*0.001)));};
+ },
+ _pick(el,e){
+  if(!this._opts||!this._opts.onPick)return;
+  const TT=T(),r2=el.getBoundingClientRect();
+  const nx=((e.clientX-r2.left)/r2.width)*2-1,
+        ny=-((e.clientY-r2.top)/r2.height)*2+1;
+  const rc=new TT.Raycaster();
+  rc.setFromCamera(new TT.Vector2(nx,ny),this._cam);
+  const hits=rc.intersectObjects(this._env.set.children,true);
+  for(const h of hits){
+    let o=h.object;
+    while(o){
+      if(o.userData&&o.userData.devTag){this._opts.onPick(o.userData.devTag);return;}
+      o=o.parent;
+    }
+  }
+ },
+ screenPosOfTag(el,tag){
+  const TT=T();
+  let found=null;
+  this._env.set.traverse(o=>{if(!found&&o.userData&&o.userData.devTag===tag)found=o;});
+  if(!found)return null;
+  const v=new TT.Vector3();
+  found.getWorldPosition(v);v.y+=0.6;v.project(this._cam);
+  const r2=el.getBoundingClientRect();
+  return {x:(v.x+1)/2*r2.width,y:(1-v.y)/2*r2.height};
  },
  _camUpd(){
   const o=this._orbit;

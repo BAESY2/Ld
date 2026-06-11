@@ -2562,6 +2562,14 @@ function glContainer(){
   }
   return el;
 }
+function glPick(tag){
+  devOpen=tag;
+  document.getElementById("devpanel").style.display="block";
+  renderDev();
+  cur.lastKey="";
+  wtab("setup");
+  logEv("op","WebGL 기기 선택 — "+tag);
+}
 async function setRenderer(on){
   const btn=document.getElementById("glbtn");
   if(on){
@@ -2573,7 +2581,7 @@ async function setRenderer(on){
     GL3D.on=true;
     const el=glContainer();
     el.style.display="block";cvs.style.display="none";
-    window.Twin3D.mount(el,cur);
+    window.Twin3D.mount(el,cur,{onPick:glPick});
     window.Twin3D.resize(el);
     if(btn){btn.classList.add("on");btn.textContent="렌더러: WebGL";}
     logEv("op","WebGL 렌더러 ON — 드래그 회전·휠 줌(실그림자·z-buffer)");
@@ -2929,7 +2937,7 @@ function show(id){
   if(COSIM.on&&COSIM.line!==id)cosimStop("라인 전환");
   if(GL3D.on&&window.Twin3D){
     if(window.Twin3D.supported.includes(id)){
-      setTimeout(()=>{if(GL3D.on){window.Twin3D.mount(glContainer(),LINES[id]);}},0);
+      setTimeout(()=>{if(GL3D.on){window.Twin3D.mount(glContainer(),LINES[id],{onPick:glPick});}},0);
     }else{
       setRenderer(false);
       setTimeout(()=>logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 전환"),0);
