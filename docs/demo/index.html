@@ -1363,6 +1363,28 @@ function pathProj(path,x,y){
 }
 /* 경로 편집 상태(AGV 섹터): 사용자가 바닥 클릭으로 차량 경로를 직접 그린다 */
 const PEDIT={mode:null,veh:"amr",pts:[]};
+/* ── 실사풍 차량 스프라이트: WebGL 오프스크린 24방위 베이크 → 2D 드로잉 ── */
+const SPR={};
+const SPRC={off:Math.PI*0.25,sign:-1}; /* 월드 헤딩→베이크 방위 보정 */
+async function bakeVehicles(){
+  try{
+    if(!(await ensureGL()))return;
+    if(!window.Twin3D||!window.Twin3D.bake)return;
+    for(const k of["agv","amr","fork"])
+      if(!SPR[k])SPR[k]=window.Twin3D.bake(k,24,220);
+    logEv("op","차량 스프라이트 베이크 — 실사풍 렌더 적용(24방위·환경광 베이크)");
+  }catch(e){}
+}
+setTimeout(bakeVehicles,2500);
+function sprite(ctx,k,x,y,ang,scale){
+  const s2=SPR[k];if(!s2||!s2.frames)return false;
+  const a=SPRC.sign*ang+SPRC.off;
+  const idx=((Math.round(a/(2*Math.PI)*s2.n)%s2.n)+s2.n)%s2.n;
+  const q=P(x,y,0);
+  const w=(s2.ext*2)*0.92*view.s*(scale||1);
+  ctx.drawImage(s2.frames[idx],q[0]-w/2,q[1]-w*0.74,w,w);
+  return true;
+}
 /* 폴리라인 경로: 누적거리 → 위치+헤딩 (AGV 코너 회전 주행) */
 function pathLen(path){
   let L2=0;
@@ -2651,7 +2673,8 @@ agv:{
    /* ── AGV-901: 경로 헤딩으로 회전 주행 ── */
    const moving=val("MOVING")||val("HOMING");
    sh(st.x-0.9,st.y-0.55,1.8,1.1,0.28);
-   rotBox(st.x,st.y,st.ang,1.7,1.1,0.34,0,"#2e5e8e");
+   if(SPR.agv)dq(st.x+st.y+0.36,c2=>sprite(c2,"agv",st.x,st.y,st.ang,1.16));
+   else rotBox(st.x,st.y,st.ang,1.7,1.1,0.34,0,"#2e5e8e");
    if(st.carry||st.loadAnim>0.05){
      rotBox(st.x,st.y,st.ang,1.2,0.85,0.12,0.34,"#5a4a30");
      rotBox(st.x,st.y,st.ang,1.0,0.7,0.45,0.46,"#7a5c2e");
@@ -2667,18 +2690,21 @@ agv:{
      const ca=Math.cos(v.ang),sa=Math.sin(v.ang);
      if(v.type==="amr"){
        sh(v.x-0.5,v.y-0.38,1.0,0.78,0.22);
-       rotBox(v.x,v.y,v.ang,0.96,0.7,0.24,0,"#3a4f66");
+       if(SPR.amr)dq(v.x+v.y+0.26,c2=>sprite(c2,"amr",v.x,v.y,v.ang,0.7));
+       else rotBox(v.x,v.y,v.ang,0.96,0.7,0.24,0,"#3a4f66");
        if(v.carry||v.lift>0.05)rotBox(v.x,v.y,v.ang,0.76,0.55,0.4,0.24+v.lift*0.06,"#46627a");
        dq(v.x+v.y+0.9,c2=>lamp(c2,P(v.x+ca*0.36,v.y+sa*0.36,0.34),2.2,"#b9a3ff",(t*2.4%1)<0.6));
        tag3(v.x,v.y,0.95,v.id,v.name,"#b9a3ff");
      }else{
        sh(v.x-0.6,v.y-0.45,1.3,0.95,0.24);
-       rotBox(v.x,v.y,v.ang,1.05,0.8,0.5,0,"#c98a16");
-       rotBox(v.x-ca*0.28,v.y-sa*0.28,v.ang,0.34,0.56,0.42,0.5,"#8a5e0e");
-       /* 마스트(전방) + 포크 승강 */
        const mx=v.x+ca*0.62,my=v.y+sa*0.62,px2=-sa,py2=ca;
-       rotBox(mx+px2*0.28,my+py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
-       rotBox(mx-px2*0.28,my-py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
+       if(SPR.fork)dq(v.x+v.y+0.4,c2=>sprite(c2,"fork",v.x,v.y,v.ang,1.05));
+       else{
+         rotBox(v.x,v.y,v.ang,1.05,0.8,0.5,0,"#c98a16");
+         rotBox(v.x-ca*0.28,v.y-sa*0.28,v.ang,0.34,0.56,0.42,0.5,"#8a5e0e");
+         rotBox(mx+px2*0.28,my+py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
+         rotBox(mx-px2*0.28,my-py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
+       }
        const fz=0.1+v.lift*0.85;
        rotBox(mx+ca*0.3+px2*0.24,my+sa*0.3+py2*0.24,v.ang,0.55,0.09,0.05,fz,"#9aa7b5");
        rotBox(mx+ca*0.3-px2*0.24,my+sa*0.3-py2*0.24,v.ang,0.55,0.09,0.05,fz,"#9aa7b5");
@@ -3208,6 +3234,16 @@ cluster:{
      });
      tag3(px,py,1.55,"PM-"+(i+1),i===st.pm?"공정 챔버(활성)":"공정 챔버",on?"#b9a3ff":"#6f7a8a",i===st.pm?1:2);
    });
+   /* 게이트밸브: 암이 향한 모듈만 개방(one-hot 인터록 시각화) */
+   const gates=[["LL",ANG_LL]].concat(ANG_PM.map((a,i)=>["PM"+(i+1),a]));
+   for(const[gn,ga]of gates){
+     let dA=st.armA-ga;
+     while(dA>Math.PI)dA-=2*Math.PI;while(dA<-Math.PI)dA+=2*Math.PI;
+     const open=Math.abs(dA)<0.18&&st.ext>0.08;
+     const gx=HUB[0]+Math.cos(ga)*1.42, gy=HUB[1]+Math.sin(ga)*1.16;
+     box3(gx-0.12,gy-0.1,0.55,0.24,0.2,open?0.1:0.46,open?"#3f8d5c":"#566472");
+     if(open)dq(gx+gy+1.2,c2=>lamp(c2,P(gx,gy,1.1),1.8,"#2f9d5c",true));
+   }
    /* 진공 로봇 암(허브→신축) + 웨이퍼 */
    dq(HUB[0]+HUB[1]+1.9,c2=>{
      const L2=0.5+st.ext*1.5;

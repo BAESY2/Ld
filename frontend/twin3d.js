@@ -109,6 +109,75 @@ function pfAGV(){
   g.add(pal);
   return {group:g,beacon,pallet:pal};
 }
+function pfAMR(){
+  const g=new (T()).Group();
+  const body=box(0.96,0.24,0.7,mat(0x3a4f66,{metalness:0.35,roughness:0.45}));
+  body.position.y=0.12;g.add(body);
+  const band=box(0.98,0.05,0.72,mat(0x58e0ff,{emissive:0x58e0ff,emissiveIntensity:0.6}));
+  band.position.y=0.1;g.add(band);
+  for(let i=0;i<4;i++){
+    const rr=box(0.16,0.03,0.6,mat(0x222a34,{metalness:0.6,roughness:0.3}));
+    rr.position.set(-0.33+i*0.22,0.255,0);g.add(rr);
+  }
+  const lidar=cyl(0.055,0.09,mat(0x1a212b));lidar.position.set(0.34,0.29,-0.2);g.add(lidar);
+  return {group:g};
+}
+function pfFork(){
+  const TT=T();
+  const g=new TT.Group();
+  const body=box(1.05,0.5,0.8,mat(0xc98a16,{metalness:0.25,roughness:0.5}));
+  body.position.y=0.25;g.add(body);
+  const cab=box(0.34,0.42,0.56,mat(0x8a5e0e,{roughness:0.6}));
+  cab.position.set(-0.28,0.71,0);g.add(cab);
+  const guard=box(0.36,0.04,0.6,mat(0x6e4a0c));guard.position.set(-0.28,0.94,0);g.add(guard);
+  for(const sx of[-0.34,0.34])for(const sz of[-0.32,0.32]){
+    const wh=cyl(0.14,0.1,mat(0x15191f,{roughness:0.8}));
+    wh.rotation.x=Math.PI/2;wh.position.set(sx,0.14,sz);g.add(wh);
+  }
+  for(const sz of[-0.28,0.28]){
+    const mast=box(0.08,1.55,0.08,mat(0x3a4654,{metalness:0.55,roughness:0.4}));
+    mast.position.set(0.62,0.78,sz);g.add(mast);
+  }
+  const cross=box(0.08,0.08,0.62,mat(0x3a4654));cross.position.set(0.62,1.45,0);g.add(cross);
+  return {group:g};
+}
+/* ── 스프라이트 베이크: 프리팹을 N방위 디메트릭 오프스크린 렌더 → 2D 캔버스용 ── */
+const _BAKE_KINDS={agv:()=>pfAGV().group,amr:()=>pfAMR().group,fork:()=>pfFork().group,
+  robot:()=>pfRobot().group};
+function bakeSprites(kind,n,px){
+  const TT=T();
+  const mk=_BAKE_KINDS[kind];
+  if(!mk)return null;
+  px=px||220;n=n||24;
+  const r=new TT.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+  r.setSize(px,px);r.setPixelRatio(1);
+  if(TT.ACESFilmicToneMapping!==undefined){r.toneMapping=TT.ACESFilmicToneMapping;r.toneMappingExposure=1.25;}
+  if(TT.SRGBColorSpace!==undefined)r.outputColorSpace=TT.SRGBColorSpace;
+  const sc=new TT.Scene();
+  const envTex=makeEnvMap(r);if(envTex)sc.environment=envTex;
+  sc.add(new TT.AmbientLight(0x8899bb,0.5));
+  sc.add(new TT.HemisphereLight(0xbdd0e8,0x4a5158,0.6));
+  const sun=new TT.DirectionalLight(0xfff2dd,1.4);
+  sun.position.set(4,7,3);sc.add(sun);
+  const grp=mk();sc.add(grp);
+  /* 디메트릭(2:1 근사): 방위 45°·고도 30° 직교 카메라 */
+  const EXT=1.55;
+  const cam=new TT.OrthographicCamera(-EXT,EXT,EXT,-EXT,0.1,40);
+  const el=Math.atan(0.577);
+  cam.position.set(Math.cos(el)*Math.cos(-Math.PI/4)*10,Math.sin(el)*10,
+    Math.cos(el)*Math.sin(-Math.PI/4)*10);
+  cam.lookAt(0,0.35,0);
+  const frames=[];
+  for(let k=0;k<n;k++){
+    grp.rotation.y=-(k/n)*Math.PI*2;
+    r.render(sc,cam);
+    const c=document.createElement("canvas");c.width=px;c.height=px;
+    c.getContext("2d").drawImage(r.domElement,0,0);
+    frames.push(c);
+  }
+  r.dispose();
+  return {frames,n,px,ext:EXT};
+}
 function pfRobot(){
   const TT=T();
   const g=new TT.Group();
@@ -828,6 +897,7 @@ const Twin3D={
   const W=container.clientWidth,H=container.clientHeight;
   this._r.setSize(W,H);this._cam.aspect=W/H;this._cam.updateProjectionMatrix();
  },
+ bake(kind,n,px){return bakeSprites(kind,n,px);},
  destroy(){
   if(this._r){this._r.dispose();
     if(this._r.domElement.parentNode)this._r.domElement.parentNode.removeChild(this._r.domElement);}
