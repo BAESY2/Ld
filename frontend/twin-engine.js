@@ -4403,6 +4403,11 @@ ids.sort((a,b)=>{
   const ia=BIG_FIRST.indexOf(a),ib=BIG_FIRST.indexOf(b);
   return (ia<0?99:ia)-(ib<0?99:ib);
 });
+/* 기본 프로젝트 = 대형 공정 6 라인만 — 소형 데모 라인은 카탈로그(라인 추가)·공장
+   템플릿으로 언제든 투입(45종). '작은 공정 잡동사니' 제거 요청 반영 */
+const FLAGSHIP=new Set(["cluster_tool","transfer_line","oht_transport",
+  "battery_formation","motion_home_move","paint_booth"]);
+for(let i=ids.length-1;i>=0;i--)if(!FLAGSHIP.has(ids[i]))ids.splice(i,1);
 USER_LINES=USER_LINES.filter(u=>registerUserLine(u));
 USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});

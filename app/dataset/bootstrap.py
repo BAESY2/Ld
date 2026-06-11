@@ -26,7 +26,7 @@ from pathlib import Path
 
 from app.boolexpr import And, Cmp, Node, Not, Or, Var, parse
 from app.memory_map import detect_double_coils
-from app.models import IODirection, StateMachineSpec
+from app.models import DataType, IODirection, StateMachineSpec
 from app.simulator import (
     MAX_SIM_SAMPLES,
     SimResult,
@@ -260,7 +260,9 @@ def _max_counter_preset(spec: StateMachineSpec) -> int:
     return max((c.preset for c in spec.counters), default=0)
 
 
-def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str, bool]]], int]:
+def _exercise_stimulus(
+    spec: StateMachineSpec,
+) -> tuple[list[tuple[int, dict[str, bool | int]]], int]:
     """기계를 실제로 '구동'하는 결정론적 다단계 입력 자극과 그에 맞는 sim 길이를 만든다.
 
     문제: 모든 입력을 동시에 ON 으로 두면 STOP/REV/HI 같은 차단 입력까지 켜져
@@ -270,32 +272,64 @@ def _exercise_stimulus(spec: StateMachineSpec) -> tuple[list[tuple[int, dict[str
     카운터(CTU/CTD)와 엣지 구동 로직까지 실제로 발화시킨다(전부 결정론 유지).
     """
     inputs = _input_symbols(spec)
+    int_syms = sorted(
+        p.symbol for p in spec.io_points
+        if p.direction == IODirection.INPUT and p.data_type != DataType.BOOL
+    )
+    bool_syms = [s for s in inputs if s not in set(int_syms)]
+    # 아날로그(INT) 입력의 임계값 후보: 명세 조건문에서 'VAR op N' 을 수집해
+    # N-1/N/N+1 을 결정론적으로 스윕한다 — 비교 접점 양측 밴드를 모두 발화시켜
+    # 죽은 출력(거짓 커버리지)을 막는다(불리언만 토글하면 INT 비교가 영원히 거짓).
+    cmp_re = re.compile(r"([A-Za-z_]\w*)\s*(?:<=|>=|<>|<|>|=)\s*(\d+)")
+    cond_txt = " ".join(
+        [tr.condition for tr in spec.transitions]
+        + [tm.enable_condition for tm in spec.timers]
+    )
+    int_cands: dict[str, list[int]] = {s: [0] for s in int_syms}
+    for m in cmp_re.finditer(cond_txt):
+        var, val = m.group(1), int(m.group(2))
+        if var in int_cands:
+            for c in (max(0, val - 1), val, val + 1):
+                if c not in int_cands[var]:
+                    int_cands[var].append(c)
     # 각 단계는 타이머가 발화할 만큼 길어야 한다(+여유 1스캔). 단, N단계 시퀀서는
     # 타이머가 직렬 핸드오프되므로 한 입력을 '모든 프리셋의 합' 만큼 유지해야 마지막
     # 단계까지 구동된다 → 합(sum)을 써야 마지막 단계 출력의 죽음(거짓 커버리지)을 막는다.
     phase_ms = max(_SIM_DURATION_MS, _sum_preset_ms(spec) + 3 * _SIM_STEP_MS)
-    phases: list[dict[str, bool]] = [{}]  # P0: 전부 OFF(초기화)
-    for sym in inputs:  # 각 입력 단독 ON
-        phases.append({s: (s == sym) for s in inputs})
-    for i in range(len(inputs) - 1):  # 인접 입력 쌍 ON(전이 트리거 다양화)
-        pair = {inputs[i], inputs[i + 1]}
-        phases.append({s: (s in pair) for s in inputs})
-    for sym in inputs:  # 단독 OFF(나머지 전부 ON) — 다중 허가 출력(예: 가드+E-stop+기동)
-        phases.append({s: (s != sym) for s in inputs})  # 을 깨우고 정지 입력만 끄는 조합
-    phases.append({s: True for s in inputs})  # 마지막: 전부 ON(차단/정지 경계)
-    stim: list[tuple[int, dict[str, bool]]] = []
+    phases: list[dict[str, bool | int]] = [{}]  # P0: 전부 OFF(초기화)
+    for sym in bool_syms:  # 각 불리언 입력 단독 ON
+        phases.append({s: (s == sym) for s in bool_syms})
+    for i in range(len(bool_syms) - 1):  # 인접 입력 쌍 ON(전이 트리거 다양화)
+        pair = {bool_syms[i], bool_syms[i + 1]}
+        phases.append({s: (s in pair) for s in bool_syms})
+    for sym in bool_syms:  # 단독 OFF(나머지 전부 ON) — 다중 허가 출력
+        phases.append({s: (s != sym) for s in bool_syms})
+    # INT 임계 스윕: 값 하나씩(불리언 OFF) + '전 불리언 ON' 동반(허가+임계 조합)
+    for sym in int_syms:
+        for c in int_cands[sym]:
+            phases.append({sym: c})
+            ph_all: dict[str, bool | int] = {s: True for s in bool_syms}
+            ph_all[sym] = c
+            phases.append(ph_all)
+    phases.append({s: True for s in bool_syms})  # 마지막: 전부 ON(차단/정지 경계)
+    stim: list[tuple[int, dict[str, bool | int]]] = []
     for k, ph in enumerate(phases):
-        stim.append((k * phase_ms, {s: ph.get(s, False) for s in inputs}))
+        frame: dict[str, bool | int] = {s: bool(ph.get(s, False)) for s in bool_syms}
+        for s in int_syms:
+            v = ph.get(s, 0)
+            frame[s] = int(v) if not isinstance(v, bool) else 0
+        stim.append((k * phase_ms, frame))
     total = len(phases) * phase_ms
     # 엣지 펄스 열: 입력을 하나씩 ON→OFF 로 PV+여유 회 토글해 상승엣지를 만든다.
     # (카운터는 상승엣지마다 +1 이므로 '유지 ON' 만으로는 1회만 세고 발화 못 함)
     pulses = max(4, _max_counter_preset(spec) + 2)
     t = total
-    for sym in inputs:
+    zero_ints: dict[str, bool | int] = {s: 0 for s in int_syms}
+    for sym in bool_syms:
         for _ in range(pulses):
-            stim.append((t, {s: (s == sym) for s in inputs}))
+            stim.append((t, {**{s: (s == sym) for s in bool_syms}, **zero_ints}))
             t += _SIM_STEP_MS
-            stim.append((t, {s: False for s in inputs}))
+            stim.append((t, {**{s: False for s in bool_syms}, **zero_ints}))
             t += _SIM_STEP_MS
     return stim, t
 
