@@ -686,6 +686,31 @@ def _weld_cell(a: Answers) -> StateMachineSpec:
     return spec
 
 
+def _transfer_line(a: Answers) -> StateMachineSpec:
+    """차체 트랜스퍼 라인: 클램프→A조 용접→B조 용접→트랜스퍼 이송(공물 인터록).
+
+    자동차 보디샵형 다중 스테이션 라인의 1사이클. 클램프/용접A/용접B/트랜스퍼는
+    one-hot 시퀀스(_build_sequencer 규율)로 상호배타가 구조적으로 보장되고,
+    차체 재석(BODY_PRESENT) 없이는 사이클 진입이 불가하다(허공 용접 차단 —
+    _weld_cell 과 동일 인터록 규율).
+    """
+    start, stop = _val(a, "start", "LINE_START"), _val(a, "stop", "LINE_STOP")
+    body = _val(a, "body", "BODY_PRESENT")
+    steps = [
+        (_val(a, "clamp", "CLAMP"), _pint(a, "t_clamp", 2, lo=1)),
+        (_val(a, "weld_a", "WELD_A"), _pint(a, "t_weld_a", 4, lo=1)),
+        (_val(a, "weld_b", "WELD_B"), _pint(a, "t_weld_b", 4, lo=1)),
+        (_val(a, "transfer", "TRANSFER"), _pint(a, "t_transfer", 3, lo=1)),
+    ]
+    spec = _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="차체 트랜스퍼 라인(클램프→용접A→용접B→이송)")
+    spec.io_points.insert(1, _io(body, _IN, "차체 재석(스테이션 1)"))
+    for tr in spec.transitions:
+        if tr.from_state == "IDLE" and tr.to_state == "S0":
+            tr.condition = f"{body} AND {tr.condition}"
+    return spec
+
+
 def _conveyor_divert(a: Answers) -> StateMachineSpec:
     """컨베이어 분기/병합: 한 라인을 좌/우(A/B)로 분기. 두 게이트 동시 작동 금지.
 
@@ -1354,6 +1379,23 @@ RECIPES: dict[str, Recipe] = {
             _plating_line,
             safety_note="산·알칼리 약품조, 미스트·환기, 호이스트 협착은 하드와이어 "
             "안전회로(레벨/누액 감지, 환기 인터락, 호이스트 리미트)로 별도 구성하세요.",
+        ),
+        Recipe(
+            "transfer_line", "차체 트랜스퍼 라인",
+            "클램프→A조 용접→B조 용접→트랜스퍼 이송(차체 인터록·다중 스테이션 1사이클).",
+            "자동차",
+            (_f("start", "라인 기동", "LINE_START"), _f("stop", "라인 정지", "LINE_STOP"),
+             _f("body", "차체 재석 센서", "BODY_PRESENT"),
+             _f("clamp", "클램프", "CLAMP"), _f("t_clamp", "클램프 시간(초)", "2", "time_sec"),
+             _f("weld_a", "A조 용접", "WELD_A"),
+             _f("t_weld_a", "A조 용접 시간(초)", "4", "time_sec"),
+             _f("weld_b", "B조 용접", "WELD_B"),
+             _f("t_weld_b", "B조 용접 시간(초)", "4", "time_sec"),
+             _f("transfer", "트랜스퍼 이송", "TRANSFER"),
+             _f("t_transfer", "이송 시간(초)", "3", "time_sec")),
+            _transfer_line,
+            safety_note="트랜스퍼 바 이송 구간은 협착·끼임 위험이 높습니다. 펜스·라이트커튼 "
+            "등 하드와이어 안전회로(ISO 13849)와 로봇 셀 안전(ISO 10218)을 별도 구성하세요.",
         ),
         Recipe(
             "weld_cell", "용접 셀 사이클",
