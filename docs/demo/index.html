@@ -140,6 +140,16 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 /* ---- live demo ---- */
 .live{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-bottom:14px}
 @media(max-width:860px){.live{grid-template-columns:1fr}}
+.box{position:relative}
+#devpanel{display:none;position:absolute;z-index:5;width:236px;background:rgba(10,15,22,.95);
+ border:1px solid #2b3743;border-radius:10px;padding:11px 13px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+#devpanel .dvt{font:700 13px ui-monospace,monospace;color:#dce4f0;margin-bottom:7px}
+#devpanel .dvr{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--mut);
+ padding:3.5px 0;border-bottom:1px dashed rgba(38,48,61,.5)}
+#devpanel .dvr b{color:#cdd6e3;font-weight:600;text-align:right}
+#devpanel .xbtn{margin-top:9px;width:100%}
+#scene{cursor:grab;touch-action:none}
+#scene:active{cursor:grabbing}
 #scene{width:100%;height:440px;display:block;border-radius:10px;
  background:radial-gradient(120% 90% at 50% 0,#0e1622 0,#070b11 70%);border:1px solid #1b2530}
 .ctrl{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;align-items:flex-end}
@@ -301,6 +311,7 @@ table.io td.mut{color:var(--mut)}
    <div class="box">
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
     <canvas id="scene"></canvas>
+    <div id="devpanel"></div>
     <div class="kpis" id="kpis"></div>
     <canvas id="trend" class="trend"></canvas>
     <div class="ctrl" id="ctrl"></div>
@@ -662,7 +673,8 @@ function face(ctx,pts,fill,stroke){
   if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=0.7;ctx.stroke();}
 }
 /* 깊이 정렬 큐 — 모든 입체는 여기로 들어가 뒤→앞 순서로 그려진다 */
-let DQ=[],LB=[],SH=[];
+let DQ=[],LB=[],SH=[],CHIPS=[];
+let cam={z:1,px:0,py:0};
 const dq=(d,f)=>DQ.push({d,f});
 function flushQ(ctx){DQ.sort((a,b)=>a.d-b.d);for(const o of DQ)o.f(ctx);DQ.length=0;}
 const EDGE="rgba(8,12,16,.35)";
@@ -716,6 +728,7 @@ function drawLabels(ctx){
     while(guard++<10&&placed.some(r=>Math.abs(p[0]-r.cx)<(w+r.w)/2+5&&by<r.by+r.h+3&&by+h>r.by-3))by=Math.min(by,placed.reduce((m,r)=>Math.abs(p[0]-r.cx)<(w+r.w)/2+5?Math.min(m,r.by):m,by))-h-5;
     placed.push({cx:p[0],w,by,h});
     const bx=p[0]-w/2;
+    CHIPS.push({bx,by,w,h,ax:p[0],ay:p[1],tg:l.tg,sub:l.sub});
     seg(ctx,[p[0],p[1]],[p[0],by+h],"rgba(160,180,200,.35)",1);
     ctx.beginPath();ctx.roundRect(bx,by,w,h,4);
     ctx.fillStyle="rgba(13,18,25,.82)";ctx.fill();
@@ -1640,6 +1653,10 @@ function drawScene(t){
   if(cvs.clientWidth!==view.W||cvs.clientHeight!==view.H)resize();
   const ctx=g2;
   ctx.clearRect(0,0,view.W,view.H);
+  CHIPS.length=0;
+  ctx.save();
+  ctx.translate(cam.px,cam.py);
+  ctx.scale(cam.z,cam.z);
   floorGrid(ctx);
   const val=eff;
   cur.m.buttons.forEach((b,i)=>wirePath(ctx,[[12.66,5.38+i*0.09],[13.5,5.72+i*0.07],[14.72,5.32+i*0.05]],val(b.sym),t,"#58a6ff"));
@@ -1650,8 +1667,9 @@ function drawScene(t){
   drawShadows(ctx);
   flushQ(ctx);
   drawLabels(ctx);
+  ctx.restore();
   txt(ctx,[14,20],cur.scene.label,"#aebdcd",12.5,"left",true);
-  txt(ctx,[14,37],"1 유닛 = 1 m 실측 비율 · 파랑 배선=입력 · 초록 배선=출력 (흐르면 ON)","#5d6c7c",11,"left");
+  txt(ctx,[14,37],"드래그=이동 · 휠=줌 · 더블클릭=초기화 · 기기 라벨 클릭=상세 — 1유닛=1m 실측","#5d6c7c",11,"left");
   const K=cur.kpi,cfg=KPI[cur.id]||{unit:"개"};
   const hud=[
    ["생산",(cur.scene.prod?cur.scene.prod(cur.sst):0)+" "+cfg.unit],
@@ -1742,6 +1760,7 @@ function updateDOM(r,dt,t){
     if(cur.trend.length>120)cur.trend.shift();
     drawTrend();
   }
+  if(devOpen)renderDev();
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
    ||'<div class="alm"><i></i><span class="t">—</span><span>이벤트 없음</span></div>';
@@ -1753,6 +1772,68 @@ function updateDOM(r,dt,t){
     document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr);
   }
 }
+/* ---- 카메라(줌·팬) + 기기 클릭 상세 ---- */
+let pdrag=null,devOpen=null;
+cvs.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const nz=Math.min(3,Math.max(0.55,cam.z*Math.exp(-e.deltaY*0.0012)));
+  const kk=nz/cam.z;
+  cam.px=mx-(mx-cam.px)*kk; cam.py=my-(my-cam.py)*kk; cam.z=nz;
+},{passive:false});
+cvs.addEventListener("pointerdown",e=>{
+  pdrag={x:e.clientX,y:e.clientY,px:cam.px,py:cam.py,moved:false};
+  cvs.setPointerCapture(e.pointerId);
+});
+cvs.addEventListener("pointermove",e=>{
+  if(!pdrag)return;
+  const dx=e.clientX-pdrag.x,dy=e.clientY-pdrag.y;
+  if(Math.abs(dx)+Math.abs(dy)>5)pdrag.moved=true;
+  cam.px=pdrag.px+dx; cam.py=pdrag.py+dy;
+});
+cvs.addEventListener("pointerup",e=>{
+  if(pdrag&&!pdrag.moved)pickDevice(e);
+  pdrag=null;
+});
+cvs.addEventListener("dblclick",()=>{cam={z:1,px:0,py:0};hideDev();});
+function pickDevice(e){
+  const r=cvs.getBoundingClientRect();
+  const mx=(e.clientX-r.left-cam.px)/cam.z, my=(e.clientY-r.top-cam.py)/cam.z;
+  const hit=CHIPS.find(c=>(mx>=c.bx-3&&mx<=c.bx+c.w+3&&my>=c.by-3&&my<=c.by+c.h+3)
+    ||Math.hypot(mx-c.ax,my-c.ay)<14);
+  if(hit){devOpen=hit.tg;
+    const el=document.getElementById("devpanel");
+    el.style.display="block";
+    el.style.left=Math.max(6,Math.min(e.clientX-r.left+14,cvs.clientWidth-248))+"px";
+    el.style.top=Math.max(6,Math.min(e.clientY-r.top+6,cvs.clientHeight-160))+"px";
+    renderDev();
+  } else hideDev();
+}
+function renderDev(){
+  if(!devOpen)return;
+  const el=document.getElementById("devpanel");
+  const ent=Object.entries(cur.m.tags||{}).find(([,i2])=>i2.tag===devOpen);
+  const chip=CHIPS.find(c=>c.tg===devOpen);
+  let h=`<div class="dvt">${devOpen}</div>`;
+  if(ent){
+    const[sym,info]=ent, stt=cur.stats[sym], on=eff(sym);
+    const tripped=(cur.m.faults||[]).some(f=>f.type==="trip"&&f.sym===sym&&cur.faults[f.id]);
+    const t2=performance.now()/1000;
+    const amp=on?(info.rated*(0.93+0.05*Math.sin(t2*6))).toFixed(1):"0.0";
+    h+=`<div class="dvr"><span>설비</span><b>${info.name}</b></div>`+
+     `<div class="dvr"><span>신호 · 주소</span><b>${sym} · ${cur.m.addr[sym]||"—"}</b></div>`+
+     `<div class="dvr"><span>상태</span><b style="color:${tripped?"#f85149":on?"#3fb950":"#8b98a8"}">${tripped?"TRIP — 복구 필요":on?"RUN":"STOP"}</b></div>`+
+     `<div class="dvr"><span>전류 / 정격</span><b>${amp} A / ${info.rated} A</b></div>`+
+     `<div class="dvr"><span>가동 · 기동</span><b>${stt.rt.toFixed(0)}s · ${stt.starts}회</b></div>`;
+  }else{
+    h+=`<div class="dvr"><span>유형</span><b>${(chip&&chip.sub)||"계측·구조물"}</b></div>`+
+     `<div class="dvr"><span>제어</span><b>PLC 비구동(수동/센서)</b></div>`;
+  }
+  h+=`<button class="xbtn" onclick="hideDev()">닫기</button>`;
+  el.innerHTML=h;
+}
+function hideDev(){devOpen=null;const el=document.getElementById("devpanel");if(el)el.style.display="none";}
+
 function simLine(L,dt,t){
   const prev=cur; cur=L;
   autopilot(L,dt);
@@ -1856,6 +1937,7 @@ function makeLine(id){
 }
 function show(id){
   cur=LINES[id];
+  hideDev();
   const d=cur.d,m=cur.m;
   const ctrl=document.getElementById("ctrl");ctrl.innerHTML="";
   m.buttons.forEach(b=>{

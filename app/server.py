@@ -27,16 +27,18 @@ import zipfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
+from starlette.websockets import WebSocketDisconnect
 
 from app import __version__
 from app.comms.protocols import WriteRejected
 from app.comms.safety_kernel import SafetyKernel
 from app.config import settings
+from app.cosim import CosimSession, handle_message
 from app.emit import emit as emit_ladder
 from app.error_codes import DB as ERROR_DB
 from app.error_codes import ErrorCode, Vendor
@@ -488,6 +490,30 @@ class SimulateResponse(BaseModel):
     samples: list[dict[str, object]] = Field(default_factory=list)
     error: str | None = None
     safety_notice: str = SAFETY_NOTICE
+
+
+@app.websocket("/api/cosim")
+async def cosim_ws(ws: WebSocket) -> None:
+    """실시간 코시뮬레이션 — 가상 PLC 스텝 구동(WebSocket, 결정론·키 불필요).
+
+    프로토콜은 :mod:`app.cosim` 모듈 독스트링 참조.
+    """
+    await ws.accept()
+    session: CosimSession | None = None
+    try:
+        while True:
+            try:
+                msg = await ws.receive_json()
+            except ValueError:
+                await ws.send_json({"type": "error", "error": "JSON 파싱 실패"})
+                continue
+            if not isinstance(msg, dict):
+                await ws.send_json({"type": "error", "error": "메시지는 JSON 객체여야 합니다."})
+                continue
+            session, reply = handle_message(session, msg)
+            await ws.send_json(reply)
+    except WebSocketDisconnect:
+        return
 
 
 @app.post("/api/simulate", response_model=SimulateResponse)
