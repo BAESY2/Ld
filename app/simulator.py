@@ -9,9 +9,10 @@ PLC 스캔 의미론(입력 읽기 → 로직 연산 → 출력 쓰기)으로 �
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from app.boolexpr import And, Const, Node, Not, Or, Var, parse
+from app.boolexpr import And, Cmp, Const, Node, Not, Or, Var, parse
 
 _ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _FB_CALL_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*\((.*)\)\s*;\s*$")
@@ -31,10 +32,26 @@ def _parse_time_ms(text: str) -> int:
     return s * 1000 + ms
 
 
-def _eval(node: Node, table: dict[str, bool]) -> bool:
+def _eval(node: Node, table: Mapping[str, bool | int]) -> bool:
     match node:
         case Var(name):
-            return table.get(name, False)
+            return bool(table.get(name, False))
+        case Cmp(var, op, value):
+            left = int(table.get(var, 0))
+            match op:
+                case "<":
+                    return left < value
+                case ">":
+                    return left > value
+                case "<=":
+                    return left <= value
+                case ">=":
+                    return left >= value
+                case "=":
+                    return left == value
+                case "<>":
+                    return left != value
+            raise ValueError(f"알 수 없는 비교 연산자: {op!r}")
         case Const(value):
             return value
         case Not(operand):
@@ -56,7 +73,7 @@ class _Timer:
     _prev_in: bool = False
     _running: bool = False  # TP: 펄스 진행 중 여부
 
-    def scan(self, table: dict[str, bool], dt: int) -> None:
+    def scan(self, table: Mapping[str, bool | int], dt: int) -> None:
         inp = _eval(self.enable_expr, table)
         if self.kind == "TOF":
             self._scan_tof(inp, dt)
@@ -111,7 +128,7 @@ class _Counter:
     q: bool = False
     _prev: bool = False
 
-    def scan(self, table: dict[str, bool]) -> None:
+    def scan(self, table: Mapping[str, bool | int]) -> None:
         if _eval(self.reset_expr, table):
             self.cnt = 0
         else:
@@ -125,7 +142,7 @@ class _Counter:
 @dataclass
 class SimSample:
     t_ms: int
-    inputs: dict[str, bool]
+    inputs: dict[str, bool | int]
     outputs: dict[str, bool]
 
 
@@ -203,6 +220,8 @@ def _node_vars(node: Node) -> set[str]:
     match node:
         case Var(name):
             return {name}
+        case Cmp(var, _, _):
+            return {var}
         case Not(operand):
             return _node_vars(operand)
         case And(operands) | Or(operands):
@@ -220,7 +239,7 @@ MAX_SIM_SAMPLES = 20_000
 
 def simulate(
     st_code: str,
-    inputs_timeline: list[tuple[int, dict[str, bool]]],
+    inputs_timeline: list[tuple[int, dict[str, bool | int]]],
     *,
     duration_ms: int,
     step_ms: int = 100,
@@ -239,7 +258,7 @@ def simulate(
             f"(duration_ms/step_ms 비율을 줄이세요)."
         )
     prog = _Program(st_code)
-    table: dict[str, bool] = {}
+    table: dict[str, bool | int] = {}
     driven = prog.driven
     fb_q = {f"{n}.Q" for n in prog.timers} | {f"{n}.Q" for n in prog.counters}
     all_syms = prog.symbols()
@@ -248,7 +267,7 @@ def simulate(
         table[s] = False
 
     timeline = sorted(inputs_timeline, key=lambda x: x[0])
-    cur_inputs: dict[str, bool] = {s: False for s in inputs}
+    cur_inputs: dict[str, bool | int] = {s: False for s in inputs}
     samples: list[SimSample] = []
     ti = 0
     t = 0
@@ -272,7 +291,7 @@ def simulate(
         samples.append(SimSample(
             t_ms=t,
             inputs={s: table.get(s, False) for s in inputs},
-            outputs={s: table.get(s, False) for s in driven},
+            outputs={s: bool(table.get(s, False)) for s in driven},
         ))
         t += step_ms
 
