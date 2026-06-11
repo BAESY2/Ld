@@ -151,6 +151,12 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 .pb.down{transform:translateY(4px);box-shadow:inset 0 5px 12px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.5)}
 .pbw small{color:var(--mut);font-size:11px;font-family:ui-monospace,monospace}
 .ctrl .hint{color:var(--mut);font-size:12.5px;flex:1;min-width:160px;align-self:center}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
+@media(max-width:860px){.kpis{grid-template-columns:repeat(3,1fr)}}
+.kpi{background:rgba(10,15,22,.7);border:1px solid #1d2733;border-radius:9px;padding:7px 9px;min-width:0}
+.kpi b{display:block;font:700 15px/1.2 ui-monospace,monospace;color:#7ee787;white-space:nowrap}
+.kpi b.blue{color:#8ec9ff}.kpi b.amber{color:#f0c26b}
+.kpi span{display:block;font-size:10.5px;color:var(--mut);margin-top:2px;white-space:nowrap}
 .scanline{font:12px/1.7 ui-monospace,monospace;color:var(--mut);margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap}
 .scanline b{color:#7ee787;font-weight:600}
 table.io{width:100%;border-collapse:collapse;font:12px ui-monospace,monospace}
@@ -254,6 +260,7 @@ table.io td.mut{color:var(--mut)}
    <div class="box">
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
     <canvas id="scene"></canvas>
+    <div class="kpis" id="kpis"></div>
     <div class="ctrl" id="ctrl"></div>
    </div>
    <div class="box">
@@ -383,6 +390,17 @@ const META={
   tags:{CONV_DOWN:{tag:"CV-603",name:"하류 벨트",rated:3.6},CONV_MID:{tag:"CV-602",name:"중간 벨트",rated:3.6},CONV_UP:{tag:"CV-601",name:"상류 벨트",rated:3.6}},
   verify:["하류 우선 기동 — 3초 간격 순차(자재 적체 방지)","STOP 지배성 — 전 벨트 정지 보장",
           "이중 코일 0건 · TON 4개 도달성","OpenPLC 런타임 차분검증 bit-for-bit 일치"]}
+};
+
+/* 생산 파라미터 — 제품 단위·개당 중량(kg)·목표 택타임(s) */
+const KPI={
+ motor_start_stop:{unit:"박스",w:12.5,tt:1.7},
+ fwd_rev:{unit:"파레트",w:450,tt:14},
+ car_wash:{unit:"대",w:null,tt:9},
+ count_eject:{unit:"부품",w:0.8,tt:1.2},
+ weld_cell:{unit:"용접품",w:6.2,tt:13},
+ batch_fill_mix_drain:{unit:"배치",w:1800,tt:25},
+ cascade_conveyor:{unit:"박스",w:8.0,tt:2.1}
 };
 
 /* ============================================================
@@ -1172,6 +1190,15 @@ cascade:{
  }}
 };
 
+/* 씬별 KPI 액세서: 생산량·재공(WIP)·라인속도 */
+SCENES.conveyor.prod=st=>st.count; SCENES.conveyor.wip=st=>st.parts.length; SCENES.conveyor.speed=st=>st.spd;
+SCENES.shuttle.prod=st=>st.count;  SCENES.shuttle.wip=st=>st.carry?1:0;     SCENES.shuttle.speed=st=>Math.abs(st.spd);
+SCENES.carwash.prod=st=>st.count;  SCENES.carwash.wip=st=>(st.carX>-1&&st.carX<19)?1:0;
+SCENES.counter.prod=st=>st.good;   SCENES.counter.wip=st=>st.parts.length;  SCENES.counter.speed=()=>1.1;
+SCENES.weld.prod=st=>st.count;     SCENES.weld.wip=st=>(st.partOn||st.out!==undefined)?1:0;
+SCENES.batch.prod=st=>st.count;    SCENES.batch.wip=st=>st.level>0.01?1:0;
+SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCENES.cascade.speed=st=>Math.max(...st.spd);
+
 /* ============================================================
    메인 루프 — 센서 → 스캔 → 물리 → 렌더 → DOM(쓰로틀)
    ============================================================ */
@@ -1192,6 +1219,18 @@ function drawScene(t){
   drawLabels(ctx);
   txt(ctx,[14,20],cur.scene.label,"#aebdcd",12.5,"left",true);
   txt(ctx,[14,37],"1 유닛 = 1 m 실측 비율 · 파랑 배선=입력 · 초록 배선=출력 (흐르면 ON)","#5d6c7c",11,"left");
+  const K=cur.kpi,cfg=KPI[cur.id]||{unit:"개"};
+  const hud=[
+   ["생산",(cur.scene.prod?cur.scene.prod(cur.sst):0)+" "+cfg.unit],
+   ["택타임",K.taktAvg?K.taktAvg.toFixed(1)+" s":"측정중"],
+   ["UPH",K.taktAvg?String(Math.round(3600/K.taktAvg)):"—"],
+   ["전력",K.kw.toFixed(1)+" kW"]];
+  let hy=22;
+  for(const[k,v]of hud){
+    txt(ctx,[view.W-118,hy],k,"#5d6c7c",10,"left");
+    txt(ctx,[view.W-14,hy],v,"#9fe0b0",11.5,"right",true);
+    hy+=16;
+  }
 }
 function updateDOM(r,dt,t){
   const d=cur.d;
@@ -1225,6 +1264,36 @@ function updateDOM(r,dt,t){
   }
   document.getElementById("opstable").innerHTML=
     `<tr><td class="mut">기기</td><td class="mut">설비명</td><td class="mut">상태</td><td class="mut">가동</td><td class="mut">기동</td><td class="mut">전류</td><td class="mut">부하</td></tr>`+rows.join("");
+  const K=cur.kpi, cfg=KPI[cur.id]||{unit:"개",w:null};
+  const prodN=cur.scene.prod?cur.scene.prod(cur.sst):0;
+  const nowMs=performance.now();
+  if(prodN>K.lastN){
+    if(K.lastDoneT!==null){
+      const tk=(nowMs-K.lastDoneT)/1000/(prodN-K.lastN);
+      K.takt=tk; K.taktAvg=K.taktAvg===null?tk:K.taktAvg*0.7+tk*0.3;
+    }
+    K.lastDoneT=nowMs; K.lastN=prodN;
+  }
+  const elapsed=Math.max(0.001,(nowMs-K.t0)/1000);
+  const mainSym=Object.keys(cur.m.tags||{})[0];
+  const util=mainSym&&cur.stats[mainSym]?Math.min(100,cur.stats[mainSym].rt/elapsed*100):0;
+  const wip=cur.scene.wip?cur.scene.wip(cur.sst):0;
+  const spd=cur.scene.speed?cur.scene.speed(cur.sst):null;
+  const uph=K.taktAvg?3600/K.taktAvg:0;
+  const fmt=(v,d)=>v===null||isNaN(v)?"—":v.toFixed(d);
+  const cards=[
+   [String(prodN),`생산수량 (${cfg.unit})`,""],
+   [K.taktAvg?fmt(K.taktAvg,1)+"s":"측정중",`택타임 / ${cfg.unit}`+(cfg.tt?` · 목표 ${cfg.tt}s`:""), K.taktAvg&&cfg.tt&&K.taktAvg>cfg.tt*1.25?"amber":""],
+   [uph?String(Math.round(uph)):"—","시간당 생산 UPH",""],
+   [cfg.w!==null?fmt(cfg.w,1)+" kg":"—",`개당 중량 / ${cfg.unit}`,"blue"],
+   [cfg.w!==null?fmt(prodN*cfg.w,0)+" kg":"—","누적 생산 중량","blue"],
+   [String(wip),"재공 WIP (라인 위)",""],
+   [spd!==null?fmt(spd,2)+" m/s":"—","라인 속도","blue"],
+   [fmt(util,0)+"%","주설비 가동률",util<40?"amber":""],
+   [fmt(K.kw,1)+" kW","현재 소비 전력","blue"],
+   [fmt(K.kwh*1000,1)+" Wh","누적 전력량","blue"]];
+  document.getElementById("kpis").innerHTML=cards.map(([v,l,cl])=>
+   `<div class="kpi"><b class="${cl}">${v}</b><span>${l}</span></div>`).join("");
   const key=JSON.stringify(r.en)
     +Object.values(cur.plc.timers).map(tm=>Math.round(tm.acc*10)).join()
     +Object.values(cur.plc.counters).map(cn=>cn.cnt).join();
@@ -1241,6 +1310,10 @@ function loop(now){
   cur.us=cur.us?cur.us*0.9+r.us*0.1:r.us;
   const o={};cur.d.sim.outputs.forEach(s=>{o[s]=cur.plc.val(s);
     const stt=cur.stats[s];if(stt){if(o[s]){stt.rt+=dt;if(!stt.prev)stt.starts++;}stt.prev=o[s];}});
+  let kw=0;
+  for(const[sym,info]of Object.entries(cur.m.tags||{}))
+    if(cur.plc.val(sym))kw+=1.732*380*info.rated*0.85/1000;
+  cur.kpi.kw=kw; cur.kpi.kwh+=kw*dt/3600;
   cur.scene.tick(cur.sst,o,dt);
   drawScene(now/1000);
   if(now-domT>90){domT=now;updateDOM(r,dt,now/1000);}
@@ -1259,7 +1332,8 @@ function fbRow(s,m,kind){
 function show(id){
   const d=DEMO[id],m=META[id];
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.id===id));
-  cur={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{}};
+  cur={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
+    kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0}};
   cur.sst=cur.scene.init();
   d.sim.outputs.forEach(s=>cur.stats[s]={rt:0,starts:0,prev:false});
   const ctrl=document.getElementById("ctrl");ctrl.innerHTML="";
