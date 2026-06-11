@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field, model_validator
 from starlette.websockets import WebSocketDisconnect
 
 from app import __version__
+from app.catalog import check_fit, list_models, suggest
 from app.comms.protocols import WriteRejected
 from app.comms.safety_kernel import SafetyKernel
 from app.config import settings
@@ -465,7 +466,7 @@ _MAX_SIM_CELLS = 200_000  # 응답 셀(샘플×신호) 상한 — 다신호 ST �
 
 class SimulateRequest(BaseModel):
     st_code: str = Field(..., max_length=settings.max_st_chars)
-    inputs_timeline: list[tuple[int, dict[str, bool]]] = Field(
+    inputs_timeline: list[tuple[int, dict[str, bool | int]]] = Field(
         default_factory=list, max_length=10_000
     )
     duration_ms: int = Field(default=5000, ge=0, le=600_000)
@@ -490,6 +491,28 @@ class SimulateResponse(BaseModel):
     samples: list[dict[str, object]] = Field(default_factory=list)
     error: str | None = None
     safety_notice: str = SAFETY_NOTICE
+
+
+@app.get("/api/catalog")
+def catalog(vendor: str | None = None) -> list[dict[str, object]]:
+    """PLC 기종 카탈로그(공개 사양 요약·출처 포함)."""
+    return [m.__dict__ | {"comm": list(m.comm)} for m in list_models(vendor)]
+
+
+@app.get("/api/catalog/fit")
+def catalog_fit(recipe: str, vendor: str | None = None) -> dict[str, object]:
+    """레시피 설계의 기종 적합성 — 위반 목록 + 최소 적합 기종 제안."""
+    try:
+        spec = build_spec(recipe, {})
+    except (KeyError, WizardError):
+        return {"ok": False, "error": f"알 수 없는 레시피: {recipe}"}
+    ladder = transpile_st(synthesize_st(spec), title=spec.title)
+    rows = [
+        {"model": m.model, "vendor": m.vendor, "issues": check_fit(spec, ladder, m)}
+        for m in list_models(vendor)
+    ]
+    best = suggest(spec, ladder, vendor)
+    return {"ok": True, "models": rows, "suggest": best.model if best else None}
 
 
 @app.websocket("/api/cosim")
