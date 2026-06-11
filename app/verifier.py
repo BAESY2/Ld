@@ -459,6 +459,57 @@ def _kinduction_pair(
     )
 
 
+def prove_containment(
+    spec: StateMachineSpec, st_code: str, pairs: list[tuple[str, str]], k: int = 3
+) -> frozenset[tuple[str, str]]:
+    """포함관계 □(A→B) 의 k-귀납 증명 — '상류(A)가 돌면 하류(B)는 반드시 돌고 있다'.
+
+    컨베이어 캐스케이드의 핵심 안전속성(자재 적체/낙하 방지): 어떤 도달 가능한
+    스캔에서도 A=1 ∧ B=0 이 불가능함을 증명한다. 상호배제(¬(A∧B))와 다른 *새 속성
+    클래스*다. positive proof only — 증명된 (A,B) 만 반환하며, 미증명은 조용히
+    제외한다(거짓 증명 금지; 검출은 시뮬/테스트가 보완).
+    """
+    if not pairs or not _HAS_Z3:
+        return frozenset()
+    if k < 1:
+        k = 1
+    outputs, eqs = _build_transition_system(st_code)
+    out_set = set(outputs)
+    proven: set[tuple[str, str]] = set()
+    for a, b in pairs:
+        if a not in eqs or b not in eqs:
+            continue
+        try:
+            frames = [_frame(outputs, i) for i in range(k + 1)]
+            # BASE: init(전부 OFF) → k 스텝 안에 (A ∧ ¬B) 도달 가능?
+            base = z3.Solver()
+            base.add(*[z3.Not(frames[0][o]) for o in outputs])
+            for step in range(k):
+                base.add(
+                    *_trans_at(eqs, outputs, out_set, frames[step], frames[step + 1], step)
+                )
+            base.add(z3.Or(*[z3.And(fr[a], z3.Not(fr[b])) for fr in frames]))
+            if base.check() == z3.sat:
+                continue  # 도달 가능한 위반 — 증명 불가(보고는 호출자 시뮬 검증 몫)
+            # STEP: 0..k-1 에서 (A→B) 성립 가정 → k 에서 (A ∧ ¬B) 가능?
+            stepS = z3.Solver()
+            for step in range(k):
+                stepS.add(
+                    *_trans_at(
+                        eqs, outputs, out_set, frames[step], frames[step + 1], step + 200
+                    )
+                )
+            for i in range(k):
+                stepS.add(z3.Implies(frames[i][a], frames[i][b]))
+            stepS.add(*_distinct_states(frames[:k], outputs))
+            stepS.add(z3.And(frames[k][a], z3.Not(frames[k][b])))
+            if stepS.check() == z3.unsat:
+                proven.add((a, b))
+        except ValueError:
+            continue
+    return frozenset(proven)
+
+
 def _at_most_one(group_vars: list[z3.BoolRef]) -> z3.BoolRef:
     """그룹 내 ON 변수가 ≤1 (at-most-one / one-hot 상한) 임을 나타내는 z3 식.
 

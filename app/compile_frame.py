@@ -341,6 +341,60 @@ def _compile_alternator(frame: IntentFrame) -> CompileResult:
     return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
 
 
+
+def _compile_cascade(frame: IntentFrame) -> CompileResult:
+    """'컨베이어 N대 연동' → 캐스케이드 기동 표준회로(하류부터 기동, 상류는 하류 가드).
+
+    회로(자재 적체/낙하 방지 — 상류가 돌 때 하류가 반드시 돌고 있어야 한다):
+      RUN := (START OR RUN) AND NOT (STOP);
+      Ti(IN := RUN, PT := T#{2i}s);                 ← 상류일수록 늦게 기동
+      C{n}   := RUN;                                ← 최하류 즉시
+      C{n-i} := RUN AND Ti.Q AND C{n-i+1};          ← 하류 가드(구조적 포함관계)
+    안전속성 □(C_상류 → C_하류)는 verifier.prove_containment 의 k-귀납으로 *증명*
+    가능하다(새 속성 클래스 — 상호배제가 아니라 포함). STOP 은 전 단 동시 차단.
+    """
+    from app.models import TimerSpec
+
+    base = "CONVEYOR"
+    n = 2
+    for c in frame.clauses:
+        if c.device and c.device not in ("CASCADE",) and c.device in _DEV_OUT:
+            base = _DEV_OUT[c.device]
+        if c.instance:
+            try:
+                n = max(2, min(6, int(c.instance)))
+            except ValueError:
+                pass
+    outs = [f"{base}{i}" for i in range(1, n + 1)]   # 1=최상류 … n=최하류
+    io = [
+        IOPoint(symbol="START", direction=IODirection.INPUT),
+        IOPoint(symbol="STOP", direction=IODirection.INPUT),
+    ] + [IOPoint(symbol=o, direction=IODirection.OUTPUT) for o in outs]
+    timers = [
+        TimerSpec(name=f"T{i}", preset_ms=2000 * i, enable_condition="RUN",
+                  description=f"{i}단 기동 지연")
+        for i in range(1, n)
+    ]
+    derived = [DerivedOutput(output="RUN", expression="(START OR RUN) AND NOT (STOP)")]
+    # 누적 조건 인라인: C_i 의 식이 C_{i+1} 식의 *강화*가 되게 한다(점별 함의).
+    # 그래야 코일 평가 순서(합성기 정렬)와 무관하게 □(상류→하류)가 성립하고
+    # k-귀납이 1스캔 갭 없이 증명된다. (하류 심볼 참조 가드는 직전값을 보게 되어
+    # 타이머 경계 스캔에서 위반 — 증명기가 옳게 거부했던 결함.)
+    acc = "RUN"
+    derived.append(DerivedOutput(output=outs[-1], expression=acc))
+    for i in range(n - 1, 0, -1):
+        delay = n - i                                  # T1=바로 위 단, …
+        acc = f"{acc} AND T{delay}.Q"
+        derived.append(DerivedOutput(output=outs[i - 1], expression=acc))
+    io.append(IOPoint(symbol="RUN", direction=IODirection.OUTPUT,
+                      description="운전 명령(내부)"))
+    spec = StateMachineSpec(
+        title=(frame.text[:40] or "캐스케이드 연동"),
+        io_points=io, timers=timers, derived_outputs=derived,
+    )
+    return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
+
+
 def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존).
 
@@ -354,6 +408,8 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
         return _compile_star_delta(frame)
     if any(c.device == "ALTERNATE" for c in frame.clauses):
         return _compile_alternator(frame)
+    if any(c.device == "CASCADE" for c in frame.clauses):
+        return _compile_cascade(frame)
     if any(c.seq for c in frame.clauses):
         return _compile_sequence(frame)
     b = _Builder()

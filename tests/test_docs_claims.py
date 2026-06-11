@@ -21,6 +21,7 @@ CATALOG = [
     ("5.5킬로와트 모터 스타델타로 기동해", {"MOTOR", "MOTOR_Y", "MOTOR_D"}),
     ("정회전 돌리고 역회전 돌리고 동시에 안 되게", {"MOTOR_FWD", "MOTOR_REV"}),
     ("펌프 두 대 교대로 운전해", {"PUMP1", "PUMP2"}),
+    ("컨베이어 3대 연동해", {"CONVEYOR1", "CONVEYOR2", "CONVEYOR3"}),
     ("모터 돌리고 다음 펌프 켜고 다음 밸브 열어", {"MOTOR", "PUMP", "VALVE"}),
     ("부품 10개 차면 배출", {"EJECT"}),
     ("히터 켜고 쿨러 켜는데 동시에 안 켜지게", {"HEATER", "COOLER"}),

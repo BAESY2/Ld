@@ -393,3 +393,49 @@ def test_estop_not_an_output_device() -> None:
     outs = {p.symbol for p in r.spec.io_points if p.direction.value == "OUTPUT"}
     assert outs == {"MOTOR"} and "ESTOP" not in outs
     assert "MOTOR := ((START OR MOTOR)) AND NOT (ESTOP);" in synthesize_st(r.spec)
+
+
+def test_cascade_conveyor_containment_proven() -> None:
+    """캐스케이드 연동 — 하류 먼저 기동·상류는 하류 가드, □(상류→하류) k-귀납 증명."""
+    from app.simulator import simulate
+    from app.verifier import prove_containment
+
+    r = frame_to_spec("컨베이어 두 대 연동 운전해")
+    assert r.confident
+    st = synthesize_st(r.spec)
+    assert "CONVEYOR1 := RUN AND T1.Q;" in st   # 누적 조건 인라인(점별 함의 가드)
+    assert verify(r.spec, st).passed and detect_double_coils(st) == {}
+    # 새 속성 클래스: 포함관계(상류가 돌면 하류는 반드시 돌고 있다) 형식 증명.
+    assert prove_containment(r.spec, st, [("CONVEYOR1", "CONVEYOR2")]) == frozenset(
+        {("CONVEYOR1", "CONVEYOR2")}
+    )
+    # 실거동: 하류 먼저, 상류는 2s(20스캔) 후 · 포함 위반 0 · STOP 동시 차단.
+    res = simulate(st, [(100, {"START": True}), (300, {"START": False}),
+                        (5000, {"STOP": True})], duration_ms=7000, step_ms=100)
+    c1, c2 = res.output_trace("CONVEYOR1"), res.output_trace("CONVEYOR2")
+    assert not any(a and not b for a, b in zip(c1, c2, strict=True))
+    f1 = min(i for i, v in enumerate(c1) if v)
+    f2 = min(i for i, v in enumerate(c2) if v)
+    assert f2 < f1 and (f1 - f2) >= 19          # 하류 선기동 + ~2s 지연
+
+
+def test_cascade_three_stage_chain() -> None:
+    """3대 연동 — 지연 누적(2s/4s)과 체인 가드, 전 쌍 포함 증명."""
+    from app.verifier import prove_containment
+
+    r = frame_to_spec("컨베이어 3대 연동해")
+    st = synthesize_st(r.spec)
+    assert r.confident and verify(r.spec, st).passed
+    proven = prove_containment(
+        r.spec, st, [("CONVEYOR1", "CONVEYOR2"), ("CONVEYOR2", "CONVEYOR3")])
+    assert proven == frozenset({("CONVEYOR1", "CONVEYOR2"), ("CONVEYOR2", "CONVEYOR3")})
+
+
+def test_containment_proof_is_not_vacuous() -> None:
+    """비공허성 — 가드 없는 회로에서는 포함 증명이 *나오지 않는다*(거짓 증명 금지)."""
+    from app.verifier import prove_containment
+
+    # 독립 트리거: 센서→히터, 버튼→쿨러 — HEATER on ∧ COOLER off 가 도달 가능.
+    r = frame_to_spec("센서 감지되면 히터 켜고 버튼 누르면 쿨러 켜")
+    st = synthesize_st(r.spec)
+    assert prove_containment(r.spec, st, [("HEATER", "COOLER")]) == frozenset()
