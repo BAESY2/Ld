@@ -1012,7 +1012,7 @@ function resize(){
     ts,tox:(W-WX*ts)/2,toy:(H-WY*ts)/2+8};
 }
 addEventListener("resize",()=>{resize();
-  if(GL3D.on&&window.Twin3D){const el=document.getElementById("gl3d");if(el)window.Twin3D.resize(el);}});
+  if((GL3D.on||FACT.on)&&window.Twin3D){const el=document.getElementById("gl3d");if(el)window.Twin3D.resize(el);}});
 let VIEW_MODE="iso";
 const P=(x,y,z)=>VIEW_MODE==="top"
   ?[view.tox+x*view.ts, view.toy+y*view.ts-(z||0)*0.12*view.ts]
@@ -2913,6 +2913,34 @@ async function setRenderer(on,auto){
     if(btn){btn.classList.remove("on");btn.textContent="렌더러: 2D";}
   }
 }
+/* ── 전체 공장 메가 뷰(대규모 프로젝트): 가동 전 라인을 한 공장에 ── */
+const FACT={on:false};
+async function enterFactory(){
+  if(!(await ensureGL()))return;
+  GL3D.on=false;
+  const gb=document.getElementById("glbtn");
+  if(gb){gb.classList.remove("on");gb.textContent="렌더러: 2D";}
+  const el=glContainer();
+  el.style.display="block";cvs.style.display="none";
+  window.Twin3D.mountFactory(el,ids,LINES,{names:OV,
+    onPickLine:id=>{exitFactory();show(id);}});
+  window.Twin3D.resize(el);
+  FACT.on=true;
+  const fb=document.getElementById("factbtn");
+  if(fb){fb.classList.add("on");fb.textContent="🏭 공장 뷰 종료";}
+  logEv("op","전체 공장 뷰 — 전 라인 실시간 가동(라인 클릭=진입, 드래그·휠=조망)");
+}
+function exitFactory(){
+  if(!FACT.on)return;
+  FACT.on=false;
+  if(window.Twin3D)window.Twin3D.destroy();
+  const fb=document.getElementById("factbtn");
+  if(fb){fb.classList.remove("on");fb.textContent="🏭 전체 공장";}
+  const el=document.getElementById("gl3d");
+  if(el)el.style.display="none";
+  cvs.style.display="block";
+  if(prefGL())setRenderer(true,true);
+}
 const COSIM={ws:null,on:false,ready:false,acc:0,lastSent:{},t_ms:0,pend:0,line:null};
 cvs.addEventListener("wheel",e=>{
   e.preventDefault();
@@ -2979,7 +3007,12 @@ document.getElementById("setbtn").onclick=()=>{
   const sb=document.createElement("button");
   sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";sb.title="WebGL은 베타 — 자유 회전/그림자";
   document.querySelector(".scol").insertBefore(sb,document.getElementById("viewbtn"));
-  sb.onclick=()=>setRenderer(!GL3D.on);
+  sb.onclick=()=>{exitFactory();setRenderer(!GL3D.on);};
+  const fb=document.createElement("button");
+  fb.className="xbtn";fb.id="factbtn";fb.textContent="🏭 전체 공장";
+  fb.title="가동 전 라인을 하나의 대형 공장으로 — 실시간 동기";
+  document.querySelector(".scol").insertBefore(fb,sb);
+  fb.onclick=()=>{FACT.on?exitFactory():enterFactory();};
   /* 래더 탭 → 엔지니어링 SW 진입 */
   const lv=document.getElementById("w-ladder");
   if(lv){
@@ -3525,7 +3558,9 @@ function loop(now){
     const r=simLine(LINES[id],dt,now/1000);
     if(LINES[id]===cur)rActive=r;
   }
-  if(GL3D.on&&window.Twin3D&&window.Twin3D.active===cur.id)
+  if(FACT.on&&window.Twin3D&&window.Twin3D.active==="__factory__")
+    window.Twin3D.updateFactory(LINES,dt,now/1000);
+  else if(GL3D.on&&window.Twin3D&&window.Twin3D.active===cur.id)
     window.Twin3D.update(cur,dt,now/1000);
   else drawScene(now/1000);
   if(now-domT>90){domT=now;updateDOM(rActive,dt,now/1000);updateOverview();}
@@ -3662,7 +3697,7 @@ function show(id){
   updateOverview();
   if(!rafId){resize();lastT=performance.now();rafId=requestAnimationFrame(loop);}
   /* WebGL(z-buffer) 기본 — 관통·투시 없는 실3D. 미지원 라인·실패 시 캔버스 폴백 */
-  if(!GL3D.on&&prefGL())setTimeout(()=>{if(cur&&LINES[id]===cur&&!GL3D.on)setRenderer(true,true);},0);
+  if(!FACT.on&&!GL3D.on&&prefGL())setTimeout(()=>{if(cur&&LINES[id]===cur&&!GL3D.on&&!FACT.on)setRenderer(true,true);},0);
 }
 /* 유저 프로젝트(라인 빌더): DEMO_ALL 의 임의 레시피를 라인 인스턴스로 */
 let USER_LINES=[];
