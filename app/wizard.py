@@ -686,6 +686,137 @@ def _weld_cell(a: Answers) -> StateMachineSpec:
     return spec
 
 
+def _paint_booth(a: Answers) -> StateMachineSpec:
+    """도장부스: 급기 퍼지→분사→세정 순차(one-hot — 분사 전 퍼지 강제)."""
+    start, stop = _val(a, "start", "PAINT_START"), _val(a, "stop", "PAINT_STOP")
+    steps = [
+        (_val(a, "purge", "PURGE_FAN"), _pint(a, "t_purge", 8, lo=1)),
+        (_val(a, "spray", "SPRAY"), _pint(a, "t_spray", 20, lo=1)),
+        (_val(a, "flush", "FLUSH"), _pint(a, "t_flush", 6, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="도장부스 퍼지→분사→세정(급기 선행)")
+
+
+def _stretch_wrap(a: Answers) -> StateMachineSpec:
+    """파레트 랩핑기: 턴테이블 권취→톱프레스→필름 컷 순차."""
+    start, stop = _val(a, "start", "WRAP_START"), _val(a, "stop", "WRAP_STOP")
+    steps = [
+        (_val(a, "turn", "TURNTABLE"), _pint(a, "t_turn", 12, lo=1)),
+        (_val(a, "press", "TOP_PRESS"), _pint(a, "t_press", 3, lo=1)),
+        (_val(a, "cut", "FILM_CUT"), _pint(a, "t_cut", 2, lo=1)),
+    ]
+    return _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="파레트 랩핑(턴테이블→프레스→컷)")
+
+
+def _oht_transport(a: Answers) -> StateMachineSpec:
+    """천장 반송(OHT): 호이스트 상승→주행→하강 시퀀스 + 캐리어 재석 인터록."""
+    start, stop = _val(a, "start", "OHT_START"), _val(a, "stop", "OHT_STOP")
+    carrier = _val(a, "carrier", "CARRIER_PRESENT")
+    steps = [
+        (_val(a, "up", "HOIST_UP"), _pint(a, "t_up", 2, lo=1)),
+        (_val(a, "traverse", "TRAVERSE"), _pint(a, "t_traverse", 6, lo=1)),
+        (_val(a, "down", "HOIST_DOWN"), _pint(a, "t_down", 2, lo=1)),
+    ]
+    spec = _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="천장 반송 OHT(캐리어 인터록·상승→주행→하강)")
+    spec.io_points.insert(1, _io(carrier, _IN, "캐리어 재석(파지 확인)"))
+    for tr in spec.transitions:
+        if tr.from_state == "IDLE" and tr.to_state == "S0":
+            tr.condition = f"{carrier} AND {tr.condition}"
+    return spec
+
+
+def _palletizer(a: Answers) -> StateMachineSpec:
+    """파레타이저 층 적재: 박스 N개 카운트 → 층 푸셔 작동 → 완료 신호로 복귀."""
+    sensor = _val(a, "sensor", "BOX_SENSOR")
+    done = _val(a, "done", "LAYER_DONE")
+    push = _val(a, "push", "LAYER_PUSH")
+    n = _pint(a, "count", 8, lo=1)
+    return StateMachineSpec(
+        title=f"파레타이저 층 적재({n}박스 → 푸셔)",
+        io_points=[
+            _io(sensor, _IN, "박스 통과 센서"),
+            _io(done, _IN, "층 적재 완료"),
+            _io(push, _OUT, "층 푸셔"),
+        ],
+        counters=[
+            CounterSpec(name="C1", preset=n, count_condition=sensor,
+                        reset_condition=done, description=f"{n}박스 카운트"),
+        ],
+        states=[
+            SfcState(name="COLLECT", is_initial=True),
+            SfcState(name="PUSHING", on_entry=[f"{push} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("COLLECT", "PUSHING", f"C1.Q AND NOT {done}"),
+            _tr("PUSHING", "COLLECT", f"{done}"),
+        ],
+    )
+
+
+def _dust_collector(a: Answers) -> StateMachineSpec:
+    """집진기 차압 백워시: 차압 상한 도달 시 펄스 밸브, 하한 복귀 시 정지."""
+    dp = _val(a, "dp", "FILTER_DP")
+    valve = _val(a, "valve", "PULSE_VALVE")
+    lo = _pint(a, "lo", 80)
+    hi = _pint(a, "hi", 180, lo + 1)
+    return StateMachineSpec(
+        title=f"집진기 백워시(차압 {hi} 이상 펄스·{lo} 이하 정지)",
+        io_points=[
+            IOPoint(symbol=dp, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="필터 차압(mmAq)"),
+            _io(valve, _OUT, "역세 펄스 밸브"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="PULSING", on_entry=[f"{valve} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "PULSING", f"{dp} >= {hi}"),
+            _tr("PULSING", "IDLE", f"{dp} <= {lo}"),
+        ],
+    )
+
+
+def _dosing_mix(a: Answers) -> StateMachineSpec:
+    """2액 정량 혼합: A액 목표량 도달 → B액 투입 → 목표 도달 시 종료(펌프 인터락)."""
+    start = _val(a, "start", "DOSE_START")
+    vol_a = _val(a, "vol_a", "VOL_A")
+    vol_b = _val(a, "vol_b", "VOL_B")
+    pump_a = _val(a, "pump_a", "PUMP_A")
+    pump_b = _val(a, "pump_b", "PUMP_B")
+    ta = _pint(a, "target_a", 600, lo=1)
+    tb = _pint(a, "target_b", 400, lo=1)
+    return StateMachineSpec(
+        title=f"2액 정량 혼합(A {ta} → B {tb} 적산 컷오프)",
+        io_points=[
+            _io(start, _IN, "혼합 시작"),
+            IOPoint(symbol=vol_a, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="A액 적산 유량(mL)"),
+            IOPoint(symbol=vol_b, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="B액 적산 유량(mL)"),
+            _io(pump_a, _OUT, "A액 정량 펌프"),
+            _io(pump_b, _OUT, "B액 정량 펌프"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="DOSE_A", on_entry=[f"{pump_a} := TRUE;"]),
+            SfcState(name="DOSE_B", on_entry=[f"{pump_b} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "DOSE_A", f"{start} AND {vol_a} < {ta}"),
+            _tr("DOSE_A", "DOSE_B", f"{vol_a} >= {ta}"),
+            _tr("DOSE_B", "IDLE", f"{vol_b} >= {tb}"),
+        ],
+        interlocks=[
+            Interlock(output_a=pump_a, output_b=pump_b,
+                      reason="A/B 정량 펌프 동시 투입 금지(혼합비 보증)"),
+        ],
+    )
+
+
 def _transfer_line(a: Answers) -> StateMachineSpec:
     """차체 트랜스퍼 라인: 클램프→A조 용접→B조 용접→트랜스퍼 이송(공물 인터록).
 
@@ -1379,6 +1510,76 @@ RECIPES: dict[str, Recipe] = {
             _plating_line,
             safety_note="산·알칼리 약품조, 미스트·환기, 호이스트 협착은 하드와이어 "
             "안전회로(레벨/누액 감지, 환기 인터락, 호이스트 리미트)로 별도 구성하세요.",
+        ),
+        Recipe(
+            "paint_booth", "도장부스 시퀀스",
+            "급기 퍼지→분사→세정 순차(분사 전 퍼지 강제).", "자동차",
+            (_f("start", "기동", "PAINT_START"), _f("stop", "정지", "PAINT_STOP"),
+             _f("purge", "급기 퍼지 팬", "PURGE_FAN"),
+             _f("t_purge", "퍼지 시간(초)", "8", "time_sec"),
+             _f("spray", "도료 분사", "SPRAY"),
+             _f("t_spray", "분사 시간(초)", "20", "time_sec"),
+             _f("flush", "건 세정", "FLUSH"), _f("t_flush", "세정 시간(초)", "6", "time_sec")),
+            _paint_booth,
+            safety_note="용제 증기 폭발 분위기(ATEX) 구역입니다. 배기 풍량 인터록과 "
+            "방폭 전장은 하드와이어·인증 기기로 구성하세요.",
+        ),
+        Recipe(
+            "stretch_wrap", "파레트 랩핑기",
+            "턴테이블 권취→톱프레스→필름 컷 순차.", "물류",
+            (_f("start", "기동", "WRAP_START"), _f("stop", "정지", "WRAP_STOP"),
+             _f("turn", "턴테이블", "TURNTABLE"),
+             _f("t_turn", "권취 시간(초)", "12", "time_sec"),
+             _f("press", "톱프레스", "TOP_PRESS"),
+             _f("t_press", "프레스 시간(초)", "3", "time_sec"),
+             _f("cut", "필름 컷터", "FILM_CUT"), _f("t_cut", "컷 시간(초)", "2", "time_sec")),
+            _stretch_wrap,
+            safety_note="회전 턴테이블 협착 위험 — 펜스/라이트커튼을 하드와이어로 구성하세요.",
+        ),
+        Recipe(
+            "oht_transport", "천장 반송 OHT",
+            "호이스트 상승→주행→하강(캐리어 파지 인터록).", "반도체",
+            (_f("start", "반송 시작", "OHT_START"), _f("stop", "정지", "OHT_STOP"),
+             _f("carrier", "캐리어 재석", "CARRIER_PRESENT"),
+             _f("up", "호이스트 상승", "HOIST_UP"), _f("t_up", "상승 시간(초)", "2", "time_sec"),
+             _f("traverse", "주행", "TRAVERSE"),
+             _f("t_traverse", "주행 시간(초)", "6", "time_sec"),
+             _f("down", "호이스트 하강", "HOIST_DOWN"),
+             _f("t_down", "하강 시간(초)", "2", "time_sec")),
+            _oht_transport,
+            safety_note="하부 통행 구역 낙하 위험 — 파지 확인 이중화와 낙하 방지 기계 장치를 "
+            "별도 구성하세요(SEMI S2).",
+        ),
+        Recipe(
+            "palletizer", "파레타이저 층 적재",
+            "박스 N개 카운트 후 층 푸셔 작동.", "물류",
+            (_f("sensor", "박스 통과 센서", "BOX_SENSOR"),
+             _f("done", "층 적재 완료", "LAYER_DONE"),
+             _f("push", "층 푸셔", "LAYER_PUSH"), _f("count", "층당 박스 수", "8", "int")),
+            _palletizer,
+            safety_note="푸셔 구동 구역 접근은 펜스·라이트커튼 하드와이어 안전회로로 막으세요.",
+        ),
+        Recipe(
+            "dust_collector", "집진기 차압 백워시",
+            "필터 차압 상한 도달 시 역세 펄스, 하한 복귀 시 정지.", "유틸리티",
+            (_f("dp", "필터 차압(아날로그 mmAq)", "FILTER_DP"),
+             _f("hi", "역세 시작 차압", "180", "int"), _f("lo", "역세 정지 차압", "80", "int"),
+             _f("valve", "역세 펄스 밸브", "PULSE_VALVE")),
+            _dust_collector,
+            safety_note="분진 폭발 위험(ATEX) — 정전기 접지와 방폭 구조를 별도 검토하세요.",
+        ),
+        Recipe(
+            "dosing_mix", "2액 정량 혼합",
+            "A액 적산 도달 → B액 투입 → 완료(펌프 인터락).", "화학",
+            (_f("start", "혼합 시작", "DOSE_START"),
+             _f("vol_a", "A액 적산(아날로그 mL)", "VOL_A"),
+             _f("target_a", "A액 목표 mL", "600", "int"),
+             _f("vol_b", "B액 적산(아날로그 mL)", "VOL_B"),
+             _f("target_b", "B액 목표 mL", "400", "int"),
+             _f("pump_a", "A액 펌프", "PUMP_A"), _f("pump_b", "B액 펌프", "PUMP_B")),
+            _dosing_mix,
+            safety_note="반응성 약액은 오투입 시 위험 — 유량계 고장(0 고착) 타임아웃 차단과 "
+            "체크밸브를 별도 구성하세요.",
         ),
         Recipe(
             "transfer_line", "차체 트랜스퍼 라인",
