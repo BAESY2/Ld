@@ -13,6 +13,10 @@ html{scroll-behavior:smooth}
 body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
  background:var(--bg);color:var(--fg);line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+/* 가동 화면은 모니터 전폭 활용(풀블리드) — 최대 1760px 중앙 정렬 */
+section#demo{width:100vw;position:relative;left:50%;margin-left:-50vw;
+ padding-left:max(24px,calc((100vw - 1760px)/2));
+ padding-right:max(24px,calc((100vw - 1760px)/2))}
 a{color:inherit}
 
 /* nav */
@@ -138,7 +142,7 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 }
 
 /* ---- live demo ---- */
-.live{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-bottom:14px}
+.live{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(380px,560px);gap:14px;margin-bottom:14px}
 .wtabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--bd);padding-bottom:8px}
 .wtab{font:600 12px inherit;background:transparent;color:var(--mut);border:1px solid transparent;
  border-radius:8px;padding:6px 11px;cursor:pointer}
@@ -157,7 +161,7 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 #devpanel .xbtn{margin-top:9px;width:100%}
 #scene{cursor:grab;touch-action:none}
 #scene:active{cursor:grabbing}
-#scene{width:100%;height:500px;display:block;border-radius:10px;
+#scene{width:100%;height:clamp(500px,62vh,820px);display:block;border-radius:10px;
  background:radial-gradient(120% 90% at 50% 0,#0e1622 0,#070b11 70%);border:1px solid #1b2530}
 .ctrl{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;align-items:flex-end}
 .pbw{display:flex;flex-direction:column;align-items:center;gap:6px}
