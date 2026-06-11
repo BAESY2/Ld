@@ -2744,6 +2744,16 @@ cluster:{
      });
      tag3(px,py,1.55,"PM-"+(i+1),i===st.pm?"공정 챔버(활성)":"공정 챔버",on?"#b9a3ff":"#6f7a8a",i===st.pm?1:2);
    });
+   /* 게이트밸브: 암이 향한 모듈만 개방(one-hot 인터록 시각화) */
+   const gates=[["LL",ANG_LL]].concat(ANG_PM.map((a,i)=>["PM"+(i+1),a]));
+   for(const[gn,ga]of gates){
+     let dA=st.armA-ga;
+     while(dA>Math.PI)dA-=2*Math.PI;while(dA<-Math.PI)dA+=2*Math.PI;
+     const open=Math.abs(dA)<0.18&&st.ext>0.08;
+     const gx=HUB[0]+Math.cos(ga)*1.42, gy=HUB[1]+Math.sin(ga)*1.16;
+     box3(gx-0.12,gy-0.1,0.55,0.24,0.2,open?0.1:0.46,open?"#3f8d5c":"#566472");
+     if(open)dq(gx+gy+1.2,c2=>lamp(c2,P(gx,gy,1.1),1.8,"#2f9d5c",true));
+   }
    /* 진공 로봇 암(허브→신축) + 웨이퍼 */
    dq(HUB[0]+HUB[1]+1.9,c2=>{
      const L2=0.5+st.ext*1.5;
