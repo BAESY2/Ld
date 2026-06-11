@@ -12,6 +12,14 @@ from __future__ import annotations
 
 import re
 
+from app.boolexpr import And as BAnd
+from app.boolexpr import Cmp as BCmp
+from app.boolexpr import Const as BConst
+from app.boolexpr import Node as BNode
+from app.boolexpr import Not as BNot
+from app.boolexpr import Or as BOr
+from app.boolexpr import Var as BVar
+from app.boolexpr import parse as bool_parse
 from app.memory_map import detect_double_coils
 from app.models import StateMachineSpec, VerificationIssue, VerificationReport
 
@@ -26,87 +34,58 @@ except Exception:  # pragma: no cover - 환경에 z3 없을 때
 # ---------------------------------------------------------------------------
 # 불리언식 → Z3 (재귀하강 파서)
 # ---------------------------------------------------------------------------
-_TOKEN_RE = re.compile(r"\s*(\(|\)|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
 
 
-def _tokenize(expr: str) -> list[str]:
-    tokens: list[str] = []
-    pos = 0
-    while pos < len(expr):
-        m = _TOKEN_RE.match(expr, pos)
-        if not m:
-            if expr[pos].isspace():
-                pos += 1
-                continue
-            raise ValueError(f"인식 불가 토큰: {expr[pos:]!r}")
-        tokens.append(m.group(1))
-        pos = m.end()
-    return tokens
+def _to_z3(
+    expr: str,
+    vars: dict[str, z3.BoolRef],
+    ints: dict[str, z3.ArithRef] | None = None,
+) -> z3.BoolRef:
+    """불리언식(+수치 비교)을 z3 식으로 변환 — 문법은 app.boolexpr 단일 소스.
 
-
-def _to_z3(expr: str, vars: dict[str, z3.BoolRef]) -> z3.BoolRef:
-    """AND/OR/NOT/괄호/심볼 불리언식을 z3 식으로 변환.
-
-    문법 (우선순위 NOT > AND > OR):
-      or_expr  := and_expr (OR and_expr)*
-      and_expr := not_expr (AND not_expr)*
-      not_expr := NOT not_expr | '(' or_expr ')' | SYMBOL
+    수치 비교(Cmp)는 z3.Int 로 인코딩한다. ints 딕셔너리를 호출 간 공유하면
+    같은 아날로그 심볼이 하나의 Int 변수로 묶여 범위 배타 증명이 가능하다
+    (예: LEVEL<300 ∧ LEVEL>=700 = UNSAT). 전이계 경로에서는 스텝 간 동일
+    값으로 공유되는 보수적 인코딩임에 유의(합성기는 아직 비교식 미출력).
     """
-    tokens = _tokenize(expr)
-    idx = 0
+    if ints is None:
+        ints = {}
 
-    def peek() -> str | None:
-        return tokens[idx] if idx < len(tokens) else None
+    def enc(n: BNode) -> z3.BoolRef:
+        match n:
+            case BVar(name):
+                if name not in vars:
+                    vars[name] = z3.Bool(name)
+                return vars[name]
+            case BConst(value):
+                return z3.BoolVal(value)
+            case BNot(operand):
+                return z3.Not(enc(operand))
+            case BAnd(operands):
+                return z3.And(*[enc(o) for o in operands])
+            case BOr(operands):
+                return z3.Or(*[enc(o) for o in operands])
+            case BCmp(var, op, value):
+                if var not in ints:
+                    ints[var] = z3.Int(var)
+                left = ints[var]
+                match op:
+                    case "<":
+                        return left < value
+                    case ">":
+                        return left > value
+                    case "<=":
+                        return left <= value
+                    case ">=":
+                        return left >= value
+                    case "=":
+                        return left == value
+                    case "<>":
+                        return left != value
+                raise ValueError(f"알 수 없는 비교 연산자: {op!r}")
+        raise TypeError(f"알 수 없는 노드: {n!r}")
 
-    def advance() -> str:
-        nonlocal idx
-        tok = tokens[idx]
-        idx += 1
-        return tok
-
-    def parse_or() -> z3.BoolRef:
-        node = parse_and()
-        while (tok := peek()) is not None and tok.upper() == "OR":
-            advance()
-            node = z3.Or(node, parse_and())
-        return node
-
-    def parse_and() -> z3.BoolRef:
-        node = parse_not()
-        while (tok := peek()) is not None and tok.upper() == "AND":
-            advance()
-            node = z3.And(node, parse_not())
-        return node
-
-    def parse_not() -> z3.BoolRef:
-        tok = peek()
-        if tok is None:
-            raise ValueError(f"식이 갑자기 끝남: {expr!r}")
-        if tok.upper() == "NOT":
-            advance()
-            return z3.Not(parse_not())
-        if tok == "(":
-            advance()
-            node = parse_or()
-            if peek() != ")":
-                raise ValueError(f"닫는 괄호 누락: {expr!r}")
-            advance()
-            return node
-        # 심볼
-        sym = advance()
-        upper = sym.upper()
-        if upper == "TRUE":
-            return z3.BoolVal(True)
-        if upper == "FALSE":
-            return z3.BoolVal(False)
-        if sym not in vars:
-            vars[sym] = z3.Bool(sym)
-        return vars[sym]
-
-    node = parse_or()
-    if idx != len(tokens):
-        raise ValueError(f"식 파싱 후 잔여 토큰: {tokens[idx:]!r}")
-    return node
+    return enc(bool_parse(expr))
 
 
 # ---------------------------------------------------------------------------

@@ -83,3 +83,44 @@ class TestAnalogSimulate:
             step_ms=100,
         )
         assert res.output_trace("OUT") == [False, True, True]
+
+
+class TestZ3Arithmetic:
+    def test_disjoint_ranges_unsat(self) -> None:
+        import z3
+
+        from app.verifier import _to_z3
+
+        bools: dict[str, z3.BoolRef] = {}
+        ints: dict[str, z3.ArithRef] = {}
+        a = _to_z3("LEVEL < 300", bools, ints)
+        b = _to_z3("LEVEL >= 700", bools, ints)
+        solver = z3.Solver()
+        solver.add(z3.And(a, b))
+        assert solver.check() == z3.unsat  # 범위 배타 — 동시 참 불가능 증명
+
+    def test_overlapping_ranges_sat(self) -> None:
+        import z3
+
+        from app.verifier import _to_z3
+
+        bools: dict[str, z3.BoolRef] = {}
+        ints: dict[str, z3.ArithRef] = {}
+        a = _to_z3("LEVEL < 500", bools, ints)
+        b = _to_z3("LEVEL >= 300", bools, ints)
+        solver = z3.Solver()
+        solver.add(z3.And(a, b))
+        assert solver.check() == z3.sat  # 300~499 에서 동시 참 가능
+
+    def test_mixed_bool_and_cmp(self) -> None:
+        import z3
+
+        from app.verifier import _to_z3
+
+        bools: dict[str, z3.BoolRef] = {}
+        ints: dict[str, z3.ArithRef] = {}
+        f = _to_z3("RUN AND NOT (LEVEL >= 700) AND LEVEL < 300", bools, ints)
+        solver = z3.Solver()
+        solver.add(f)
+        assert solver.check() == z3.sat
+        assert "RUN" in bools and "LEVEL" in ints
