@@ -310,9 +310,17 @@ const BUILDERS={
   };
  },
  motion_home_move(env){
-  const guide=new (T()).Mesh(new (T()).BoxGeometry(10.8,0.01,0.08),
-    new (T()).MeshBasicMaterial({color:0x58e0ff}));
-  at(guide,8,3.0,0.012);env.set.add(guide);
+  /* S자 메인 경로 — 2D 엔진(AGV_MAIN)과 동일 폴리라인 */
+  const PATH=[[2.6,3.0],[6.2,3.0],[6.2,2.1],[10.4,2.1],[10.4,3.0],[13.4,3.0]];
+  const gm=new (T()).MeshBasicMaterial({color:0x58e0ff});
+  for(let i=0;i<PATH.length-1;i++){
+    const a=PATH[i],b2=PATH[i+1];
+    const L2=Math.hypot(b2[0]-a[0],b2[1]-a[1]);
+    const seg2=new (T()).Mesh(new (T()).BoxGeometry(L2,0.01,0.08),gm);
+    at(seg2,(a[0]+b2[0])/2,(a[1]+b2[1])/2,0.012);
+    seg2.rotation.y=-Math.atan2(b2[1]-a[1],b2[0]-a[0]);
+    env.set.add(seg2);
+  }
   for(const[x,c,tx]of[[2.6,0x3fb950,"ST-H"],[13.4,0xd9a514,"ST-B"]]){
     const ring=new (T()).Mesh(new (T()).RingGeometry(0.7,0.78,32),
       new (T()).MeshBasicMaterial({color:c,side:2}));
@@ -336,7 +344,9 @@ const BUILDERS={
   const lb2=labelSprite("AGV-901","#58e0ff");env.set.add(lb2);
   env.upd=(L,dt,t)=>{
     const st=L.sst;
-    const q=W2T(st.x,3.0,0);agv.group.position.set(q[0],q[1],q[2]);
+    const q=W2T(st.x,st.y!==undefined?st.y:3.0,0);
+    agv.group.position.set(q[0],q[1],q[2]);
+    agv.group.rotation.y=-(st.ang||0); /* 경로 헤딩 동기(코너 선회) */
     agv.pallet.visible=st.carry;
     agv.beacon.intensity=(L.plc.val("MOVING")||L.plc.val("HOMING"))&&(t*3%1)<0.6?1.6:0;
     lb2.position.set(q[0],1.6,q[2]);
