@@ -196,11 +196,10 @@ def to_dnf(node: Node) -> list[Term]:
                 return [frozenset({(name, True)})]
             case Const(value):
                 return [frozenset()] if value else []
-            case Cmp():
-                raise ValueError(
-                    "비교식은 래더(DNF) 변환을 아직 지원하지 않습니다 — "
-                    "아날로그 1단계(시뮬레이션 전용)."
-                )
+            case Cmp(var, op, value):
+                # 비교 접점(아날로그 3단계): 정규화 문자열을 리터럴 이름으로.
+                # NNF 가 NOT 을 연산자 반전으로 흡수하므로 부정 리터럴은 없다.
+                return [frozenset({(f"{var} {op} {value}", False)})]
             case Or(operands):
                 terms: list[Term] = []
                 for o in operands:
