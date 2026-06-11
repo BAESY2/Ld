@@ -2305,7 +2305,7 @@ async function setRenderer(on){
     el.style.display="block";cvs.style.display="none";
     window.Twin3D.mount(el,cur,{onPick:glPick});
     window.Twin3D.resize(el);
-    if(btn){btn.classList.add("on");btn.textContent="렌더러: WebGL";}
+    if(btn){btn.classList.add("on");btn.textContent="렌더러: WebGL β";}
     logEv("op","WebGL 렌더러 ON — 드래그 회전·휠 줌(실그림자·z-buffer)");
   }else{
     GL3D.on=false;
@@ -2380,7 +2380,7 @@ document.getElementById("setbtn").onclick=()=>{
 };
 (function(){
   const sb=document.createElement("button");
-  sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";
+  sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";sb.title="WebGL은 베타 — 자유 회전/그림자";
   document.querySelector(".scol").insertBefore(sb,document.getElementById("viewbtn"));
   sb.onclick=()=>setRenderer(!GL3D.on);
 })();

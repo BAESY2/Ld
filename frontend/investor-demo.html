@@ -12,11 +12,10 @@
 html{scroll-behavior:smooth}
 body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
  background:var(--bg);color:var(--fg);line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+.wrap{max-width:min(97vw,1880px);margin:0 auto;padding:0 24px}
 /* 가동 화면은 모니터 전폭 활용(풀블리드) — 최대 1760px 중앙 정렬 */
 section#demo{width:100vw;position:relative;left:50%;margin-left:-50vw;
- padding-left:max(24px,calc((100vw - 1760px)/2));
- padding-right:max(24px,calc((100vw - 1760px)/2))}
+ padding-left:max(20px,2vw);padding-right:max(20px,2vw)}
 a{color:inherit}
 
 /* nav */
@@ -142,7 +141,9 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 }
 
 /* ---- live demo ---- */
-.live{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(380px,560px);gap:14px;margin-bottom:14px}
+.live{display:grid;grid-template-columns:minmax(0,2.05fr) minmax(430px,1fr);gap:14px;margin-bottom:14px;align-items:stretch}
+#workpanel{display:flex;flex-direction:column;min-height:0}
+#workpanel .wview.on{flex:1;min-height:0;overflow:auto}
 .wtabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--bd);padding-bottom:8px}
 .wtab{font:600 12px inherit;background:transparent;color:var(--mut);border:1px solid transparent;
  border-radius:8px;padding:6px 11px;cursor:pointer}
@@ -235,7 +236,7 @@ table.cmp td.themwin{color:#f0c26b}
 .alm .t{color:#5d6c7c;min-width:58px}
 .alm i{width:7px;height:7px;border-radius:50%;background:#3fb950;flex:none;align-self:center}
 .alm.op i{background:#58a6ff}.alm.warn{color:#f0c26b}.alm.warn i{background:#d9a514}
-.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
 @media(max-width:860px){.kpis{grid-template-columns:repeat(3,1fr)}}
 .kpi{background:rgba(10,15,22,.7);border:1px solid #1d2733;border-radius:9px;padding:7px 9px;min-width:0}
 .kpi b{display:block;font:700 15px/1.2 ui-monospace,monospace;color:#7ee787;white-space:nowrap}
