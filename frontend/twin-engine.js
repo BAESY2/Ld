@@ -412,7 +412,7 @@ function makePLC(ladder){
 /* ============================================================
    통전 래더 렌더러 — 전류 경로 실시간 + TON/CTU 현재값
    ============================================================ */
-function ladderLive(ladder,en,plc,addr){
+function ladderLive(ladder,en,plc,addr,hiSym){
   const LEFT=24,BUSL=70,SLOT=104,ROWH=58,PADT=28,COILW=90;
   const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const ON="#3fd97a",OFF="#33414f";
@@ -422,6 +422,8 @@ function ladderLive(ladder,en,plc,addr){
     g.push(`<line x1="${cx-6}" y1="${cy-11}" x2="${cx-6}" y2="${cy+11}" stroke="${bar}" stroke-width="2"/>`);
     g.push(`<line x1="${cx+6}" y1="${cy-11}" x2="${cx+6}" y2="${cy+11}" stroke="${bar}" stroke-width="2"/>`);
     if(nc)g.push(`<line x1="${cx-9}" y1="${cy+11}" x2="${cx+9}" y2="${cy-11}" stroke="${bar}" stroke-width="2"/>`);
+    if(hiSym&&el.symbol.indexOf(hiSym)===0)
+      g.push(`<rect x="${cx-30}" y="${cy-26}" width="60" height="48" rx="6" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.2" stroke-dasharray="4 3"/>`);
     g.push(`<text x="${cx}" y="${cy-16}" fill="${onp?"#bff5cd":"#dce4f0"}" font-size="11" text-anchor="middle">${esc(el.symbol)}</text>`);
     const a=(addr&&addr[el.symbol.replace(/\.Q$/,"")])||"";
     if(a)g.push(`<text x="${cx}" y="${cy+26}" fill="#6f7a8a" font-size="10" text-anchor="middle">${esc(a)}</text>`);
@@ -442,6 +444,8 @@ function ladderLive(ladder,en,plc,addr){
     }
     const set=et==="COIL_SET",rst=et==="COIL_RESET";
     const c=on?(rst?"#ff8f8f":ON):"#3a4a5a";
+    if(hiSym&&o.symbol.indexOf(hiSym)===0)
+      g.push(`<rect x="${cx-6}" y="${cy-28}" width="84" height="54" rx="6" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.2" stroke-dasharray="4 3"/>`);
     g.push(`<text x="${cx+35}" y="${cy-16}" fill="${on?(rst?"#ffb3b3":"#7ee787"):"#9fb3c8"}" font-size="11" text-anchor="middle">${esc(o.symbol)}${set?" (S)":rst?" (R)":""}</text>`);
     g.push(`<path d="M ${cx} ${cy-12} Q ${cx+14} ${cy} ${cx} ${cy+12}" fill="none" stroke="${c}" stroke-width="${on?2.6:2}"/>`);
     g.push(`<path d="M ${cx+70} ${cy-12} Q ${cx+56} ${cy} ${cx+70} ${cy+12}" fill="none" stroke="${c}" stroke-width="${on?2.6:2}"/>`);
@@ -1645,7 +1649,7 @@ agv:{
  wiresOut:[["HOMING",[[14.72,4.95],[3.0,4.4],[2.6,3.6]]],
            ["MOVING",[[14.72,5.0],[8.0,4.5],[8.0,3.6]]],
            ["IN_POS_LAMP",[[14.72,5.05],[13.5,4.4],[13.5,3.6]]]],
- init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0}),
+ init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[]}),
  sense(st,plc){
    plc.set("ESTOP_OK",!cur.faults.estop);
  },
@@ -1660,12 +1664,21 @@ agv:{
    if(o.IN_POS_LAMP){
      const p2=tP.acc/tP.preset;
      if(p2>0.45&&!st.unloaded){st.unloaded=true;st.stack=(st.stack%6)+1;st.done++;
-       st.carry=false;st.loadAnim=0;}
+       st.carry=false;st.loadAnim=0;
+       if(st.missions.length){const ms=st.missions.shift();
+         st.mlog.unshift({id:ms.id,msg:"완료",t:new Date().toLocaleTimeString("ko-KR")});
+         st.mlog=st.mlog.slice(0,8);}}
      st.prevPos=true;
    }else{
      if(st.prevPos){st.unloaded=false;}
      st.prevPos=false;
    }
+   /* 배터리 물리: 주행 방전 / 도크 정차 충전 */
+   const driving=o.MOVING||o.HOMING;
+   const atDock=Math.abs(st.x-2.6)<0.3&&!driving;
+   st.batt=Math.max(0,Math.min(100,st.batt+(atDock?1.2:driving?-0.45:-0.02)*dt));
+   if(st.batt<20&&!st.lowWarn){st.lowWarn=true;logEv("warn","ACS: AGV-901 배터리 "+st.batt.toFixed(0)+"% — 미션 차단·충전 복귀");}
+   if(st.batt>40)st.lowWarn=false;
  },
  draw(ctx,st,val,t){
    /* 전용 섹터 바닥: 메인 유도선 + 스테이션 마커 */
@@ -1897,7 +1910,10 @@ const AUTO={
  duty_standby(){return null;},
  motion_home_move(L){
    const busy=["HOMING","MOVING","IN_POS_LAMP"].some(x=>L.plc.val(x));
-   if(!busy&&!L.faults.estop)return["CYCLE_START",0.4,3];
+   if(busy||L.faults.estop)return null;
+   if(L.sst.batt<20)return null; /* ACS: 저전압 미션 차단(도크 충전 대기) */
+   if(!L.sst.missions.length)L.sst.missions.push({id:"M"+String(++L.sst.mseq||(L.sst.mseq=1)).padStart(3,"0"),src:"ST-H",dst:"ST-B"});
+   return["CYCLE_START",0.4,3];
  },
  cascade_conveyor(L){if(L.sst.spd.every(v=>v<0.02)&&!L.plc.val("CONV_DOWN"))return["START_PB",0.4,6];}
 };
@@ -2049,6 +2065,39 @@ function updateDOM(r,dt,t){
     if(el2)el2.textContent=String(get());
   }
   if(devOpen)renderDevLive();
+  /* AGV 관제(ACS) */
+  document.getElementById("acstab").style.display=cur.id==="motion_home_move"?"block":"none";
+  if(cur.id==="motion_home_move"){
+    const st2=cur.sst;
+    const busy=["HOMING","MOVING","IN_POS_LAMP"].some(x=>cur.plc.val(x));
+    const stt2=cur.plc.val("MOVING")?"운송":cur.plc.val("HOMING")?"복귀":cur.plc.val("IN_POS_LAMP")?"도킹":st2.batt<20?"충전 대기":"대기";
+    const bc=st2.batt<20?"#f85149":st2.batt<40?"#f0c26b":"#3fb950";
+    document.getElementById("acsbody").innerHTML=
+     `<div class="vrf" style="margin-top:0;border-top:0;padding-top:0"><h4>ACS 상위 제어기 — 차량 현황</h4></div>`+
+     `<table class="io"><tr><td class="mut">차량</td><td class="mut">상태</td><td class="mut">위치</td><td class="mut">배터리</td><td class="mut">적재</td></tr>`+
+     `<tr><td><b>AGV-901</b></td><td style="color:${busy?"#3fb950":"#8b98a8"}">${stt2}</td>`+
+     `<td class="mut">${st2.x.toFixed(1)} m</td>`+
+     `<td><div class="tbar" style="width:70px;display:inline-block;vertical-align:middle"><i style="width:${st2.batt.toFixed(0)}%;background:${bc}"></i></div> <span style="color:${bc}">${st2.batt.toFixed(0)}%</span></td>`+
+     `<td class="mut">${st2.carry?"파레트 1":"공차"}</td></tr></table>`+
+     `<div class="vrf"><h4>미션 큐</h4></div>`+
+     (st2.missions.length?`<table class="io">`+st2.missions.map((ms,i)=>
+       `<tr><td><b>${ms.id}</b></td><td class="mut">${ms.src} → ${ms.dst}</td><td style="color:${i===0&&busy?"#3fb950":"#8b98a8"}">${i===0&&busy?"실행 중":"대기"}</td></tr>`).join("")+`</table>`
+      :'<div class="hint" style="font-size:12px;color:var(--mut)">대기 미션 없음</div>')+
+     `<div style="display:flex;gap:8px;margin-top:10px">`+
+     `<button class="xbtn" id="acsgo" ${st2.batt<20?"disabled":""}>미션 발행(ST-H → ST-B)</button>`+
+     `<button class="xbtn" id="acsstop">전 미션 취소</button></div>`+
+     (st2.batt<20?'<div class="alm warn" style="margin-top:8px"><i></i><span>저전압 — 충전 완료(40%)까지 미션 차단</span></div>':"")+
+     `<div class="vrf"><h4>미션 이력</h4></div>`+
+     (st2.mlog.length?st2.mlog.map(l2=>`<div class="alm"><i></i><span class="t">${l2.t}</span><span>${l2.id} ${l2.msg}</span></div>`).join(""):'<div class="hint" style="font-size:12px;color:var(--mut)">이력 없음</div>');
+    const g1=document.getElementById("acsgo");
+    if(g1)g1.onclick=()=>{
+      const st3=cur.sst;
+      st3.missions.push({id:"M"+String(++st3.mseq||(st3.mseq=1)).padStart(3,"0"),src:"ST-H",dst:"ST-B"});
+      logEv("op","ACS 미션 발행 — ST-H → ST-B");
+    };
+    const g2=document.getElementById("acsstop");
+    if(g2)g2.onclick=()=>{cur.sst.missions=[];logEv("warn","ACS 전 미션 취소");};
+  }
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
    ||'<div class="alm"><i></i><span class="t">—</span><span>이벤트 없음</span></div>';
@@ -2057,7 +2106,7 @@ function updateDOM(r,dt,t){
     +Object.values(cur.plc.counters).map(cn=>cn.cnt).join();
   if(key!==cur.lastKey){
     cur.lastKey=key;
-    document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr);
+    document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr,devSym());
     const wd=document.getElementById("wiring");
     if(wd)wd.innerHTML=wiringSvg(cur);
   }
@@ -2148,15 +2197,22 @@ function chipAt(e){
   return CHIPS.find(c=>(mx>=c.bx-3&&mx<=c.bx+c.w+3&&my>=c.by-3&&my<=c.by+c.h+3)
     ||Math.hypot(mx-c.ax,my-c.ay)<14);
 }
+function wtab(name){
+  document.querySelectorAll(".wtab").forEach(b=>b.classList.toggle("on",b.dataset.w===name));
+  document.querySelectorAll(".wview").forEach(v=>v.classList.toggle("on",v.id==="w-"+name));
+}
+document.getElementById("wtabs").addEventListener("click",e=>{
+  const b=e.target.closest(".wtab");
+  if(b)wtab(b.dataset.w);
+});
 function pickDevice(e){
   const hit=chipAt(e);
-  if(hit){devOpen=hit.tg;
-    const rb=cvs.getBoundingClientRect();
-    const el=document.getElementById("devpanel");
-    el.style.display="block";
-    el.style.left=Math.max(6,Math.min(e.clientX-rb.left+14,cvs.clientWidth-248))+"px";
-    el.style.top=Math.max(6,Math.min(e.clientY-rb.top+6,cvs.clientHeight-160))+"px";
+  if(hit){
+    devOpen=hit.tg;
+    document.getElementById("devpanel").style.display="block";
     renderDev();
+    cur.lastKey="";
+    wtab("setup");
   } else hideDev();
 }
 function renderDev(){
@@ -2254,6 +2310,11 @@ function openPendant(){
   document.getElementById("pd_reset").onclick=()=>{
     rc.off=[0,0,0];document.getElementById("pd_p3").textContent=fmt();
     logEv("op","RB-401 원점 복귀(티칭 리셋)");};
+}
+function devSym(){
+  if(!devOpen)return null;
+  const ent=Object.entries(cur.m.tags||{}).find(([,i2])=>i2.tag===devOpen);
+  return ent?ent[0]:null;
 }
 function renderDevLive(){
   if(!devOpen)return;
@@ -2446,7 +2507,7 @@ function show(id){
   document.getElementById("safety").textContent=
     "⚠️ 안전 경계: 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061). 3D 설비는 디지털트윈 시각화입니다.";
   cur.lastKey="";
-  document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr);
+  document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr,devSym());
   const wd0=document.getElementById("wiring");
   if(wd0)wd0.innerHTML=wiringSvg(cur);
   updateOverview();

@@ -138,11 +138,18 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 }
 
 /* ---- live demo ---- */
-.live{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-bottom:14px}
+.live{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-bottom:14px}
+.wtabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--bd);padding-bottom:8px}
+.wtab{font:600 12px inherit;background:transparent;color:var(--mut);border:1px solid transparent;
+ border-radius:8px;padding:6px 11px;cursor:pointer}
+.wtab:hover{color:var(--fg)}
+.wtab.on{background:rgba(88,166,255,.12);color:#9cc7ff;border-color:rgba(88,166,255,.35)}
+.wview{display:none}.wview.on{display:block}
+#workpanel{min-height:560px}
 @media(max-width:860px){.live{grid-template-columns:1fr}}
 .box{position:relative}
-#devpanel{display:none;position:absolute;z-index:5;width:236px;background:rgba(10,15,22,.95);
- border:1px solid #2b3743;border-radius:10px;padding:11px 13px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+#devpanel{display:none;width:100%;background:rgba(10,15,22,.6);
+ border:1px solid #2b3743;border-radius:10px;padding:12px 14px}
 #devpanel .dvt{font:700 13px ui-monospace,monospace;color:#dce4f0;margin-bottom:7px}
 #devpanel .dvr{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--mut);
  padding:3.5px 0;border-bottom:1px dashed rgba(38,48,61,.5)}
@@ -182,9 +189,8 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 #setpanel{position:absolute;right:0;top:0;bottom:0;width:min(380px,92vw);background:#0d141d;
  border-left:1px solid var(--bd);padding:18px 18px 30px;overflow:auto;box-shadow:-18px 0 50px rgba(0,0,0,.5)}
 #setpanel .alhd h4{font-size:14px;color:var(--fg)}
-#pendant{display:none;position:absolute;z-index:6;right:10px;top:60px;width:280px;
- background:rgba(10,15,22,.97);border:1px solid #2b3743;border-radius:12px;
- padding:13px 14px;box-shadow:0 16px 40px rgba(0,0,0,.6)}
+#pendant{display:none;width:100%;margin-top:10px;background:rgba(10,15,22,.8);
+ border:1px solid #3a2b1a;border-radius:12px;padding:13px 14px}
 #pendant .alhd h4{margin:0;font-size:13px;color:var(--fg)}
 .alhd{display:flex;justify-content:space-between;align-items:center}
 .alhd h4{margin:0}
@@ -246,7 +252,6 @@ table.io td.mut{color:var(--mut)}
  <span class="sp"></span>
  <a class="lnk" href="#why">왜 어려운가</a>
  <a class="lnk" href="#demo">가동 현황</a>
- <a class="lnk" href="#vs">vs 지멘스</a>
  <a class="lnk" href="https://github.com/BAESY2/Ld/blob/main/docs/WHITEPAPER.md" target="_blank">백서·산식</a>
  <a class="btn" href="#demo">공장 가동 ▶</a>
 </div></nav>
@@ -326,8 +331,6 @@ table.io td.mut{color:var(--mut)}
    <div class="box">
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
     <canvas id="scene"></canvas>
-    <div id="devpanel"></div>
-    <div id="pendant"></div>
     <div class="scol">
      <button class="xbtn" id="setbtn">⚙ 설정</button>
      <button class="xbtn" id="viewbtn">시점: 아이소</button>
@@ -358,47 +361,54 @@ table.io td.mut{color:var(--mut)}
     <canvas id="trend" class="trend"></canvas>
     <div class="ctrl" id="ctrl"></div>
    </div>
-   <div class="box">
-    <h3>② 가상 PLC — 실시간 I/O · 운전 데이터</h3>
-    <div id="cosimbar" style="margin-bottom:8px"></div>
-    <div class="scanline" id="scaninfo"></div>
-    <table class="io" id="iotable"></table>
-    <div class="vrf"><h4>운전 데이터 — 실시간</h4></div>
-    <table class="io" id="opstable"></table>
-    <div class="vrf alhd"><h4>알람 · 이벤트 이력</h4><span><button id="csvbtn" class="xbtn">CSV ↓</button> <button id="rptbtn" class="xbtn">리포트 ↓</button></span></div>
-    <div class="alms" id="alarms"></div>
-    <div class="vrf" id="verify"></div>
+   <div class="box" id="workpanel">
+    <div class="wtabs" id="wtabs">
+     <button class="wtab on" data-w="ops">운전 데이터</button>
+     <button class="wtab" data-w="ladder">래더</button>
+     <button class="wtab" data-w="wiring">결선도</button>
+     <button class="wtab" data-w="setup">기기 셋업</button>
+     <button class="wtab" data-w="acs" id="acstab" style="display:none">AGV 관제</button>
+     <button class="wtab" data-w="alarm">알람</button>
+    </div>
+    <div class="wview on" id="w-ops">
+     <div id="cosimbar" style="margin-bottom:8px"></div>
+     <div class="scanline" id="scaninfo"></div>
+     <table class="io" id="iotable"></table>
+     <div class="vrf"><h4>운전 데이터 — 실시간</h4></div>
+     <table class="io" id="opstable"></table>
+     <div class="vrf" id="verify"></div>
+    </div>
+    <div class="wview" id="w-ladder">
+     <div class="hint" style="font-size:11.5px;color:var(--mut);margin-bottom:8px">통전 경로 실시간 — 기기 셋업에서 기기를 선택하면 해당 심볼이 하이라이트됩니다.</div>
+     <div id="ladder"></div>
+    </div>
+    <div class="wview" id="w-wiring">
+     <div class="hint" style="font-size:11.5px;color:var(--mut);margin-bottom:8px">PLC 단자 → TB-01 단자대 → 현장 기기 · 선번호/통전 라이브</div>
+     <div id="wiring"></div>
+    </div>
+    <div class="wview" id="w-setup">
+     <div class="hint" style="font-size:11.5px;color:var(--mut);margin-bottom:8px">3D에서 기기 라벨을 클릭하면 여기에 정밀 셋업 패널이 열립니다(비전 광학·티칭 펜던트·전기 파라미터).</div>
+     <div id="devpanel"></div>
+     <div id="pendant"></div>
+    </div>
+    <div class="wview" id="w-acs">
+     <div id="acsbody"></div>
+    </div>
+    <div class="wview" id="w-alarm">
+     <div class="vrf alhd" style="margin-top:0;border-top:0;padding-top:0"><h4>알람 · 이벤트 이력</h4><span><button id="csvbtn" class="xbtn">CSV ↓</button> <button id="rptbtn" class="xbtn">리포트 ↓</button></span></div>
+     <div class="alms" id="alarms" style="max-height:420px"></div>
+    </div>
    </div>
   </div>
-  <div class="demo">
-   <div class="box"><h3>③ 래더 다이어그램 — 통전 경로 실시간 표시</h3><div id="ladder"></div></div>
-   <div class="box"><h3>④ 평문 설명 · 누구나 이해</h3><pre id="explain"></pre></div>
-  </div>
   <details class="engd">
-   <summary>엔지니어 상세 — 생성된 IEC 61131-3 ST 코드 · 사전 검증 타임라인</summary>
+   <summary>문서 — 평문 설명 · 생성 ST 코드 · 사전 검증 타임라인</summary>
    <div class="demo" style="margin-top:12px">
-    <div class="box"><h3>결선도(직배선도) — 자동 생성 · 라이브 통전</h3><div id="wiring"></div></div>
+    <div class="box"><h3>평문 설명 · 누구나 이해</h3><pre id="explain"></pre></div>
     <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
     <div class="box"><h3>사전 검증 타임라인 (파랑=입력, 초록=출력, 시간→)</h3><div id="sim"></div></div>
    </div>
   </details>
   <div class="safety" id="safety" style="margin-top:16px"></div>
- </section>
-
- <section id="vs" class="reveal">
-  <h2>지멘스를 넘는 지점 — 그리고 정직한 현재 위치</h2>
-  <p class="sub">TIA Portal + PLCSIM Advanced + NX MCD 스택과 비교하면, 우리는 <b>설계 진입</b>과 <b>검증 자동화</b>에서 세대가 다릅니다.
-   이 페이지의 라이브 디지털트윈이 그 증거입니다 — 설치 0, 라이선스 0.</p>
-  <table class="cmp">
-   <tr><td></td><td class="hd">Siemens TIA + PLCSIM Adv. + NX MCD</td><td class="hd us">BNS ROBO 'Hands'</td></tr>
-   <tr><td class="lbl">설계 입력</td><td class="them">래더/SCL 수작업 — 숙련 엔지니어 필수</td><td class="us">한국어 평문 → 결정론 합성 (32 레시피, LLM은 추출만)</td></tr>
-   <tr><td class="lbl">논리 검증</td><td class="them">수동 시뮬레이션 — 시나리오를 사람이 작성</td><td class="us">Z3 SMT 자동 증명(인터록 UNSAT)·이중코일 0·도달성 — 출하 전 전수</td></tr>
-   <tr><td class="lbl">디지털트윈</td><td class="them">별도 라이선스 + 워크스테이션 + 모델링 공수</td><td class="us">브라우저 단독 — 위 8개 라인이 지금 이 페이지에서 실행 중</td></tr>
-   <tr><td class="lbl">고장 테스트</td><td class="them">물리 모델 수작업 구성</td><td class="us">원클릭 고장 주입(트립·센서 고착·카메라 정지) → 로직 내고장성 즉시 확인</td></tr>
-   <tr><td class="lbl">벤더 종속</td><td class="them">지멘스 생태계 전용</td><td class="us">LS XGK/XGI·OMRON·미쓰비시 + Siemens SCL — 5종 동시 출력, 국산 PLC 1st</td></tr>
-   <tr><td class="lbl">도입 비용·시간</td><td class="them">수천만 원 라이선스 + 수 주 교육</td><td class="us">평문 입력 → 분 단위로 검증된 설계</td></tr>
-   <tr><td class="lbl">실기 신뢰성·인증</td><td class="themwin">수십 년 트랙레코드·기능안전 인증 — 아직 지멘스 우위</td><td class="them">안전커널 + 하드와이어 원칙 고수, 인증은 로드맵 (정직한 격차)</td></tr>
-  </table>
  </section>
 
 </div>
@@ -823,7 +833,7 @@ function makePLC(ladder){
 /* ============================================================
    통전 래더 렌더러 — 전류 경로 실시간 + TON/CTU 현재값
    ============================================================ */
-function ladderLive(ladder,en,plc,addr){
+function ladderLive(ladder,en,plc,addr,hiSym){
   const LEFT=24,BUSL=70,SLOT=104,ROWH=58,PADT=28,COILW=90;
   const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const ON="#3fd97a",OFF="#33414f";
@@ -833,6 +843,8 @@ function ladderLive(ladder,en,plc,addr){
     g.push(`<line x1="${cx-6}" y1="${cy-11}" x2="${cx-6}" y2="${cy+11}" stroke="${bar}" stroke-width="2"/>`);
     g.push(`<line x1="${cx+6}" y1="${cy-11}" x2="${cx+6}" y2="${cy+11}" stroke="${bar}" stroke-width="2"/>`);
     if(nc)g.push(`<line x1="${cx-9}" y1="${cy+11}" x2="${cx+9}" y2="${cy-11}" stroke="${bar}" stroke-width="2"/>`);
+    if(hiSym&&el.symbol.indexOf(hiSym)===0)
+      g.push(`<rect x="${cx-30}" y="${cy-26}" width="60" height="48" rx="6" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.2" stroke-dasharray="4 3"/>`);
     g.push(`<text x="${cx}" y="${cy-16}" fill="${onp?"#bff5cd":"#dce4f0"}" font-size="11" text-anchor="middle">${esc(el.symbol)}</text>`);
     const a=(addr&&addr[el.symbol.replace(/\.Q$/,"")])||"";
     if(a)g.push(`<text x="${cx}" y="${cy+26}" fill="#6f7a8a" font-size="10" text-anchor="middle">${esc(a)}</text>`);
@@ -853,6 +865,8 @@ function ladderLive(ladder,en,plc,addr){
     }
     const set=et==="COIL_SET",rst=et==="COIL_RESET";
     const c=on?(rst?"#ff8f8f":ON):"#3a4a5a";
+    if(hiSym&&o.symbol.indexOf(hiSym)===0)
+      g.push(`<rect x="${cx-6}" y="${cy-28}" width="84" height="54" rx="6" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.2" stroke-dasharray="4 3"/>`);
     g.push(`<text x="${cx+35}" y="${cy-16}" fill="${on?(rst?"#ffb3b3":"#7ee787"):"#9fb3c8"}" font-size="11" text-anchor="middle">${esc(o.symbol)}${set?" (S)":rst?" (R)":""}</text>`);
     g.push(`<path d="M ${cx} ${cy-12} Q ${cx+14} ${cy} ${cx} ${cy+12}" fill="none" stroke="${c}" stroke-width="${on?2.6:2}"/>`);
     g.push(`<path d="M ${cx+70} ${cy-12} Q ${cx+56} ${cy} ${cx+70} ${cy+12}" fill="none" stroke="${c}" stroke-width="${on?2.6:2}"/>`);
@@ -2056,7 +2070,7 @@ agv:{
  wiresOut:[["HOMING",[[14.72,4.95],[3.0,4.4],[2.6,3.6]]],
            ["MOVING",[[14.72,5.0],[8.0,4.5],[8.0,3.6]]],
            ["IN_POS_LAMP",[[14.72,5.05],[13.5,4.4],[13.5,3.6]]]],
- init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0}),
+ init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[]}),
  sense(st,plc){
    plc.set("ESTOP_OK",!cur.faults.estop);
  },
@@ -2071,12 +2085,21 @@ agv:{
    if(o.IN_POS_LAMP){
      const p2=tP.acc/tP.preset;
      if(p2>0.45&&!st.unloaded){st.unloaded=true;st.stack=(st.stack%6)+1;st.done++;
-       st.carry=false;st.loadAnim=0;}
+       st.carry=false;st.loadAnim=0;
+       if(st.missions.length){const ms=st.missions.shift();
+         st.mlog.unshift({id:ms.id,msg:"완료",t:new Date().toLocaleTimeString("ko-KR")});
+         st.mlog=st.mlog.slice(0,8);}}
      st.prevPos=true;
    }else{
      if(st.prevPos){st.unloaded=false;}
      st.prevPos=false;
    }
+   /* 배터리 물리: 주행 방전 / 도크 정차 충전 */
+   const driving=o.MOVING||o.HOMING;
+   const atDock=Math.abs(st.x-2.6)<0.3&&!driving;
+   st.batt=Math.max(0,Math.min(100,st.batt+(atDock?1.2:driving?-0.45:-0.02)*dt));
+   if(st.batt<20&&!st.lowWarn){st.lowWarn=true;logEv("warn","ACS: AGV-901 배터리 "+st.batt.toFixed(0)+"% — 미션 차단·충전 복귀");}
+   if(st.batt>40)st.lowWarn=false;
  },
  draw(ctx,st,val,t){
    /* 전용 섹터 바닥: 메인 유도선 + 스테이션 마커 */
@@ -2308,7 +2331,10 @@ const AUTO={
  duty_standby(){return null;},
  motion_home_move(L){
    const busy=["HOMING","MOVING","IN_POS_LAMP"].some(x=>L.plc.val(x));
-   if(!busy&&!L.faults.estop)return["CYCLE_START",0.4,3];
+   if(busy||L.faults.estop)return null;
+   if(L.sst.batt<20)return null; /* ACS: 저전압 미션 차단(도크 충전 대기) */
+   if(!L.sst.missions.length)L.sst.missions.push({id:"M"+String(++L.sst.mseq||(L.sst.mseq=1)).padStart(3,"0"),src:"ST-H",dst:"ST-B"});
+   return["CYCLE_START",0.4,3];
  },
  cascade_conveyor(L){if(L.sst.spd.every(v=>v<0.02)&&!L.plc.val("CONV_DOWN"))return["START_PB",0.4,6];}
 };
@@ -2460,6 +2486,39 @@ function updateDOM(r,dt,t){
     if(el2)el2.textContent=String(get());
   }
   if(devOpen)renderDevLive();
+  /* AGV 관제(ACS) */
+  document.getElementById("acstab").style.display=cur.id==="motion_home_move"?"block":"none";
+  if(cur.id==="motion_home_move"){
+    const st2=cur.sst;
+    const busy=["HOMING","MOVING","IN_POS_LAMP"].some(x=>cur.plc.val(x));
+    const stt2=cur.plc.val("MOVING")?"운송":cur.plc.val("HOMING")?"복귀":cur.plc.val("IN_POS_LAMP")?"도킹":st2.batt<20?"충전 대기":"대기";
+    const bc=st2.batt<20?"#f85149":st2.batt<40?"#f0c26b":"#3fb950";
+    document.getElementById("acsbody").innerHTML=
+     `<div class="vrf" style="margin-top:0;border-top:0;padding-top:0"><h4>ACS 상위 제어기 — 차량 현황</h4></div>`+
+     `<table class="io"><tr><td class="mut">차량</td><td class="mut">상태</td><td class="mut">위치</td><td class="mut">배터리</td><td class="mut">적재</td></tr>`+
+     `<tr><td><b>AGV-901</b></td><td style="color:${busy?"#3fb950":"#8b98a8"}">${stt2}</td>`+
+     `<td class="mut">${st2.x.toFixed(1)} m</td>`+
+     `<td><div class="tbar" style="width:70px;display:inline-block;vertical-align:middle"><i style="width:${st2.batt.toFixed(0)}%;background:${bc}"></i></div> <span style="color:${bc}">${st2.batt.toFixed(0)}%</span></td>`+
+     `<td class="mut">${st2.carry?"파레트 1":"공차"}</td></tr></table>`+
+     `<div class="vrf"><h4>미션 큐</h4></div>`+
+     (st2.missions.length?`<table class="io">`+st2.missions.map((ms,i)=>
+       `<tr><td><b>${ms.id}</b></td><td class="mut">${ms.src} → ${ms.dst}</td><td style="color:${i===0&&busy?"#3fb950":"#8b98a8"}">${i===0&&busy?"실행 중":"대기"}</td></tr>`).join("")+`</table>`
+      :'<div class="hint" style="font-size:12px;color:var(--mut)">대기 미션 없음</div>')+
+     `<div style="display:flex;gap:8px;margin-top:10px">`+
+     `<button class="xbtn" id="acsgo" ${st2.batt<20?"disabled":""}>미션 발행(ST-H → ST-B)</button>`+
+     `<button class="xbtn" id="acsstop">전 미션 취소</button></div>`+
+     (st2.batt<20?'<div class="alm warn" style="margin-top:8px"><i></i><span>저전압 — 충전 완료(40%)까지 미션 차단</span></div>':"")+
+     `<div class="vrf"><h4>미션 이력</h4></div>`+
+     (st2.mlog.length?st2.mlog.map(l2=>`<div class="alm"><i></i><span class="t">${l2.t}</span><span>${l2.id} ${l2.msg}</span></div>`).join(""):'<div class="hint" style="font-size:12px;color:var(--mut)">이력 없음</div>');
+    const g1=document.getElementById("acsgo");
+    if(g1)g1.onclick=()=>{
+      const st3=cur.sst;
+      st3.missions.push({id:"M"+String(++st3.mseq||(st3.mseq=1)).padStart(3,"0"),src:"ST-H",dst:"ST-B"});
+      logEv("op","ACS 미션 발행 — ST-H → ST-B");
+    };
+    const g2=document.getElementById("acsstop");
+    if(g2)g2.onclick=()=>{cur.sst.missions=[];logEv("warn","ACS 전 미션 취소");};
+  }
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
    ||'<div class="alm"><i></i><span class="t">—</span><span>이벤트 없음</span></div>';
@@ -2468,7 +2527,7 @@ function updateDOM(r,dt,t){
     +Object.values(cur.plc.counters).map(cn=>cn.cnt).join();
   if(key!==cur.lastKey){
     cur.lastKey=key;
-    document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr);
+    document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr,devSym());
     const wd=document.getElementById("wiring");
     if(wd)wd.innerHTML=wiringSvg(cur);
   }
@@ -2559,15 +2618,22 @@ function chipAt(e){
   return CHIPS.find(c=>(mx>=c.bx-3&&mx<=c.bx+c.w+3&&my>=c.by-3&&my<=c.by+c.h+3)
     ||Math.hypot(mx-c.ax,my-c.ay)<14);
 }
+function wtab(name){
+  document.querySelectorAll(".wtab").forEach(b=>b.classList.toggle("on",b.dataset.w===name));
+  document.querySelectorAll(".wview").forEach(v=>v.classList.toggle("on",v.id==="w-"+name));
+}
+document.getElementById("wtabs").addEventListener("click",e=>{
+  const b=e.target.closest(".wtab");
+  if(b)wtab(b.dataset.w);
+});
 function pickDevice(e){
   const hit=chipAt(e);
-  if(hit){devOpen=hit.tg;
-    const rb=cvs.getBoundingClientRect();
-    const el=document.getElementById("devpanel");
-    el.style.display="block";
-    el.style.left=Math.max(6,Math.min(e.clientX-rb.left+14,cvs.clientWidth-248))+"px";
-    el.style.top=Math.max(6,Math.min(e.clientY-rb.top+6,cvs.clientHeight-160))+"px";
+  if(hit){
+    devOpen=hit.tg;
+    document.getElementById("devpanel").style.display="block";
     renderDev();
+    cur.lastKey="";
+    wtab("setup");
   } else hideDev();
 }
 function renderDev(){
@@ -2665,6 +2731,11 @@ function openPendant(){
   document.getElementById("pd_reset").onclick=()=>{
     rc.off=[0,0,0];document.getElementById("pd_p3").textContent=fmt();
     logEv("op","RB-401 원점 복귀(티칭 리셋)");};
+}
+function devSym(){
+  if(!devOpen)return null;
+  const ent=Object.entries(cur.m.tags||{}).find(([,i2])=>i2.tag===devOpen);
+  return ent?ent[0]:null;
 }
 function renderDevLive(){
   if(!devOpen)return;
@@ -2857,7 +2928,7 @@ function show(id){
   document.getElementById("safety").textContent=
     "⚠️ 안전 경계: 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061). 3D 설비는 디지털트윈 시각화입니다.";
   cur.lastKey="";
-  document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr);
+  document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr,devSym());
   const wd0=document.getElementById("wiring");
   if(wd0)wd0.innerHTML=wiringSvg(cur);
   updateOverview();
