@@ -151,6 +151,12 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 .pb.down{transform:translateY(4px);box-shadow:inset 0 5px 12px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.5)}
 .pbw small{color:var(--mut);font-size:11px;font-family:ui-monospace,monospace}
 .ctrl .hint{color:var(--mut);font-size:12.5px;flex:1;min-width:160px;align-self:center}
+.trend{width:100%;height:76px;display:block;margin-top:10px;border:1px solid #1d2733;border-radius:9px;background:rgba(10,15,22,.6)}
+.alms{margin-top:8px;max-height:168px;overflow:auto}
+.alm{font:11px/1.5 ui-monospace,monospace;color:#9fb3c8;padding:3.5px 2px;border-bottom:1px dashed rgba(38,48,61,.45);display:flex;gap:7px;align-items:baseline}
+.alm .t{color:#5d6c7c;min-width:58px}
+.alm i{width:7px;height:7px;border-radius:50%;background:#3fb950;flex:none;align-self:center}
+.alm.op i{background:#58a6ff}.alm.warn{color:#f0c26b}.alm.warn i{background:#d9a514}
 .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
 @media(max-width:860px){.kpis{grid-template-columns:repeat(3,1fr)}}
 .kpi{background:rgba(10,15,22,.7);border:1px solid #1d2733;border-radius:9px;padding:7px 9px;min-width:0}
@@ -261,6 +267,7 @@ table.io td.mut{color:var(--mut)}
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
     <canvas id="scene"></canvas>
     <div class="kpis" id="kpis"></div>
+    <canvas id="trend" class="trend"></canvas>
     <div class="ctrl" id="ctrl"></div>
    </div>
    <div class="box">
@@ -269,6 +276,8 @@ table.io td.mut{color:var(--mut)}
     <table class="io" id="iotable"></table>
     <div class="vrf"><h4>운전 데이터 — 실시간</h4></div>
     <table class="io" id="opstable"></table>
+    <div class="vrf"><h4>알람 · 이벤트 이력</h4></div>
+    <div class="alms" id="alarms"></div>
     <div class="vrf" id="verify"></div>
    </div>
   </div>
@@ -1199,6 +1208,46 @@ SCENES.weld.prod=st=>st.count;     SCENES.weld.wip=st=>(st.partOn||st.out!==unde
 SCENES.batch.prod=st=>st.count;    SCENES.batch.wip=st=>st.level>0.01?1:0;
 SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCENES.cascade.speed=st=>Math.max(...st.spd);
 
+SCENES.counter.quality=st=>(st.good+st.ejected)>0?st.good/(st.good+st.ejected):1;
+SCENES.counter.avail=()=>1; /* 검수 라인 벨트는 상시 가동(배출 실린더는 간헐 작동) */
+
+/* 알람·이벤트 로그 */
+function logEv(lv,msg){
+  if(!cur)return;
+  const t=(performance.now()-cur.kpi.t0)/1000;
+  cur.log.unshift({lv,msg,t:"T+"+t.toFixed(1)+"s"});
+  if(cur.log.length>60)cur.log.pop();
+}
+
+/* 택타임·전력 추이 차트 */
+function drawTrend(){
+  const tc=document.getElementById("trend");if(!tc)return;
+  const dpr=window.devicePixelRatio||1,W=tc.clientWidth,H=tc.clientHeight;
+  if(tc.width!==(W*dpr|0)){tc.width=W*dpr;tc.height=H*dpr;}
+  const c=tc.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,W,H);
+  c.font="10px ui-monospace,monospace";c.textAlign="left";c.fillStyle="#5d6c7c";
+  c.fillText("택타임 추이 s/개 (초록) · 소비전력 (파랑) · 점선 = 목표 택타임",8,13);
+  const D=cur.trend,cfg=KPI[cur.id]||{};
+  const vals=D.map(p=>p.takt).filter(v=>v!==null&&!isNaN(v));
+  if(D.length<3||!vals.length){c.fillText("가동 데이터 수집 중…",8,30);return;}
+  const vmax=Math.max(cfg.tt||0,...vals)*1.3+0.001;
+  const X=i=>8+(W-16)*i/(D.length-1), Y=v=>H-7-(H-28)*v/vmax;
+  if(cfg.tt){
+    c.strokeStyle="rgba(217,165,20,.65)";c.setLineDash([4,4]);c.lineWidth=1;
+    c.beginPath();c.moveTo(8,Y(cfg.tt));c.lineTo(W-8,Y(cfg.tt));c.stroke();c.setLineDash([]);
+  }
+  const kmax=Math.max(...D.map(p=>p.kw),0.1)*1.2;
+  c.strokeStyle="rgba(88,166,255,.65)";c.lineWidth=1.2;c.beginPath();
+  D.forEach((p,i)=>{const x=X(i),y=H-7-(H-28)*p.kw/kmax;i?c.lineTo(x,y):c.moveTo(x,y);});
+  c.stroke();
+  c.strokeStyle="#3fd97a";c.lineWidth=1.7;c.beginPath();let st0=false;
+  D.forEach((p,i)=>{if(p.takt===null||isNaN(p.takt))return;const x=X(i),y=Y(p.takt);st0?c.lineTo(x,y):(c.moveTo(x,y),st0=true);});
+  c.stroke();
+  const last=vals[vals.length-1];
+  c.fillStyle="#3fd97a";c.textAlign="right";
+  c.fillText(last.toFixed(1)+"s",W-8,Math.max(20,Y(last)-4));
+}
+
 /* ============================================================
    메인 루프 — 센서 → 스캔 → 물리 → 렌더 → DOM(쓰로틀)
    ============================================================ */
@@ -1255,7 +1304,11 @@ function updateDOM(r,dt,t){
   for(const[sym,info]of Object.entries(cur.m.tags||{})){
     const stt=cur.stats[sym], on=cur.plc.val(sym);
     const cur_a=on?(info.rated*(0.93+0.05*Math.sin(t*6+idx))).toFixed(1):"0.0";
-    const load=on?Math.round(62+18*Math.sin(t*2.2+idx*2)):0;
+    const load=on?Math.round(58+20*Math.sin(t*0.5+idx*2)+8*Math.sin(t*2.2+idx)):0;
+    if(on&&load>80&&(!stt.lastOvl||t-stt.lastOvl>20)){
+      stt.lastOvl=t;
+      logEv("warn",`${info.tag} 부하 ${load}% — 과부하 주의`);
+    }
     rows.push(`<tr><td><b>${info.tag}</b></td><td class="mut">${info.name}</td>`+
       `<td style="color:${on?"#3fb950":"#8b98a8"}">${on?"RUN":"STOP"}</td>`+
       `<td class="mut">${stt.rt.toFixed(0)}s</td><td class="mut">${stt.starts}</td>`+
@@ -1276,12 +1329,22 @@ function updateDOM(r,dt,t){
   }
   const elapsed=Math.max(0.001,(nowMs-K.t0)/1000);
   const mainSym=Object.keys(cur.m.tags||{})[0];
-  const util=mainSym&&cur.stats[mainSym]?Math.min(100,cur.stats[mainSym].rt/elapsed*100):0;
+  const util=cur.scene.avail?cur.scene.avail(cur.sst)*100
+    :(mainSym&&cur.stats[mainSym]?Math.min(100,cur.stats[mainSym].rt/elapsed*100):0);
   const wip=cur.scene.wip?cur.scene.wip(cur.sst):0;
   const spd=cur.scene.speed?cur.scene.speed(cur.sst):null;
   const uph=K.taktAvg?3600/K.taktAvg:0;
   const fmt=(v,d)=>v===null||isNaN(v)?"—":v.toFixed(d);
+  const A=util/100;
+  const Pf=K.taktAvg&&cfg.tt?Math.min(1,cfg.tt/K.taktAvg):null;
+  const Q=cur.scene.quality?cur.scene.quality(cur.sst):1;
+  const oee=Pf!==null?A*Pf*Q*100:null;
+  if(K.taktAvg&&cfg.tt){
+    if(K.taktAvg>cfg.tt*1.3&&!cur.taktAlarm){cur.taktAlarm=true;logEv("warn",`택타임 ${K.taktAvg.toFixed(1)}s — 목표 ${cfg.tt}s 초과`);}
+    if(K.taktAvg<cfg.tt*1.1)cur.taktAlarm=false;
+  }
   const cards=[
+   [oee!==null?fmt(oee,0)+"%":"측정중",`OEE = A ${fmt(util,0)}% × P ${Pf!==null?fmt(Pf*100,0):"—"}% × Q ${fmt(Q*100,0)}%`,oee!==null&&oee<55?"amber":""],
    [String(prodN),`생산수량 (${cfg.unit})`,""],
    [K.taktAvg?fmt(K.taktAvg,1)+"s":"측정중",`택타임 / ${cfg.unit}`+(cfg.tt?` · 목표 ${cfg.tt}s`:""), K.taktAvg&&cfg.tt&&K.taktAvg>cfg.tt*1.25?"amber":""],
    [uph?String(Math.round(uph)):"—","시간당 생산 UPH",""],
@@ -1294,6 +1357,15 @@ function updateDOM(r,dt,t){
    [fmt(K.kwh*1000,1)+" Wh","누적 전력량","blue"]];
   document.getElementById("kpis").innerHTML=cards.map(([v,l,cl])=>
    `<div class="kpi"><b class="${cl}">${v}</b><span>${l}</span></div>`).join("");
+  if(nowMs-cur.lastTrendT>1500){
+    cur.lastTrendT=nowMs;
+    cur.trend.push({takt:K.taktAvg,kw:K.kw});
+    if(cur.trend.length>120)cur.trend.shift();
+    drawTrend();
+  }
+  document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
+   `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
+   ||'<div class="alm"><i></i><span class="t">—</span><span>이벤트 없음</span></div>';
   const key=JSON.stringify(r.en)
     +Object.values(cur.plc.timers).map(tm=>Math.round(tm.acc*10)).join()
     +Object.values(cur.plc.counters).map(cn=>cn.cnt).join();
@@ -1310,6 +1382,27 @@ function loop(now){
   cur.us=cur.us?cur.us*0.9+r.us*0.1:r.us;
   const o={};cur.d.sim.outputs.forEach(s=>{o[s]=cur.plc.val(s);
     const stt=cur.stats[s];if(stt){if(o[s]){stt.rt+=dt;if(!stt.prev)stt.starts++;}stt.prev=o[s];}});
+  for(const sym of cur.d.sim.outputs){
+    const on=o[sym];
+    if(on!==!!cur.prevO[sym]){
+      const tg=cur.m.tags[sym]?cur.m.tags[sym].tag+" "+cur.m.tags[sym].name:sym;
+      logEv(on?"info":"op",tg+(on?" 기동":" 정지"));
+      cur.prevO[sym]=on;
+    }
+  }
+  for(const b of cur.m.buttons){
+    const on=cur.plc.val(b.sym);
+    if(on&&!cur.prevI[b.sym])logEv(b.c==="#c93c3c"?"warn":"op","조작: "+b.label+" ("+b.sym+" ON)");
+    cur.prevI[b.sym]=on;
+  }
+  for(const[sym,tm]of Object.entries(cur.plc.timers)){
+    if(tm.q&&!cur.prevQ[sym])logEv("info",sym+" 타이머 완료("+tm.preset+"s) — 단계 전환");
+    cur.prevQ[sym]=tm.q;
+  }
+  for(const[sym,cn]of Object.entries(cur.plc.counters)){
+    if(cn.q&&!cur.prevQ[sym])logEv("warn",sym+" 카운트 "+cn.preset+" 도달 — 배출 작동");
+    cur.prevQ[sym]=cn.q;
+  }
   let kw=0;
   for(const[sym,info]of Object.entries(cur.m.tags||{}))
     if(cur.plc.val(sym))kw+=1.732*380*info.rated*0.85/1000;
@@ -1333,9 +1426,11 @@ function show(id){
   const d=DEMO[id],m=META[id];
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.id===id));
   cur={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
-    kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0}};
+    kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0},
+    log:[],trend:[],lastTrendT:0,prevO:{},prevI:{},prevQ:{},taktAlarm:false};
   cur.sst=cur.scene.init();
   d.sim.outputs.forEach(s=>cur.stats[s]={rt:0,starts:0,prev:false});
+  logEv("info","라인 투입 — "+d.title);
   const ctrl=document.getElementById("ctrl");ctrl.innerHTML="";
   m.buttons.forEach(b=>{
     const w=document.createElement("div");w.className="pbw";
