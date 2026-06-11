@@ -291,7 +291,7 @@ const BUILDERS={
   const SHX=6.3,SHY=2.95,SHZ=0.66,L1=0.85,L2=0.84;
   env.upd=(L,dt,t)=>{
     const st=L.sst,a0=st.arm,a=a0*a0*(3-2*a0);
-    wbts.forEach(b2=>b2.drive(0.5,dt)); /* 엔진 셀 벨트 0.5m/s 동일 */
+    wbts.forEach(b2=>b2.drive(st.feeding?1.1:0,dt)); /* 공물 이동 시에만 1.1m/s — 엔진 1:1 */
     /* 엔진과 동일한 타깃 산출(티칭 오프셋 + 위브) */
     const rc=L.devCfg["RB-401"]||{};
     const ro=rc.off||[0,0,0];
@@ -312,7 +312,8 @@ const BUILDERS={
     const a2=Math.acos((L1*L1+L2*L2-d*d)/(2*L1*L2));
     rob.sh.rotation.z=a1-Math.PI/2;     /* 0=수직 기준 */
     rob.el.rotation.z=a2-Math.PI;       /* 펴짐=π */
-    rob.arc.intensity=L.plc.val("WELD")?(2.5+Math.random()*3):0;
+    const arcing=L.plc.val("WELD")&&st.arm>0.93; /* 토치 도달 후에만 아크 */
+    rob.arc.intensity=arcing?(2.5+Math.random()*3):0;
     const cg=st.clamp;
     const c1=W2T(7.27,1.96+cg*0.16,0.93),c2=W2T(7.27,2.7-cg*0.16,0.93);
     clamps[0].position.set(c1[0],c1[1],c1[2]);
@@ -320,7 +321,7 @@ const BUILDERS={
     const px=st.out!==undefined?st.out:st.partX;
     part.visible=(st.out!==undefined||st.partX>1.55);
     const pq=W2T(px,2.34,0.84);part.position.set(pq[0],pq[1],pq[2]);
-    if(L.plc.val("WELD")&&sp.length<240)
+    if(arcing&&sp.length<240)
       for(let i=0;i<5;i++)sp.push({x:goal[0],y:goal[1],z:goal[2],
         vx:(Math.random()-.5)*2.4,vy:Math.random()*1.8,vz:(Math.random()-.5)*2.4,life:0.5});
     const pos=sparks.geometry.attributes.position.array;
