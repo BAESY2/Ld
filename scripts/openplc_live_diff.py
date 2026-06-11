@@ -18,6 +18,7 @@
   OPENPLC_PASS   웹 로그인 비밀번호      (기본 openplc)
   OPENPLC_UNIT   Modbus unit id          (기본 1)
   OPENPLC_RECIPE 검증할 wizard 레시피 id (기본 motor_start_stop)
+  OPENPLC_NL     자연어 한 줄(설정 시 레시피 대신 frame_to_spec 컴파일러 산출물 검증)
   OPENPLC_SKIP_LOAD  '1' 이면 업로드/컴파일/실행을 건너뛰고 기존 실행을 그대로 검증
 
 핵심 발견(주소맵 주의 — docs/OPENPLC_LIVE.md 참조):
@@ -27,7 +28,11 @@
     배치한다(코일번호 = b*8 + c, 단일 선형 코일 테이블).
 
 재현 명령(로컬 도커 예):
+  # 레시피 경로
+  OPENPLC_HOST=127.0.0.1 OPENPLC_PORT=5502 python scripts/openplc_live_diff.py
+  # 자연어 경로(헤드라인 — 한국어 한 줄이 실 IEC 런타임에서 비트 일치)
   OPENPLC_HOST=127.0.0.1 OPENPLC_PORT=5502 \
+    OPENPLC_NL='저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 비상정지 누르면 다 꺼' \
     python scripts/openplc_live_diff.py
 """
 
@@ -391,14 +396,27 @@ def run(recipe: str) -> int:
                 k, v = pair.split("=", 1)
                 answers[k.strip()] = v.strip()
 
-    spec = build_spec(recipe, answers)
+    # 자연어 경로(OPENPLC_NL) — 레시피 대신 *컴파일러* 산출물을 실 PLC 에 올려 대조한다.
+    # 제조사 재현용 헤드라인 경로: 한국어 한 줄 → frame_to_spec → 실 IEC 런타임 비트 일치.
+    nl = os.environ.get("OPENPLC_NL", "").strip()
+    label = recipe
+    if nl:
+        from app.compile_frame import frame_to_spec
+        result = frame_to_spec(nl)
+        if not result.confident:
+            print(f"자연어 컴파일 보류(confident=False): {result.unresolved}")
+            return 2
+        spec = result.spec
+        label = "nl"
+    else:
+        spec = build_spec(recipe, answers)
     _check_reserved(spec)
     body = synthesize_st(spec)
     coils = build_coil_map(spec)
     st_text = wrap_st_for_openplc(spec, body, coils)
 
     print("=" * 68)
-    print(f"OpenPLC LIVE 차분 검증 — recipe={recipe}")
+    print(f"OpenPLC LIVE 차분 검증 — {'자연어' if nl else 'recipe'}={nl or recipe}")
     print(f"  host={host} modbus_port={port} web={web_base} unit={unit}")
     print("-" * 68)
     print("심볼 → 코일 매핑(%QX):")
@@ -412,7 +430,7 @@ def run(recipe: str) -> int:
         web = OpenPlcWeb(web_base, user, password)
         web.login()
         print("업로드→컴파일→실행 중...")
-        web.upload_compile_run(st_text, f"livediff_{recipe}")
+        web.upload_compile_run(st_text, f"livediff_{label}")
         print("OpenPLC 컴파일 성공 + 실행 시작.")
         time.sleep(1.0)  # 런타임 부팅·Modbus 서버 기동 여유
     else:

@@ -102,3 +102,32 @@ def test_live_counter_agrees(monkeypatch: pytest.MonkeyPatch) -> None:
     """실 OpenPLC 와 우리 시뮬레이터가 카운터(CTU) 레시피에서 비트 단위로 일치."""
     monkeypatch.setenv("OPENPLC_ANSWERS", "count=3")
     assert run("count_eject") == 0
+
+
+def test_nl_path_wraps_for_openplc_deterministically() -> None:
+    """자연어 경로(OPENPLC_NL) — 컴파일러 산출물이 OpenPLC 적재용 ST 로 결정론 래핑된다.
+
+    하드웨어 없이 항상 도는 단위 검증: frame_to_spec → 코일맵 → wrap 이 유효한
+    OpenPLC ST(PROGRAM/CONFIGURATION)이고, 입력/출력 코일이 겹치지 않으며, 비상정지
+    가드가 보존된다. (실 런타임 비트 일치는 OPENPLC_HOST 설정 시 위 라이브 테스트가 검증.)
+    """
+    from app.compile_frame import frame_to_spec
+    from scripts.openplc_live_diff import _check_reserved, build_coil_map, wrap_st_for_openplc
+
+    text = "저수위 되면 펌프 켜고 고수위 되면 펌프 끄고 비상정지 누르면 다 꺼"
+    r = frame_to_spec(text)
+    assert r.confident
+    _check_reserved(r.spec)
+    body = synthesize_st(r.spec)
+    coils = build_coil_map(r.spec)
+    wrapped = wrap_st_for_openplc(r.spec, body, coils)
+
+    assert "PROGRAM prog0" in wrapped and "CONFIGURATION Config0" in wrapped
+    assert "PUMP" in coils.outputs and {"LO_LS", "HI_LS", "ESTOP"} <= set(coils.inputs)
+    # 입력·출력 코일은 절대 겹치지 않는다(이중 의미 차단).
+    assert set(coils.outputs.values()).isdisjoint(set(coils.inputs.values()))
+    assert "ESTOP" in wrapped  # 비상정지 가드가 OpenPLC 사본에도 보존
+    # 결정론: 같은 문장 → 같은 ST.
+    assert wrapped == wrap_st_for_openplc(
+        frame_to_spec(text).spec, synthesize_st(frame_to_spec(text).spec),
+        build_coil_map(frame_to_spec(text).spec))

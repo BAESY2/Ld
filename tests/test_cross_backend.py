@@ -148,3 +148,34 @@ def test_corpus_excludes_analog_comparators() -> None:
         assert not sres.signals, (
             f"불리언 코퍼스에 아날로그 비교기 혼입: {text!r} signals={sres.signals}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 표준 제어 회로 카탈로그 — 증명 회로를 독립 백엔드(XGK IL)에서도 동치 확인
+# (백서·매뉴얼의 카탈로그 주장을 *교차 실행*으로 한 겹 더 검증한다)
+# ---------------------------------------------------------------------------
+CATALOG = {
+    "self_hold": "버튼 누르면 모터 돌고 정지 누르면 멈춰",
+    "estop": "버튼 누르면 모터 돌고 비상정지 누르면 다 꺼",
+    "fwd_rev": "정회전 돌리고 역회전 돌리고 동시에 안 되게",
+    "alternation": "펌프 두 대 교대로 운전해",
+    "interlock": "히터 켜고 쿨러 켜는데 동시에 안 켜지게",
+    "hysteresis": "저수위 되면 펌프 켜고 고수위 되면 펌프 꺼",
+}
+
+
+@pytest.mark.parametrize("name", sorted(CATALOG))
+def test_standard_circuit_catalog_sim_matches_xgk(name: str) -> None:
+    """표준회로(자기유지·E-STOP·정역·교번·인터락·히스테리시스)가 PySim↔XGK 비트 동일."""
+    st, xgk = _build(CATALOG[name])
+    inputs = _input_symbols(st)
+    tl = staggered_timeline(inputs)
+    sres = simulate(st, tl, duration_ms=DURATION_MS, step_ms=STEP_MS)
+    xres = simulate_xgk(xgk, tl, duration_ms=DURATION_MS, step_ms=STEP_MS)
+    assert sres.outputs and sorted(sres.outputs) == sorted(xres.outputs), (
+        f"{name}: 출력 심볼 불일치 ST={sres.outputs} XGK={xres.outputs}"
+    )
+    for o in sres.outputs:
+        assert sres.output_trace(o) == xres.output_trace(o), (
+            f"{name}: 출력 '{o}' 트레이스가 PySim↔XGK 에서 갈라짐"
+        )
