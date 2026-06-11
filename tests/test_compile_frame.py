@@ -439,3 +439,32 @@ def test_containment_proof_is_not_vacuous() -> None:
     r = frame_to_spec("센서 감지되면 히터 켜고 버튼 누르면 쿨러 켜")
     st = synthesize_st(r.spec)
     assert prove_containment(r.spec, st, [("HEATER", "COOLER")]) == frozenset()
+
+
+def test_two_hand_safety_start() -> None:
+    """양수(투핸드) 안전 기동 — 동시성 창 0.5s·비동시 락·해제 후 재시도(ISO 13851 의미)."""
+    from app.simulator import simulate
+
+    r = frame_to_spec("양손 버튼 동시에 눌러야 프레스 내려가게")
+    assert r.confident
+    st = synthesize_st(r.spec)
+    assert "PRESS_M := BTN_L AND BTN_R AND NOT LOCK;" in st  # 출력 중 양손 구속(구조)
+    assert verify(r.spec, st).passed and detect_double_coils(st) == {}
+
+    def trace(tl: list, dur: int = 3000) -> list:
+        return simulate(st, tl, duration_ms=dur, step_ms=100).output_trace("PRESS_M")
+
+    assert any(trace([(200, {"BTN_L": True, "BTN_R": True})]))            # 동시 → 기동
+    assert not any(trace([(100, {"BTN_L": True}), (900, {"BTN_R": True})]))  # 0.8s 비동시 → 차단
+    assert any(trace([(100, {"BTN_L": True}), (400, {"BTN_R": True})]))   # 0.3s 창내 → 기동
+    rearm = trace([(100, {"BTN_L": True}), (900, {"BTN_R": True}),
+                   (1500, {"BTN_L": False, "BTN_R": False}),
+                   (2000, {"BTN_L": True, "BTN_R": True})])
+    assert any(rearm[20:])                                               # 둘 다 뗀 뒤 재기동
+    rel = trace([(200, {"BTN_L": True, "BTN_R": True}), (1000, {"BTN_R": False})])
+    assert not any(rel[11:])                                             # 한손 해제 → 즉시 정지
+
+
+def test_two_hand_not_misrouted_by_casual_text() -> None:
+    """'양손 조심해' 같은 비제어 문장은 투핸드로 오라우팅되지 않는다(강단서 한정)."""
+    assert frame_to_spec("양손 조심해").confident is False

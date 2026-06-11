@@ -48,6 +48,7 @@ _DEV_OUT = {
     "WASHER": "WASHER", "PACKER": "PACKER",
     # 정역 운전(전동기 방향)
     "DIR_FWD": "MOTOR_FWD", "DIR_REV": "MOTOR_REV",
+    "PRESS_MACHINE": "PRESS_M",
 }
 # 조건 기기 → (트리거 입력 심볼). 아날로그/계수는 별도(비교기/카운터)로 푼다.
 _DEV_TRIG = {
@@ -124,7 +125,7 @@ def _resolve_cond(c: IntentClause, b: _Builder) -> str | None:
 _NON_ACTUATABLE = {
     "PRESSURE", "TEMP", "LEVEL", "LEVEL_LO", "LEVEL_HI", "FAULT", "BUTTON",
     "SENSOR", "SWITCH", "LIMIT", "PROX", "PHOTO", "PART", "TANK", "BOTTLE",
-    "VISION", "NG", "ESTOP",
+    "VISION", "NG", "ESTOP", "TWOHAND", "CASCADE", "ALTERNATE", "STAR_DELTA",
 }
 # 물리 구동을 뜻하는 동작 술어(이것이 비액추에이터에 걸리면 부적합).
 _ACTUATION_PREDS = _ON | _OFF
@@ -395,6 +396,54 @@ def _compile_cascade(frame: IntentFrame) -> CompileResult:
     return CompileResult(spec=spec, unresolved=[], confident=frame.confident)
 
 
+
+def _compile_two_hand(frame: IntentFrame) -> CompileResult:
+    """'양손 버튼 동시에 눌러야 …' → 양수(투핸드) 안전 기동 회로(동시성 창 0.5s).
+
+    프레스류 협착 방지 표준 패턴(ISO 13851 의 동시성 요구를 로직으로 구현):
+      TL(IN := BTN_L AND NOT BTN_R, PT := T#500ms);  ← 왼손 *단독* 누름 지속
+      TR(IN := BTN_R AND NOT BTN_L, PT := T#500ms);
+      LOCK := (TL.Q OR TR.Q OR LOCK) AND (BTN_L OR BTN_R);  ← 비동시 락(둘 다 떼야 해제)
+      OUT  := BTN_L AND BTN_R AND NOT LOCK;          ← 두 손 다 누른 동안만 출력
+    보장(시뮬로 단정): 한쪽을 0.5s 이상 먼저 누르면 다른 쪽을 눌러도 기동 불가,
+    둘 다 뗀 뒤에만 재시도 가능, 0.5s 이내 동시 누름이면 기동, 출력 중 한쪽을 떼면
+    즉시 정지. 출력식이 BTN_L AND BTN_R 의 강화라 '출력 중 양손 구속'은 구조 보장.
+    주의: 본 로직은 *설계 보조*다 — 실제 양수조작 안전기능은 안전릴레이/안전 PLC
+    하드와이어로 구현해야 한다(docs/SAFETY.md).
+    """
+    from app.models import TimerSpec
+
+    target = "PRESS_M"
+    for c in frame.clauses:
+        if c.device and c.device not in ("TWOHAND", "BUTTON") and c.device in _DEV_OUT:
+            target = _DEV_OUT[c.device]
+    io = [
+        IOPoint(symbol="BTN_L", direction=IODirection.INPUT, description="좌 버튼"),
+        IOPoint(symbol="BTN_R", direction=IODirection.INPUT, description="우 버튼"),
+        IOPoint(symbol=target, direction=IODirection.OUTPUT),
+        IOPoint(symbol="LOCK", direction=IODirection.OUTPUT,
+                description="비동시 락(내부)"),
+    ]
+    spec = StateMachineSpec(
+        title=(frame.text[:40] or "양수 안전 기동"),
+        io_points=io,
+        timers=[
+            TimerSpec(name="TL", preset_ms=500, enable_condition="BTN_L AND NOT BTN_R",
+                      description="좌 단독 누름 감시"),
+            TimerSpec(name="TR", preset_ms=500, enable_condition="BTN_R AND NOT BTN_L",
+                      description="우 단독 누름 감시"),
+        ],
+        derived_outputs=[
+            DerivedOutput(output="LOCK",
+                          expression="(TL.Q OR TR.Q OR LOCK) AND (BTN_L OR BTN_R)"),
+            DerivedOutput(output=target,
+                          expression="BTN_L AND BTN_R AND NOT LOCK"),
+        ],
+    )
+    # 강단서 라우팅 전제 — 회로 의도가 명백해 빌더가 확신을 부여한다.
+    return CompileResult(spec=spec, unresolved=[], confident=True)
+
+
 def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
     """의도 프레임을 검증 가능한 StateMachineSpec 으로 컴파일한다(레시피 비의존).
 
@@ -410,6 +459,13 @@ def frame_to_spec(source: IntentFrame | Analysis | str) -> CompileResult:
         return _compile_alternator(frame)
     if any(c.device == "CASCADE" for c in frame.clauses):
         return _compile_cascade(frame)
+    # 양손은 '양손 버튼'처럼 수식어 위치라 최근체언(버튼)에 덮인다 — 원문 *강단서*로
+    # 라우팅한다(양손+동시 / 투핸드 / 양수조작). 강단서는 회로 의도가 명백하므로
+    # 빌더가 확신을 갖는다('눌러야' 같은 미등록 어미로 coverage 가 낮아도).
+    _th = frame.text.replace(" ", "")
+    if ("투핸드" in _th or "양수조작" in _th
+            or ("양손" in _th and "동시" in _th)):
+        return _compile_two_hand(frame)
     if any(c.seq for c in frame.clauses):
         return _compile_sequence(frame)
     b = _Builder()

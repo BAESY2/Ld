@@ -142,6 +142,9 @@ DEVICES: dict[str, str] = {
     "교대": "ALTERNATE", "교번": "ALTERNATE", "번갈아": "ALTERNATE",
     # 캐스케이드(연동) 운전 — 하류부터 기동, 상류는 하류 가드
     "연동": "CASCADE", "캐스케이드": "CASCADE",
+    # 양수(투핸드) 안전 기동 — 두 버튼 동시(시간창) 조작
+    "양손": "TWOHAND", "투핸드": "TWOHAND", "양수조작": "TWOHAND",
+    "프레스": "PRESS_MACHINE",
 }
 
 # 동작 용언: 활용 표면(스템 또는 단축형) → (대표동사, 의미범주). 르-/ㅓ축약 등은 표면 열거로 처리.
