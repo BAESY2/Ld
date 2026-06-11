@@ -2582,9 +2582,9 @@ agv:{
  },
  draw(ctx,st,val,t){
    /* 경로(코너 포함) — 차종별 색 */
-   drawPath(ctx,AGV_MAIN,"rgba(88,224,255,.5)",t);
-   drawPath(ctx,(st.customPaths&&st.customPaths.amr)||FLEET_PATHS.amr,"rgba(185,163,255,.4)",t);
-   drawPath(ctx,(st.customPaths&&st.customPaths.fork)||FLEET_PATHS.fork,"rgba(240,194,107,.38)",t);
+   drawPath(ctx,AGV_MAIN,"rgba(13,128,160,.7)",t);
+   drawPath(ctx,(st.customPaths&&st.customPaths.amr)||FLEET_PATHS.amr,"rgba(109,79,214,.55)",t);
+   drawPath(ctx,(st.customPaths&&st.customPaths.fork)||FLEET_PATHS.fork,"rgba(178,121,8,.55)",t);
    /* 경로 그리기 미리보기(사용자 웨이포인트) */
    if(PEDIT.mode==="draw"&&PEDIT.pts.length){
      for(let i=0;i<PEDIT.pts.length;i++){
@@ -2693,7 +2693,7 @@ agv:{
    worker(5.0,5.85);
    if(cur.faults.estop)txt(ctx,P(8,2.2,1.6),"⛔ E-STOP — 안전회로 개방(전 구동 차단)","#f85149",13,"center",true);
    const ph2=val("HOMING")?"원점(도크) 복귀 중":val("MOVING")?"적재 운송 중 ▶":val("IN_POS_LAMP")?"정위치 도킹·하역":"미션 대기";
-   txt(ctx,P(8,1.7,1.2),ph2,"#9fb3c8",12);
+   txt(ctx,P(8,1.7,1.2),ph2,"#3d4c5a",12);
    ledBoard(10.5,1.6,"운반 완료",String(st.done).padStart(4,"0"));
  }},
 
@@ -3002,13 +3002,13 @@ wrap:{
      /* 권취 필름(반투명) — 감긴 높이만큼 */
      if(st.filmH>0.03)dq(bx+2.95+1.6,c2=>{
        const b2=P(bx,2.95,0.16),t2=P(bx,2.95,0.16+st.filmH*1.1);
-       c2.save();c2.globalAlpha=0.3;c2.strokeStyle="#bfe3ff";c2.lineWidth=0.62*view.s;
+       c2.save();c2.globalAlpha=0.45;c2.strokeStyle="#9fc0da";c2.lineWidth=0.62*view.s;
        c2.beginPath();c2.moveTo(b2[0],b2[1]);c2.lineTo(t2[0],t2[1]);c2.stroke();c2.restore();
      });
      /* 필름 가닥: 캐리지→파레트 */
      if(val("TURNTABLE"))dq(99,c2=>{
        const a=P(5.62,2.85,st.carrH+0.2),b2=P(bx+Math.cos(st.rot)*0.5,2.95+Math.sin(st.rot)*0.4,st.carrH);
-       seg(c2,a,b2,"rgba(191,227,255,.6)",1.6);
+       seg(c2,a,b2,"rgba(70,110,150,.7)",1.6);
      });
    }
    /* 톱프레스 */
