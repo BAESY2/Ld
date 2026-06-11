@@ -670,13 +670,20 @@ def _weld_cell(a: Answers) -> StateMachineSpec:
     (기존 _build_sequencer 규율과 동일; 검증기 무변경 약속 준수).
     """
     start, stop = _val(a, "start", "WELD_START"), _val(a, "stop", "WELD_STOP")
+    part = _val(a, "part", "PART_PRESENT")
     steps = [
         (_val(a, "clamp", "CLAMP"), _pint(a, "t_clamp", 3, lo=1)),
         (_val(a, "weld", "WELD"), _pint(a, "t_weld", 5, lo=1)),
         (_val(a, "unclamp", "UNCLAMP"), _pint(a, "t_unclamp", 3, lo=1)),
     ]
-    return _build_sequencer(steps, start=start, stop=stop, loop=False,
-                            title="용접 셀 사이클(클램프→용접→해제)")
+    spec = _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="용접 셀 사이클(공물 인터록·클램프→용접→해제)")
+    # 공물 감지 인터록: 제품이 지그에 없으면 사이클 진입 불가(허공 용접 방지)
+    spec.io_points.insert(1, _io(part, _IN, "공물 감지(지그 재석)"))
+    for tr in spec.transitions:
+        if tr.from_state == "IDLE" and tr.to_state == "S0":
+            tr.condition = f"{part} AND {tr.condition}"
+    return spec
 
 
 def _conveyor_divert(a: Answers) -> StateMachineSpec:
@@ -1350,8 +1357,9 @@ RECIPES: dict[str, Recipe] = {
         ),
         Recipe(
             "weld_cell", "용접 셀 사이클",
-            "클램프→용접→해제를 시간대로(클램프/해제 인터락).", "뿌리산업",
+            "클램프→용접→해제를 시간대로(공물 인터록·클램프/해제 인터락).", "뿌리산업",
             (_f("start", "기동", "WELD_START"), _f("stop", "정지", "WELD_STOP"),
+             _f("part", "공물 감지 센서", "PART_PRESENT"),
              _f("clamp", "클램프", "CLAMP"), _f("t_clamp", "클램프 시간(초)", "3", "time_sec"),
              _f("weld", "용접", "WELD"), _f("t_weld", "용접 시간(초)", "5", "time_sec"),
              _f("unclamp", "해제", "UNCLAMP"),
