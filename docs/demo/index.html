@@ -182,6 +182,10 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 #setpanel{position:absolute;right:0;top:0;bottom:0;width:min(380px,92vw);background:#0d141d;
  border-left:1px solid var(--bd);padding:18px 18px 30px;overflow:auto;box-shadow:-18px 0 50px rgba(0,0,0,.5)}
 #setpanel .alhd h4{font-size:14px;color:var(--fg)}
+#pendant{display:none;position:absolute;z-index:6;right:10px;top:60px;width:280px;
+ background:rgba(10,15,22,.97);border:1px solid #2b3743;border-radius:12px;
+ padding:13px 14px;box-shadow:0 16px 40px rgba(0,0,0,.6)}
+#pendant .alhd h4{margin:0;font-size:13px;color:var(--fg)}
 .alhd{display:flex;justify-content:space-between;align-items:center}
 .alhd h4{margin:0}
 details.engd{margin-top:14px}
@@ -323,8 +327,10 @@ table.io td.mut{color:var(--mut)}
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
     <canvas id="scene"></canvas>
     <div id="devpanel"></div>
+    <div id="pendant"></div>
     <div class="scol">
      <button class="xbtn" id="setbtn">⚙ 설정</button>
+     <button class="xbtn" id="viewbtn">시점: 아이소</button>
      <button class="xbtn" id="lblbtn">라벨: 핵심</button>
      <button class="xbtn" id="editbtn">배치 편집</button>
      <button class="xbtn" id="rstbtn" style="display:none">배치 초기화</button>
@@ -338,6 +344,10 @@ table.io td.mut{color:var(--mut)}
       <div class="fitbox" id="fitbox"></div>
       <div class="vrf"><h4>운전 파라미터</h4></div>
       <div class="ctrl" id="setsliders" style="margin-top:2px"></div>
+      <div class="vrf"><h4>제품·부하 설정</h4></div>
+      <div class="ctrl" id="setprod" style="margin-top:2px"></div>
+      <div class="vrf"><h4>통신 I/O 구성</h4></div>
+      <div id="setcomm" style="margin-top:8px"></div>
       <div class="vrf"><h4>고장 주입 — 디지털트윈 내고장 테스트</h4></div>
       <div id="setfaults" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
       <div class="hint" style="margin-top:14px;font-size:12px;color:var(--mut)">
@@ -367,6 +377,7 @@ table.io td.mut{color:var(--mut)}
   <details class="engd">
    <summary>엔지니어 상세 — 생성된 IEC 61131-3 ST 코드 · 사전 검증 타임라인</summary>
    <div class="demo" style="margin-top:12px">
+    <div class="box"><h3>결선도(직배선도) — 자동 생성 · 라이브 통전</h3><div id="wiring"></div></div>
     <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
     <div class="box"><h3>사전 검증 타임라인 (파랑=입력, 초록=출력, 시간→)</h3><div id="sim"></div></div>
    </div>
@@ -588,6 +599,60 @@ function dRegs(L){
   return r;
 }
 
+/* 비전 광학 모델 — 1/1.8" 센서(7.2×5.4mm)·1920×1080 가정 */
+function visionCfg(L){
+  return L.devCfg["VS-701"]||(L.devCfg["VS-701"]={f:12,wd:300,lux:600});
+}
+function visionOptics(L){
+  const c=visionCfg(L);
+  const fovW=7.2*c.wd/c.f, fovH=5.4*c.wd/c.f;
+  const res=fovW/1920*1000; /* µm/px */
+  const cLux=Math.min(1,c.lux/600);
+  const cRes=res<=120?1:Math.max(0.3,120/res);
+  const conf=Math.max(0.3,Math.min(1,(0.45+0.55*cLux)*cRes));
+  return {fovW,fovH,res,conf};
+}
+
+/* 결선도(직배선도) 자동 생성 — 라이브 통전 표시 */
+function wiringSvg(L){
+  const esc=v=>String(v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const rows=[
+    ...L.d.sim.inputs.map(sym=>({sym,dir:"IN"})),
+    ...L.d.sim.outputs.map(sym=>({sym,dir:"OUT"}))
+  ];
+  const RH=30,top=50,W=640,H=top+rows.length*RH+26;
+  let g="";
+  g+=`<text x="64" y="16" fill="#8b98a8" font-size="11" text-anchor="middle">PLC ${esc(L.cpu||"")}</text>`;
+  g+=`<text x="280" y="16" fill="#8b98a8" font-size="11" text-anchor="middle">TB-01 단자대</text>`;
+  g+=`<text x="540" y="16" fill="#8b98a8" font-size="11" text-anchor="middle">현장 기기</text>`;
+  g+=`<line x1="24" y1="${top-16}" x2="${W-18}" y2="${top-16}" stroke="#b8860b" stroke-width="1.6"/>`;
+  g+=`<text x="28" y="${top-21}" fill="#d9a514" font-size="9.5">DC24V COM 모선</text>`;
+  g+=`<line x1="${W-18}" y1="${top-16}" x2="${W-18}" y2="${top+rows.length*RH-12}" stroke="#6b5410" stroke-width="1.2" stroke-dasharray="3 3"/>`;
+  rows.forEach((r,i)=>{
+    const y=top+i*RH+8;
+    const on=L.plc.val(r.sym);
+    const col=on?(r.dir==="IN"?"#58a6ff":"#3fd97a"):"#33414f";
+    const tcol=on?(r.dir==="IN"?"#9cc7ff":"#7ee787"):"#8fa0b3";
+    const addr=L.m.addr[r.sym]||"—";
+    const wn=(r.dir==="IN"?"W1":"W2")+String(i+1).padStart(2,"0");
+    g+=`<rect x="22" y="${y-10}" width="84" height="21" rx="3" fill="#16202b" stroke="#33414f"/>`;
+    g+=`<text x="64" y="${y+4}" fill="${tcol}" font-size="10.5" text-anchor="middle" font-family="monospace">${esc(addr)}</text>`;
+    g+=`<line x1="106" y1="${y}" x2="252" y2="${y}" stroke="${col}" stroke-width="${on?2.2:1.5}"/>`;
+    g+=`<text x="178" y="${y-4}" fill="#6f7a8a" font-size="9" text-anchor="middle" font-family="monospace">${wn}</text>`;
+    g+=`<rect x="252" y="${y-10}" width="34" height="21" rx="3" fill="#1d2733" stroke="#3a4756"/>`;
+    g+=`<text x="269" y="${y+4}" fill="#9fb3c8" font-size="10" text-anchor="middle" font-family="monospace">${i+1}</text>`;
+    g+=`<line x1="286" y1="${y}" x2="468" y2="${y}" stroke="${col}" stroke-width="${on?2.2:1.5}"/>`;
+    g+=`<text x="377" y="${y-4}" fill="#6f7a8a" font-size="9" text-anchor="middle" font-family="monospace">${wn}A</text>`;
+    const info=L.m.tags&&L.m.tags[r.sym];
+    const devName=info?info.tag+" "+info.name:(L.m.desc[r.sym]||r.sym);
+    g+=`<rect x="468" y="${y-11}" width="142" height="23" rx="3" fill="#16202b" stroke="${r.dir==="IN"?"#2b4a6e":"#2e6b44"}"/>`;
+    g+=`<text x="539" y="${y+4}" fill="${tcol}" font-size="9.5" text-anchor="middle">${esc(devName.slice(0,20))}</text>`;
+    g+=`<line x1="610" y1="${y}" x2="${W-18}" y2="${y}" stroke="#6b5410" stroke-width="1" stroke-dasharray="3 3"/>`;
+    if(on)g+=`<circle cx="269" cy="${y}" r="3.2" fill="${col}"/>`;
+  });
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="max-width:${W}px">${g}</svg>`;
+}
+
 /* 설정 드로어 — 기종·운전 파라미터·고장 주입(라인별) */
 function buildSettings(){
   document.getElementById("settitle").textContent=OV[cur.id]||cur.d.title;
@@ -626,6 +691,50 @@ function buildSettings(){
   });
   if(!(cur.m.faults||[]).length)
     ff.innerHTML='<span class="hint" style="font-size:12px;color:var(--mut)">이 라인은 고장 주입 항목이 없습니다.</span>';
+  /* 통신 I/O 구성 */
+  const cm=document.getElementById("setcomm");
+  if(cm){
+    const vend=(PLC_CATALOG.find(x=>x.model===cur.cpu)||{}).v||"LS";
+    const defProto={LS:"XGT FEnet (TCP 2004)",MITSUBISHI:"MELSEC MC (TCP 5007)",
+      SIEMENS:"S7/PROFINET (TCP 102)",OMRON:"FINS/EtherNet·IP (TCP 9600)"}[vend];
+    if(!cur.comm)cur.comm=defProto;
+    const protos=[defProto,"Modbus TCP (502)","EtherNet/IP (44818)","RS-485 시리얼(9600-N-8-1)"];
+    const ip="192.168.0."+(10+ids.indexOf(cur.id));
+    cm.innerHTML="";
+    const sel=document.createElement("select");
+    sel.style.cssText="width:100%;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:12px ui-monospace,monospace;padding:6px 8px;border-radius:8px";
+    [...new Set(protos)].forEach(p2=>{const o=document.createElement("option");
+      o.value=p2;o.textContent=p2;if(p2===cur.comm)o.selected=true;sel.appendChild(o);});
+    sel.onchange=()=>{cur.comm=sel.value;logEv("op","통신 프로토콜 변경 → "+sel.value);buildSettings();};
+    cm.appendChild(sel);
+    const inf=document.createElement("div");
+    inf.className="fitbox";inf.style.marginTop="8px";
+    inf.innerHTML=`가상 스테이션 IP <b style="color:#8ec9ff">${ip}</b> · 기종 포트: ${(PLC_CATALOG.find(x=>x.model===cur.cpu)||{}).comm||"—"}`+
+      `<br/>서버 코사임 연동 시 이 채널로 I/O 미러링(섀도 모드 — 로드맵 P2)`;
+    cm.appendChild(inf);
+  }
+  /* 제품·부하 설정 */
+  const pr2=document.getElementById("setprod");
+  if(pr2){
+    const cfg=KPI[cur.id]||(KPI[cur.id]={unit:"개",w:null,tt:null});
+    pr2.innerHTML="";
+    const mkNum=(label,val,suffix,cb)=>{
+      const w=document.createElement("div");w.className="sld";
+      w.innerHTML=`<small>${label}</small>`;
+      const inp=document.createElement("input");
+      inp.type="number";inp.step="0.1";inp.value=val===null?"":val;
+      inp.style.cssText="width:110px;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:12.5px ui-monospace,monospace;padding:6px 8px;border-radius:8px";
+      inp.addEventListener("change",()=>{const v=parseFloat(inp.value);
+        if(!isNaN(v)&&v>0){cb(v);logEv("op",label+" 변경 → "+v+suffix);}});
+      w.appendChild(inp);pr2.appendChild(w);
+    };
+    mkNum("개당 중량 kg/"+cfg.unit,cfg.w,"kg",v=>{cfg.w=v;});
+    mkNum("목표 택타임 s",cfg.tt,"s",v=>{cfg.tt=v;});
+    const nt=document.createElement("div");
+    nt.className="hint";nt.style.cssText="font-size:11.5px;color:var(--mut);width:100%";
+    nt.textContent="중량은 누적 생산중량 KPI에, 목표 택타임은 OEE 성능(P)·차트 목표선·경보 임계에 즉시 반영됩니다.";
+    pr2.appendChild(nt);
+  }
 }
 
 /* 생산 파라미터 — 제품 단위·개당 중량(kg)·목표 택타임(s) */
@@ -791,10 +900,15 @@ function resize(){
   cvs.width=Math.max(1,W*dpr); cvs.height=Math.max(1,H*dpr);
   g2.setTransform(dpr,0,0,dpr,0,0);
   const s=Math.min((W-36)/((WX+WY)*0.866), (H-50)/((WX+WY)*0.5+2.3));
-  view={s,ox:18+WY*0.866*s,oy:42+2.3*0.8*s,W,H};
+  const ts=Math.min((W-46)/WX,(H-56)/WY);
+  view={s,ox:18+WY*0.866*s,oy:42+2.3*0.8*s,W,H,
+    ts,tox:(W-WX*ts)/2,toy:(H-WY*ts)/2+8};
 }
 addEventListener("resize",resize);
-const P=(x,y,z)=>[view.ox+(x-y)*0.866*view.s, view.oy+(x+y)*0.5*view.s-(z||0)*0.8*view.s];
+let VIEW_MODE="iso";
+const P=(x,y,z)=>VIEW_MODE==="top"
+  ?[view.tox+x*view.ts, view.toy+y*view.ts-(z||0)*0.12*view.ts]
+  :[view.ox+(x-y)*0.866*view.s, view.oy+(x+y)*0.5*view.s-(z||0)*0.8*view.s];
 function shade(hex,f){
   const n=parseInt(hex.slice(1),16);
   const r=Math.min(255,(n>>16&255)*f),g=Math.min(255,(n>>8&255)*f),b=Math.min(255,(n&255)*f);
@@ -915,12 +1029,14 @@ function wirePath(ctx,pts,on,t,color){
 }
 /* 공장 바닥 — 콘크리트 타일 + 통로 라인 */
 function floorGrid(ctx){
+  if(VIEW_MODE!=="top"){
   face(ctx,[P(0,0,0),P(WX,0,0),P(WX,0,3.9),P(0,0,3.9)],"#151b23");
   for(let x=0.8;x<WX-1;x+=2.2)
     face(ctx,[P(x,0,2.35),P(x+1.5,0,2.35),P(x+1.5,0,3.35),P(x,0,3.35)],"rgba(140,180,220,.07)");
   seg(ctx,P(0,0,2.2),P(WX,0,2.2),"rgba(0,0,0,.35)",1);
   face(ctx,[P(13.1,0,1.45),P(16.3,0,1.45),P(16.3,0,2.05),P(13.1,0,2.05)],"#16241a");
   txt(ctx,P(14.7,0,1.7),"무재해 247日","#7ee787",12,"center",true);
+  }
   face(ctx,[P(0,0,0),P(WX,0,0),P(WX,WY,0),P(0,WY,0)],"#20262e");
   for(let x=0;x<=WX;x+=2)seg(ctx,P(x,0,0),P(x,WY,0),"rgba(0,0,0,.22)",1);
   for(let y=0;y<=WY;y+=2)seg(ctx,P(0,y,0),P(WX,y,0),"rgba(0,0,0,.22)",1);
@@ -1307,7 +1423,8 @@ conveyor:{
  wiresOut:[["MOTOR",[[14.72,5.0],[13.4,4.2],[12.45,2.75]]]],
  init:()=>({belt:0,spd:0,parts:[],count:0,spawn:0}),
  tick(st,o,dt){
-   st.spd=ramp(st.spd,o.MOTOR?0.95*(cur.speedF||1):0,1.4,dt);
+   const macc=((cur.devCfg["M-101"]||{}).acc)||1.4;
+   st.spd=ramp(st.spd,o.MOTOR?0.95*(cur.speedF||1):0,macc,dt);
    st.belt=(st.belt+st.spd*dt)%0.55;
    st.spawn-=dt;
    const clearIn=!st.parts.some(p=>!p.fall&&p.x<3.3);
@@ -1525,7 +1642,8 @@ weld:{
  init:()=>({phase:"idle",partX:1.6,partOn:false,arm:0,clamp:0,sparks:[],count:0,weaveT:0}),
  tick(st,o,dt){
    st.clamp=ramp(st.clamp,(o.CLAMP||o.WELD)?1:0,2.5,dt);
-   st.arm=ramp(st.arm,o.WELD?1:0,2.2,dt);
+   const rspd=((cur.devCfg["RB-401"]||{}).spd||100)/100;
+   st.arm=ramp(st.arm,o.WELD?1:0,2.2*rspd,dt);
    const cycle=o.CLAMP||o.WELD||o.UNCLAMP;
    if(!st.partOn&&!cycle){
      st.partX=Math.min(7.55,st.partX+dt*1.1);
@@ -1540,7 +1658,9 @@ weld:{
      if(st.out>12.9){st.out=undefined;st.count++;st.partX=1.6;}
    }
    if(o.WELD){st.weaveT+=dt;
-     const tip=P(7.55+Math.sin(st.weaveT*9)*0.07,2.28,1.02);
+     const rc=cur.devCfg["RB-401"]||{};
+     const ro=rc.off||[0,0,0];
+     const tip=P(7.55+ro[0]+Math.sin(st.weaveT*9)*0.07,2.28+ro[1],1.02+ro[2]);
      for(let i=0;i<6;i++)st.sparks.push({x:tip[0],y:tip[1],vx:(Math.random()-0.5)*150,vy:-Math.random()*110,life:0.4+Math.random()*0.5});
    }
    st.sparks.forEach(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=220*dt;});
@@ -1571,7 +1691,10 @@ weld:{
      const a0=st.arm,a=a0*a0*(3-2*a0);
      const S=P(6.3,2.95,0.66);
      const wv=val("WELD")?Math.sin(st.weaveT*9)*0.07:0;
-     const T=a<0.02?P(6.85,2.95,2.0):P(6.85+( (7.55+wv) -6.85)*a,2.95+(2.3-2.95)*a,2.0+(1.04-2.0)*a);
+     const rc2=cur.devCfg["RB-401"]||{};
+     const ro2=rc2.off||[0,0,0];
+     const T=a<0.02?P(6.85,2.95,2.0)
+       :P(6.85+((7.55+ro2[0]+wv)-6.85)*a,2.95+((2.3+ro2[1])-2.95)*a,2.0+((1.04+ro2[2])-2.0)*a);
      const E=[(S[0]+T[0])/2+0.15*view.s*0.04,Math.min(S[1],T[1])-0.62*view.s*0.8*0.55];
      c2.lineCap="round";
      c2.strokeStyle="#8a6d10";c2.lineWidth=0.2*view.s+2;
@@ -1713,7 +1836,10 @@ vision:{
            st.lastShot={off:true};
          }else{
            st.insp++;st.flash=1;st.lastNG=p.ng;
-           st.sel=p.ng?-1:1;st.selT=0.35;
+           const det=p.ng?(Math.random()<visionOptics(cur).conf):true;
+           const judgedNG=p.ng&&det;
+           if(p.ng&&!det)logEv("warn","VS-701 미검출 — 조도/분해능 부족(NG 통과)");
+           st.sel=judgedNG?-1:1;st.selT=0.35;
            st.verdicts.push({x:p.x,ng:p.ng,life:1});
            st.lastShot={ng:p.ng,dx:0.25+Math.random()*0.5,dy:0.25+Math.random()*0.5,
              ms:(8+Math.random()*9)|0,n:st.insp};
@@ -1824,6 +1950,9 @@ vision:{
      c2.fillText("처리: "+so.ms+" ms",ix,py0+60);
      c2.fillText("샷 #"+String(so.n).padStart(4,"0"),ix,py0+73);
      if((st.leak||0)>0){c2.fillStyle="#f0c26b";c2.fillText("유출 "+st.leak+"건!",ix,py0+88);}
+     const op2=visionOptics(cur);
+     c2.fillStyle="#5d6c7c";c2.textAlign="left";
+     c2.fillText(`FOV ${op2.fovW.toFixed(0)}×${op2.fovH.toFixed(0)}mm · ${op2.res.toFixed(0)}µm/px · 신뢰도 ${(op2.conf*100).toFixed(0)}%`,mx+8,my+mh-6);
    });
    const tot=st.ok+st.ng;
    ledBoard(4.6,1.1,"불량율",tot?((st.ng/tot)*100).toFixed(1)+"%":"0.0%",st.ng/Math.max(1,tot)>0.12?"#f5b14c":"#7ee787");
@@ -2227,7 +2356,7 @@ function updateDOM(r,dt,t){
     const el2=document.getElementById("an_"+addr);
     if(el2)el2.textContent=String(get());
   }
-  if(devOpen)renderDev();
+  if(devOpen)renderDevLive();
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
    ||'<div class="alm"><i></i><span class="t">—</span><span>이벤트 없음</span></div>';
@@ -2237,6 +2366,8 @@ function updateDOM(r,dt,t){
   if(key!==cur.lastKey){
     cur.lastKey=key;
     document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr);
+    const wd=document.getElementById("wiring");
+    if(wd)wd.innerHTML=wiringSvg(cur);
   }
 }
 /* ---- 카메라(줌·팬) + 기기 클릭 상세 ---- */
@@ -2303,6 +2434,11 @@ document.getElementById("editbtn").onclick=()=>{
 document.getElementById("setbtn").onclick=()=>{
   document.getElementById("setwrap").style.display="block";
 };
+document.getElementById("viewbtn").onclick=()=>{
+  VIEW_MODE=VIEW_MODE==="iso"?"top":"iso";
+  document.getElementById("viewbtn").textContent="시점: "+(VIEW_MODE==="iso"?"아이소":"탑뷰(천장)");
+  logEv("op","시점 전환 → "+(VIEW_MODE==="iso"?"아이소메트릭":"탑뷰"));
+};
 document.getElementById("setclose").onclick=()=>{
   document.getElementById("setwrap").style.display="none";
 };
@@ -2323,10 +2459,11 @@ function chipAt(e){
 function pickDevice(e){
   const hit=chipAt(e);
   if(hit){devOpen=hit.tg;
+    const rb=cvs.getBoundingClientRect();
     const el=document.getElementById("devpanel");
     el.style.display="block";
-    el.style.left=Math.max(6,Math.min(e.clientX-r.left+14,cvs.clientWidth-248))+"px";
-    el.style.top=Math.max(6,Math.min(e.clientY-r.top+6,cvs.clientHeight-160))+"px";
+    el.style.left=Math.max(6,Math.min(e.clientX-rb.left+14,cvs.clientWidth-248))+"px";
+    el.style.top=Math.max(6,Math.min(e.clientY-rb.top+6,cvs.clientHeight-160))+"px";
     renderDev();
   } else hideDev();
 }
@@ -2343,15 +2480,103 @@ function renderDev(){
     const amp=on?(info.rated*(0.93+0.05*Math.sin(t2*6))).toFixed(1):"0.0";
     h+=`<div class="dvr"><span>설비</span><b>${info.name}</b></div>`+
      `<div class="dvr"><span>신호 · 주소</span><b>${sym} · ${cur.m.addr[sym]||"—"}</b></div>`+
-     `<div class="dvr"><span>상태</span><b style="color:${tripped?"#f85149":on?"#3fb950":"#8b98a8"}">${tripped?"TRIP — 복구 필요":on?"RUN":"STOP"}</b></div>`+
-     `<div class="dvr"><span>전류 / 정격</span><b>${amp} A / ${info.rated} A</b></div>`+
-     `<div class="dvr"><span>가동 · 기동</span><b>${stt.rt.toFixed(0)}s · ${stt.starts}회</b></div>`;
+     `<div class="dvr"><span>상태</span><b id="dvv_state" style="color:${tripped?"#f85149":on?"#3fb950":"#8b98a8"}">${tripped?"TRIP — 복구 필요":on?"RUN":"STOP"}</b></div>`+
+     `<div class="dvr"><span>전류 / 정격</span><b id="dvv_amp">${amp} A / ${info.rated} A</b></div>`+
+     `<div class="dvr"><span>가동 · 기동</span><b id="dvv_run">${stt.rt.toFixed(0)}s · ${stt.starts}회</b></div>`;
   }else{
     h+=`<div class="dvr"><span>유형</span><b>${(chip&&chip.sub)||"계측·구조물"}</b></div>`+
      `<div class="dvr"><span>제어</span><b>PLC 비구동(수동/센서)</b></div>`;
   }
-  h+=`<button class="xbtn" onclick="hideDev()">닫기</button>`;
+  /* 기기별 파라미터 입력 — 현장 셋업처럼 */
+  if(devOpen==="VS-701"){
+    const c=visionCfg(cur),op2=visionOptics(cur);
+    h+=`<div class="dvt" style="margin-top:9px">광학 셋업(FOV·렌즈·조도)</div>`+
+     `<div class="dvr"><span>렌즈 f</span><b><select id="dv_f" style="background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px">`+
+     [8,12,16,25,35].map(v=>`<option ${v===c.f?"selected":""}>${v}</option>`).join("")+`</select> mm</b></div>`+
+     `<div class="dvr"><span>WD 작동거리</span><b><input id="dv_wd" type="number" value="${c.wd}" style="width:64px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"/> mm</b></div>`+
+     `<div class="dvr"><span>조도</span><b><input id="dv_lux" type="range" min="50" max="1200" value="${c.lux}" style="width:90px"/> <span id="dv_luxv">${c.lux}</span> lx</b></div>`+
+     `<div class="dvr"><span>FOV / 분해능</span><b id="dv_calc">${op2.fovW.toFixed(0)}×${op2.fovH.toFixed(0)}mm · ${op2.res.toFixed(0)}µm/px</b></div>`+
+     `<div class="dvr"><span>검출 신뢰도</span><b id="dv_conf" style="color:${op2.conf>0.85?"#7ee787":"#f0c26b"}">${(op2.conf*100).toFixed(0)}%</b></div>`;
+  }
+  if(devOpen==="RB-401"){
+    h+=`<button class="xbtn" style="margin-top:9px;width:100%" onclick="openPendant()">🎛 티칭 펜던트 열기</button>`;
+  }
+  if(ent&&ent[1].rated!==undefined){
+    h+=`<div class="dvr"><span>정격 전류 설정</span><b><input id="dv_rated" type="number" step="0.1" value="${ent[1].rated}" style="width:64px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"/> A</b></div>`;
+    if(devOpen==="M-101")
+      h+=`<div class="dvr"><span>가감속</span><b><input id="dv_acc" type="number" step="0.1" value="${((cur.devCfg["M-101"]||{}).acc)||1.4}" style="width:64px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"/> m/s²</b></div>`;
+  }
+  h+=`<button class="xbtn" onclick="hideDev()" style="margin-top:8px">닫기</button>`;
   el.innerHTML=h;
+  /* 입력 바인딩 */
+  const c3=visionCfg(cur);
+  const upd=()=>{const op3=visionOptics(cur);
+    const e1=document.getElementById("dv_calc");
+    if(e1)e1.textContent=`${op3.fovW.toFixed(0)}×${op3.fovH.toFixed(0)}mm · ${op3.res.toFixed(0)}µm/px`;
+    const e2=document.getElementById("dv_conf");
+    if(e2){e2.textContent=(op3.conf*100).toFixed(0)+"%";e2.style.color=op3.conf>0.85?"#7ee787":"#f0c26b";}};
+  const fE=document.getElementById("dv_f");
+  if(fE)fE.onchange=()=>{c3.f=+fE.value;logEv("op","VS-701 렌즈 변경 → f"+c3.f+"mm");upd();};
+  const wdE=document.getElementById("dv_wd");
+  if(wdE)wdE.onchange=()=>{c3.wd=Math.max(50,+wdE.value||300);logEv("op","VS-701 WD → "+c3.wd+"mm");upd();};
+  const lxE=document.getElementById("dv_lux");
+  if(lxE)lxE.oninput=()=>{c3.lux=+lxE.value;
+    document.getElementById("dv_luxv").textContent=c3.lux;upd();};
+  const rtE=document.getElementById("dv_rated");
+  if(rtE&&ent)rtE.onchange=()=>{const v=parseFloat(rtE.value);
+    if(v>0){ent[1].rated=v;logEv("op",devOpen+" 정격 전류 → "+v+"A");}};
+  const acE=document.getElementById("dv_acc");
+  if(acE)acE.onchange=()=>{const v=parseFloat(acE.value);
+    if(v>0){(cur.devCfg["M-101"]=cur.devCfg["M-101"]||{}).acc=v;logEv("op","M-101 가감속 → "+v+"m/s²");}};
+}
+
+/* ── 로봇 티칭 펜던트 ── */
+function openPendant(){
+  const rc=cur.devCfg["RB-401"]||(cur.devCfg["RB-401"]={off:[0,0,0],spd:100});
+  if(!rc.off)rc.off=[0,0,0];
+  const el=document.getElementById("pendant");
+  el.style.display="block";
+  const fmt=()=>`P3 WELD = (${(7.55+rc.off[0]).toFixed(2)}, ${(2.30+rc.off[1]).toFixed(2)}, ${(1.04+rc.off[2]).toFixed(2)}) m`;
+  el.innerHTML=
+   `<div class="alhd"><h4>🎛 RB-401 티칭 펜던트</h4><button class="xbtn" onclick="document.getElementById('pendant').style.display='none'">닫기 ✕</button></div>`+
+   `<div class="fitbox" style="margin-top:10px">포인트 목록<br/>P1 HOME = (6.85, 2.95, 2.00)<br/>P2 APPROACH = (7.20, 2.60, 1.50)<br/><b id="pd_p3" style="color:#7ee787">${fmt()}</b></div>`+
+   `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0">`+
+   [["X−",0,-1],["Y−",1,-1],["Z−",2,-1],["X+",0,1],["Y+",1,1],["Z+",2,1]].map(([lb,ax,dr])=>
+     `<button class="fbtn abtn" data-jog="${ax},${dr}">${lb} JOG</button>`).join("")+`</div>`+
+   `<div class="sld" style="margin:6px 0"><small>속도 오버라이드 <b id="pd_spdv">${rc.spd||100}%</b></small>`+
+   `<input id="pd_spd" type="range" min="10" max="100" value="${rc.spd||100}" style="width:100%"/></div>`+
+   `<div style="display:flex;gap:8px;margin-top:10px">`+
+   `<button class="xbtn" id="pd_save" style="flex:1">P3 저장(티칭 확정)</button>`+
+   `<button class="xbtn" id="pd_reset">원점 복귀</button></div>`+
+   `<div class="hint" style="font-size:11.5px;color:var(--mut);margin-top:10px">JOG ±0.05m — 토치 타깃이 3D에서 즉시 이동합니다. 지그 범위(±0.4m) 밖 티칭 시 용접 품질 저하.</div>`;
+  el.querySelectorAll("[data-jog]").forEach(b=>{
+    b.onclick=()=>{const[ax,dr]=b.dataset.jog.split(",").map(Number);
+      rc.off[ax]=Math.max(-0.4,Math.min(0.4,rc.off[ax]+dr*0.05));
+      document.getElementById("pd_p3").textContent=fmt();};
+  });
+  document.getElementById("pd_spd").oninput=e=>{
+    rc.spd=+e.target.value;
+    document.getElementById("pd_spdv").textContent=rc.spd+"%";};
+  document.getElementById("pd_save").onclick=()=>{
+    logEv("op",`RB-401 티칭 저장 — ${fmt()} · 속도 ${rc.spd||100}%`);};
+  document.getElementById("pd_reset").onclick=()=>{
+    rc.off=[0,0,0];document.getElementById("pd_p3").textContent=fmt();
+    logEv("op","RB-401 원점 복귀(티칭 리셋)");};
+}
+function renderDevLive(){
+  if(!devOpen)return;
+  const ent=Object.entries(cur.m.tags||{}).find(([,i2])=>i2.tag===devOpen);
+  if(!ent)return;
+  const[sym,info]=ent, stt=cur.stats[sym], on=eff(sym);
+  const tripped=(cur.m.faults||[]).some(f=>f.type==="trip"&&f.sym===sym&&cur.faults[f.id]);
+  const e1=document.getElementById("dvv_state");
+  if(e1){e1.textContent=tripped?"TRIP — 복구 필요":on?"RUN":"STOP";
+    e1.style.color=tripped?"#f85149":on?"#3fb950":"#8b98a8";}
+  const t2=performance.now()/1000;
+  const e2=document.getElementById("dvv_amp");
+  if(e2)e2.textContent=(on?(info.rated*(0.93+0.05*Math.sin(t2*6))).toFixed(1):"0.0")+" A / "+info.rated+" A";
+  const e3=document.getElementById("dvv_run");
+  if(e3)e3.textContent=stt.rt.toFixed(0)+"s · "+stt.starts+"회";
 }
 function hideDev(){devOpen=null;const el=document.getElementById("devpanel");if(el)el.style.display="none";}
 
@@ -2455,7 +2680,12 @@ function makeLine(id){
   const L={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
     kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0},
     log:[],trend:[],lastTrendT:0,prevO:{},prevI:{},prevQ:{},taktAlarm:false,
-    speedF:1,ngRate:8,demandF:1,faults:{},auto:true,apPulse:null,apCool:Math.random()*2,cpu:"XGK-CPUH"};
+    speedF:1,ngRate:8,demandF:1,faults:{},auto:true,apPulse:null,apCool:Math.random()*2,
+    cpu:({motor_start_stop:"XGK-CPUE",fwd_rev:"FX5U-32MR/ES",car_wash:"CP1L-EM30",
+      count_eject:"XBC-DR32H",conveyor_divert:"NX1P2-1140DT",weld_cell:"R04CPU",
+      batch_fill_mix_drain:"CJ2M-CPU31",duty_standby:"CPU 1214C",
+      cascade_conveyor:"XGK-CPUH"})[id]||"XGK-CPUH",
+    devCfg:{}};
   L.sst=L.scene.init();
   d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
   L.log.unshift({lv:"info",msg:"라인 투입 — "+d.title,t:"T+0.0s"});
@@ -2525,6 +2755,8 @@ function show(id){
     "⚠️ 안전 경계: 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061). 3D 설비는 디지털트윈 시각화입니다.";
   cur.lastKey="";
   document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr);
+  const wd0=document.getElementById("wiring");
+  if(wd0)wd0.innerHTML=wiringSvg(cur);
   updateOverview();
   if(!rafId){resize();lastT=performance.now();rafId=requestAnimationFrame(loop);}
 }
