@@ -817,6 +817,31 @@ def _dosing_mix(a: Answers) -> StateMachineSpec:
     )
 
 
+def _cluster_tool(a: Answers) -> StateMachineSpec:
+    """반도체 클러스터 툴 1웨이퍼 사이클(매엽식).
+
+    로드락 펌프다운 → 진공 로봇 픽 → 프로세스 챔버 공정 → 복귀 반송 → 로드락 벤트.
+    one-hot 시퀀스로 단계 배타가 구조적으로 보장되고, 웨이퍼 재석(WAFER_PRESENT)
+    없이는 사이클 진입이 불가하다(빈 챔버 공정·허공 반송 차단).
+    """
+    start, stop = _val(a, "start", "CT_START"), _val(a, "stop", "CT_STOP")
+    wafer = _val(a, "wafer", "WAFER_PRESENT")
+    steps = [
+        (_val(a, "pump", "LL_PUMP"), _pint(a, "t_pump", 3, lo=1)),
+        (_val(a, "pick", "TM_PICK"), _pint(a, "t_pick", 2, lo=1)),
+        (_val(a, "proc", "PM_PROCESS"), _pint(a, "t_proc", 6, lo=1)),
+        (_val(a, "ret", "TM_RETURN"), _pint(a, "t_ret", 2, lo=1)),
+        (_val(a, "vent", "LL_VENT"), _pint(a, "t_vent", 3, lo=1)),
+    ]
+    spec = _build_sequencer(steps, start=start, stop=stop, loop=False,
+                            title="클러스터 툴 웨이퍼 사이클(펌프→픽→공정→복귀→벤트)")
+    spec.io_points.insert(1, _io(wafer, _IN, "웨이퍼 재석(로드락)"))
+    for tr in spec.transitions:
+        if tr.from_state == "IDLE" and tr.to_state == "S0":
+            tr.condition = f"{wafer} AND {tr.condition}"
+    return spec
+
+
 def _transfer_line(a: Answers) -> StateMachineSpec:
     """차체 트랜스퍼 라인: 클램프→A조 용접→B조 용접→트랜스퍼 이송(공물 인터록).
 
@@ -1580,6 +1605,21 @@ RECIPES: dict[str, Recipe] = {
             _dosing_mix,
             safety_note="반응성 약액은 오투입 시 위험 — 유량계 고장(0 고착) 타임아웃 차단과 "
             "체크밸브를 별도 구성하세요.",
+        ),
+        Recipe(
+            "cluster_tool", "클러스터 툴 웨이퍼 사이클",
+            "로드락 펌프→진공 로봇 픽→챔버 공정→복귀→벤트(웨이퍼 인터록).", "반도체",
+            (_f("start", "사이클 시작", "CT_START"), _f("stop", "정지", "CT_STOP"),
+             _f("wafer", "웨이퍼 재석", "WAFER_PRESENT"),
+             _f("pump", "로드락 펌프다운", "LL_PUMP"),
+             _f("t_pump", "펌프다운(초)", "3", "time_sec"),
+             _f("pick", "진공 로봇 픽", "TM_PICK"), _f("t_pick", "픽(초)", "2", "time_sec"),
+             _f("proc", "챔버 공정", "PM_PROCESS"), _f("t_proc", "공정(초)", "6", "time_sec"),
+             _f("ret", "복귀 반송", "TM_RETURN"), _f("t_ret", "복귀(초)", "2", "time_sec"),
+             _f("vent", "로드락 벤트", "LL_VENT"), _f("t_vent", "벤트(초)", "3", "time_sec")),
+            _cluster_tool,
+            safety_note="진공·RF·공정가스 위험 — 게이트밸브/RF/가스 인터락 매트릭스는 "
+            "장비 안전 PLC와 하드와이어로 구성하세요(SEMI S2/S8).",
         ),
         Recipe(
             "transfer_line", "차체 트랜스퍼 라인",

@@ -19,6 +19,12 @@ from app.models import DataType, DeviceClass, IODirection
 from app.simulator import simulate
 from app.synth import synthesize_st
 from app.transpiler import transpile_st
+from app.vendors.profiles import (
+    LS_XGK,
+    MITSUBISHI_FX,
+    OMRON_CJ,
+    SIEMENS_S7,
+)
 from app.verifier import verify
 from app.wizard import RECIPES, build_spec
 
@@ -83,6 +89,12 @@ def build_payload() -> dict[str, dict[str, Any]]:
             "passed": True,
             "addr": addr,
             "il_xgk": render_for_vendor(st, spec),
+            "il": {
+                "LS": render_for_vendor(st, spec, LS_XGK),
+                "MITSUBISHI": render_for_vendor(st, spec, MITSUBISHI_FX),
+                "SIEMENS": render_for_vendor(st, spec, SIEMENS_S7),
+                "OMRON": render_for_vendor(st, spec, OMRON_CJ),
+            },
             "analog_inputs": analog_ins,
             "desc": {p.symbol: p.description for p in spec.io_points},
             "sim": {
