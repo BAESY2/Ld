@@ -2113,6 +2113,58 @@ function updateDOM(r,dt,t){
 }
 /* ---- 카메라(줌·팬) + 기기 클릭 상세 ---- */
 let pdrag=null,devOpen=null;
+let GL3D={on:false,loaded:false,loading:false};
+function loadSeq(paths){
+  return paths.reduce((p,src)=>p.catch(()=>new Promise((ok,bad)=>{
+    const sc=document.createElement("script");
+    sc.src=src;sc.onload=ok;sc.onerror=()=>bad(new Error(src));
+    document.head.appendChild(sc);
+  })),Promise.reject());
+}
+async function ensureGL(){
+  if(GL3D.loaded)return true;
+  if(GL3D.loading)return false;
+  GL3D.loading=true;
+  try{
+    if(!window.THREE)await loadSeq(["vendor/three.min.js","three.min.js"]);
+    if(!window.Twin3D)await loadSeq(["twin3d.js"]);
+    GL3D.loaded=true;return true;
+  }catch(e){logEv("warn","WebGL 모듈 로드 실패 — 캔버스 모드 유지");return false;}
+  finally{GL3D.loading=false;}
+}
+function glContainer(){
+  let el=document.getElementById("gl3d");
+  if(!el){
+    el=document.createElement("div");el.id="gl3d";
+    el.style.cssText="width:100%;height:500px;display:none;border-radius:10px;overflow:hidden;border:1px solid #1b2530;background:#0a0f16;cursor:grab;touch-action:none";
+    cvs.parentNode.insertBefore(el,cvs);
+  }
+  return el;
+}
+async function setRenderer(on){
+  const btn=document.getElementById("glbtn");
+  if(on){
+    if(!(await ensureGL()))return;
+    if(!window.Twin3D.supported.includes(cur.id)){
+      logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 유지(지원: 포장·AGV·용접)");
+      return;
+    }
+    GL3D.on=true;
+    const el=glContainer();
+    el.style.display="block";cvs.style.display="none";
+    window.Twin3D.mount(el,cur);
+    window.Twin3D.resize(el);
+    if(btn){btn.classList.add("on");btn.textContent="렌더러: WebGL";}
+    logEv("op","WebGL 렌더러 ON — 드래그 회전·휠 줌(실그림자·z-buffer)");
+  }else{
+    GL3D.on=false;
+    if(window.Twin3D)window.Twin3D.destroy();
+    const el=document.getElementById("gl3d");
+    if(el)el.style.display="none";
+    cvs.style.display="block";
+    if(btn){btn.classList.remove("on");btn.textContent="렌더러: 2D";}
+  }
+}
 const COSIM={ws:null,on:false,ready:false,acc:0,lastSent:{},t_ms:0,pend:0,line:null};
 cvs.addEventListener("wheel",e=>{
   e.preventDefault();
@@ -2175,6 +2227,12 @@ document.getElementById("editbtn").onclick=()=>{
 document.getElementById("setbtn").onclick=()=>{
   document.getElementById("setwrap").style.display="block";
 };
+(function(){
+  const sb=document.createElement("button");
+  sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";
+  document.querySelector(".scol").insertBefore(sb,document.getElementById("viewbtn"));
+  sb.onclick=()=>setRenderer(!GL3D.on);
+})();
 document.getElementById("viewbtn").onclick=()=>{
   VIEW_MODE=VIEW_MODE==="iso"?"top":"iso";
   document.getElementById("viewbtn").textContent="시점: "+(VIEW_MODE==="iso"?"아이소":"탑뷰(천장)");
@@ -2393,7 +2451,9 @@ function loop(now){
     const r=simLine(LINES[id],dt,now/1000);
     if(LINES[id]===cur)rActive=r;
   }
-  drawScene(now/1000);
+  if(GL3D.on&&window.Twin3D&&window.Twin3D.active===cur.id)
+    window.Twin3D.update(cur,dt,now/1000);
+  else drawScene(now/1000);
   if(now-domT>90){domT=now;updateDOM(rActive,dt,now/1000);updateOverview();}
 }
 let _ovHtml="";
@@ -2446,6 +2506,14 @@ function makeLine(id){
 }
 function show(id){
   if(COSIM.on&&COSIM.line!==id)cosimStop("라인 전환");
+  if(GL3D.on&&window.Twin3D){
+    if(window.Twin3D.supported.includes(id)){
+      setTimeout(()=>{if(GL3D.on){window.Twin3D.mount(glContainer(),LINES[id]);}},0);
+    }else{
+      setRenderer(false);
+      setTimeout(()=>logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 전환"),0);
+    }
+  }
   cur=LINES[id];
   hideDev();
   const d=cur.d,m=cur.m;
