@@ -27,7 +27,7 @@
   `TwinEngine.mount(container, recipeId)` — 물리 트윈 + KPI 미니 패널.
 - 미지/자유 설계면 기존 `Plant3D.create` 유지(일반 렌더). 사용자는 차이를 모르게 폴백.
 
-### P-C. WebGL 이식 (모델링·확대·모션 한계 돌파)
+### P-C. WebGL 이식 — 🚧 1단계 완료(three.min.js 벤더링 + `frontend/twin3d-poc.html`: beltUnit 프리팹 1:1 포팅, 실그림자·궤도 카메라·헤드리스 검증)
 - 트윈 프리팹을 plant3d.js 스타일 `{group, anim}`으로 1:1 포팅:
   beltUnit→BoxGeometry+텍스처 벨트, cyl3→CylinderGeometry, fence→I빔+해저드 텍스처,
   로봇 암→본 체인(또는 단순 조인트 그룹), 지게차/작업자→그룹 애니.
