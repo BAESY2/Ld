@@ -292,7 +292,11 @@ function buildSettings(){
     v=>{cur.ngRate=v;logEv("op","불량 주입률 변경 → "+v+"%");});
   if(cur.scene.demandCtl)mkSlider("수요 부하","dmr",20,170,Math.round(cur.demandF*100),"%",
     v=>{cur.demandF=v/100;logEv("op","공정 수요 부하 변경 → "+v+"%");});
-  if(!cur.scene.speedCtl&&!cur.scene.ngCtl&&!cur.scene.demandCtl)
+  (cur.m.analogIns||[]).forEach(sym=>{
+    mkSlider(sym+" 설정",("an_"+sym),0,1000,Number(cur.plc.vars[sym])||0,"",
+      v=>{cur.plc.set(sym,v);});
+  });
+  if(!cur.scene.speedCtl&&!cur.scene.ngCtl&&!cur.scene.demandCtl&&!(cur.m.analogIns||[]).length)
     sl.innerHTML='<span class="hint" style="font-size:12px;color:var(--mut)">이 라인은 조정 파라미터가 없습니다.</span>';
   else{
     const nt=document.createElement("div");
@@ -1670,6 +1674,38 @@ pumps:{
    ledBoard(7.6,1.2,"누적 공급 ㎥",String(Math.floor(st.supplied)).padStart(4,"0"));
  }},
 
+/* ---- 제네릭 자동화 셀 — 임의 레시피 라인(유저 빌더) ---- */
+generic:{
+ label:"",
+ overhead:"piping",
+ wiresOut:[],
+ init:()=>({prevOut:{},cycles:0,pist:{}}),
+ tick(st,o,dt){
+   const outs=cur.d.sim.outputs;
+   outs.forEach((sym,i)=>{
+     st.pist[sym]=ramp(st.pist[sym]||0,o[sym]?1:0,3,dt);
+     if(o[sym]&&!st.prevOut[sym]&&i===outs.length-1)st.cycles++;
+     st.prevOut[sym]=o[sym];
+   });
+ },
+ draw(ctx,st,val,t){
+   const outs=cur.d.sim.outputs;
+   sh(5.4,1.8,6.4,2.2,0.28);
+   box3(5.5,1.9,0,6.2,2.0,1.5,"#2c3743");
+   box3(5.5,1.9,1.5,6.2,2.0,0.12,"#39434f");
+   tag3(8.6,2.0,2.0,cur.m.cellTag||"CELL-01",cur.d.title.slice(0,18),"#9cc7ff");
+   outs.forEach((sym,i)=>{
+     const px=6.2+i*(5.0/Math.max(1,outs.length-1||1));
+     const ext=st.pist[sym]||0;
+     box3(px-0.12,3.9,0,0.24,0.24,0.5,"#39434f");
+     box3(px-0.08,3.55-ext*0.55,0.5,0.16,0.5,0.16,"#9aa7b5");
+     dq(px+4.2+1.4,c2=>lamp(c2,P(px,4.05,0.75),3,val(sym)?"#3fb950":"#27313c",val(sym)));
+     tag3(px,4.05,1.05,sym.slice(0,10),(cur.m.addr&&cur.m.addr[sym])||"",val(sym)?"#7ee787":"#5d6c7c",2);
+   });
+   stackLight(12.2,1.6,!outs.some(s2=>val(s2)),false,outs.some(s2=>val(s2)));
+   ledBoard(4.2,1.2,"사이클",String(st.cycles).padStart(4,"0"));
+ }},
+
 /* ---- 정량 충전(병입) 라인 — 로드셀 아날로그 폐루프 ---- */
 fnb:{
  label:"정량 충전 라인 — 로드셀 500g 도달 시 래더가 밸브 차단(아날로그 폐루프)",
@@ -1902,6 +1938,7 @@ SCENES.conveyor.speedCtl=SCENES.counter.speedCtl=SCENES.cascade.speedCtl=true;
 SCENES.counter.overhead="oht"; SCENES.vision.overhead="oht"; SCENES.weld.overhead="oht";
 SCENES.batch.overhead="piping"; SCENES.pumps.overhead="piping"; SCENES.carwash.overhead="piping";
 /* conveyor·shuttle·cascade = 기본 crane */
+SCENES.generic.prod=st=>st.cycles; SCENES.generic.avail=()=>1;
 SCENES.fnb.prod=st=>st.count; SCENES.fnb.wip=st=>st.bottles.length;
 SCENES.fnb.speed=()=>0.8*(cur.speedF||1); SCENES.fnb.avail=()=>1;
 SCENES.fnb.speedCtl=true;
@@ -2584,11 +2621,17 @@ function updateOverview(){
     return `<div class="ovc${id===cur.id?" act":""}" data-id="${id}">`+
       `<div class="ovt"><span class="dot ${trip?"trip":run?"on-o":""}"></span>${OV[id]||id}</div>`+
       `<div class="ovs"><span>생산 <b>${prodN}</b></span><span>OEE <b>${oee===null?"—":Math.round(oee)+"%"}</b></span><span>경보 <b class="${warns?"w":""}">${warns}</b></span></div>`+
-      (trip?'<div class="ovw">⚠ 설비 트립</div>':"")+`</div>`;
+      (trip?'<div class="ovw">⚠ 설비 트립</div>':"")+
+      (id.startsWith("u")&&USER_LINES.some(u=>u.uid===id)?`<span class="ovdel" data-del="${id}">✕ 삭제</span>`:"")+
+      `</div>`;
   }).join("");
   if(html!==_ovHtml){_ovHtml=html;el.innerHTML=html;}
+  const pc=document.getElementById("pjcount");
+  if(pc)pc.textContent=ids.length+"개 라인 가동 · 카탈로그 "+(window.DEMO_ALL?Object.keys(window.DEMO_ALL).length:0)+"종";
 }
 document.getElementById("overview").addEventListener("click",e=>{
+  const del=e.target.closest(".ovdel");
+  if(del){removeLine(del.dataset.del);logEv("op","라인 삭제");e.stopPropagation();return;}
   const c=e.target.closest(".ovc");
   if(c&&c.dataset.id!==cur.id)show(c.dataset.id);
 });
@@ -2620,6 +2663,7 @@ function makeLine(id){
   return L;
 }
 function show(id){
+  if(!LINES[id])return;
   if(COSIM.on&&COSIM.line!==id)cosimStop("라인 전환");
   if(GL3D.on&&window.Twin3D){
     if(window.Twin3D.supported.includes(id)){
@@ -2696,8 +2740,102 @@ function show(id){
   updateOverview();
   if(!rafId){resize();lastT=performance.now();rafId=requestAnimationFrame(loop);}
 }
+/* 유저 프로젝트(라인 빌더): DEMO_ALL 의 임의 레시피를 라인 인스턴스로 */
+let USER_LINES=[];
+try{USER_LINES=JSON.parse(localStorage.getItem("hands_lines")||"[]");}catch(e){}
+const PAL=["#1f9d4d","#c93c3c","#2563b8","#6d4fd6"];
+function registerUserLine(u){
+  const src=window.DEMO_ALL&&window.DEMO_ALL[u.recipe];
+  if(!src)return false;
+  DEMO[u.uid]={title:u.name+" — "+src.title,st:src.st,ladder:src.ladder,
+    explain:src.explain,passed:true,sim:src.sim};
+  const analog=src.analog_inputs||[];
+  const btns=src.sim.inputs.filter(x=>!analog.includes(x)).slice(0,4)
+    .map((x,i)=>({sym:x,label:x.slice(0,7),c:PAL[i%4]}));
+  const tags={};
+  src.sim.outputs.forEach((x,i)=>{tags[x]={tag:"OUT-"+String(i+1).padStart(2,"0"),name:x,rated:2.0};});
+  META[u.uid]={scene:"generic",addr:src.addr,desc:src.desc,buttons:btns,tags,
+    autoInputs:Object.fromEntries(analog.map(x=>[x,"아날로그 D · 설정값"])),
+    analogIns:analog,cellTag:"CELL-"+u.uid.slice(-2).toUpperCase(),
+    verify:["엔진 합성·검증 통과(이중코일 0·도달성)","OpenPLC 차분검증 코어 동일 시맨틱",
+            "유저 라인 인스턴스 — 카탈로그 #"+u.recipe]};
+  KPI[u.uid]={unit:"사이클",w:null,tt:null};
+  OV[u.uid]=u.name;
+  return true;
+}
+function persistLines(){
+  try{localStorage.setItem("hands_lines",JSON.stringify(USER_LINES));}catch(e){}
+}
+function addLine(recipe,name){
+  const uid="u"+Date.now().toString(36);
+  const u={uid,recipe,name:name||((window.DEMO_ALL[recipe]||{}).title||recipe).slice(0,14)};
+  if(!registerUserLine(u))return;
+  USER_LINES.push(u);persistLines();
+  ids.push(uid);
+  LINES[uid]=makeLine(uid);
+  updateOverview();
+  show(uid);
+  logEv("op","라인 생성 — "+u.name+" ("+recipe+")");
+}
+function removeLine(uid){
+  const i=ids.indexOf(uid);
+  if(i<0)return;
+  if(cur&&cur.id===uid)show(ids[0]);
+  ids.splice(i,1);
+  delete LINES[uid];delete DEMO[uid];delete META[uid];delete KPI[uid];delete OV[uid];
+  USER_LINES=USER_LINES.filter(u=>u.uid!==uid);persistLines();
+  updateOverview();
+}
+USER_LINES=USER_LINES.filter(u=>registerUserLine(u));
+USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});
 show(ids[0]);
+
+/* 프로젝트 바 */
+(function(){
+  const pn=document.getElementById("pjname");
+  if(!pn)return;
+  pn.value=localStorage.getItem("hands_pj")||"무제 공장 프로젝트";
+  pn.onchange=()=>{try{localStorage.setItem("hands_pj",pn.value);}catch(e){}};
+  const sel=document.getElementById("addrecipe");
+  if(window.DEMO_ALL){
+    const cats={};
+    Object.entries(window.DEMO_ALL).forEach(([rid,d])=>{
+      (cats[d.category||"기타"]=cats[d.category||"기타"]||[]).push([rid,d.title]);});
+    Object.entries(cats).forEach(([cat,list])=>{
+      const og=document.createElement("optgroup");og.label=cat;
+      list.forEach(([rid,t2])=>{const o=document.createElement("option");
+        o.value=rid;o.textContent=t2;og.appendChild(o);});
+      sel.appendChild(og);
+    });
+  }
+  const info=()=>{
+    const d=window.DEMO_ALL&&window.DEMO_ALL[sel.value];
+    if(!d)return;
+    document.getElementById("addinfo").innerHTML=
+      `입력 ${d.sim.inputs.length} · 출력 ${d.sim.outputs.length} · 래더 ${d.ladder.rungs.length}렁 · `+
+      `<span class="ok">✓ Z3·이중코일·도달성 검증 통과</span><br/>`+d.explain.split("\n")[1]||"";
+    document.getElementById("addname").value=(d.title||"").slice(0,14);
+  };
+  sel.onchange=info;
+  document.getElementById("addlinebtn").onclick=()=>{
+    document.getElementById("addwrap").style.display="block";info();};
+  document.getElementById("addclose").onclick=()=>
+    document.getElementById("addwrap").style.display="none";
+  document.getElementById("addwrap").addEventListener("click",e=>{
+    if(e.target.id==="addwrap")e.target.style.display="none";});
+  document.getElementById("addgo").onclick=()=>{
+    addLine(sel.value,document.getElementById("addname").value.trim());
+    document.getElementById("addwrap").style.display="none";
+    document.getElementById("scene").scrollIntoView({behavior:"smooth",block:"center"});
+  };
+  document.getElementById("pjexport").onclick=()=>{
+    dl((pn.value||"project")+".hands.json",JSON.stringify({
+      name:pn.value,lines:USER_LINES,layout:LAYOUT,
+      exported:new Date().toISOString()},null,1),"application/json");
+    logEv("op","프로젝트 내보내기 — "+pn.value);
+  };
+})();
 
 /* ---- 알람 CSV·운전 리포트 내보내기 ---- */
 function dl(name,text,mime){
