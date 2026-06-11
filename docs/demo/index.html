@@ -486,19 +486,19 @@ const META={
 
 /* PLC 기종 카탈로그 — app/catalog.py 동일 데이터(공개 사양 요약·납품 전 데이터시트 확인) */
 const PLC_CATALOG=[
- {v:"LS",model:"XGK-CPUE",dio:1536,sk:32,cap:"32K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB",prof:"LS XGK(P/T/C 10진)"},
- {v:"LS",model:"XGK-CPUH",dio:6144,sk:64,cap:"64K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB·Ethernet",prof:"LS XGK(P/T/C 10진)"},
- {v:"LS",model:"XBC-DR32H",dio:384,sk:15,cap:"15K 스텝",tm:256,cn:256,comm:"RS-232C·RS-485",prof:"LS XGK(P/T/C 10진)"},
- {v:"LS",model:"XGI-CPUU",dio:6144,sk:null,cap:"1MB(IEC)",tm:2048,cn:2048,comm:"USB·Ethernet",prof:"LS XGI(%IX/%QX)"},
- {v:"MITSUBISHI",model:"FX5U-32MR/ES",dio:512,sk:64,cap:"64K 스텝",tm:1024,cn:1024,comm:"RS-485·Ethernet",prof:"MELSEC(X/Y 8진)"},
- {v:"MITSUBISHI",model:"Q03UDECPU",dio:4096,sk:30,cap:"30K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC(X/Y 16진)"},
- {v:"MITSUBISHI",model:"R04CPU",dio:4096,sk:40,cap:"40K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC iQ-R"},
- {v:"SIEMENS",model:"CPU 1212C",dio:282,sk:null,cap:"100KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
- {v:"SIEMENS",model:"CPU 1214C",dio:284,sk:null,cap:"125KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
- {v:"SIEMENS",model:"CPU 1515-2 PN",dio:8192,sk:null,cap:"500KB+3MB",tm:null,cn:null,comm:"PROFINET×2",prof:"S7(%I/%Q)"},
- {v:"OMRON",model:"CP1L-EM30",dio:150,sk:10,cap:"10K 스텝",tm:256,cn:256,comm:"USB·Ethernet",prof:"OMRON CIO"},
- {v:"OMRON",model:"CJ2M-CPU31",dio:2560,sk:60,cap:"60K 스텝",tm:4096,cn:4096,comm:"USB·Ethernet",prof:"OMRON CIO"},
- {v:"OMRON",model:"NX1P2-1140DT",dio:256,sk:null,cap:"1.5MB(IEC)",tm:null,cn:null,comm:"EtherCAT·EtherNet/IP",prof:"OMRON NX(IEC)"}];
+ {v:"LS",model:"XGK-CPUE",dio:1536,sk:32,us:0.084,cap:"32K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XGK-CPUH",dio:6144,sk:64,us:0.028,cap:"64K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB·Ethernet",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XBC-DR32H",dio:384,sk:15,us:0.094,cap:"15K 스텝",tm:256,cn:256,comm:"RS-232C·RS-485",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XGI-CPUU",dio:6144,sk:null,us:0.028,cap:"1MB(IEC)",tm:2048,cn:2048,comm:"USB·Ethernet",prof:"LS XGI(%IX/%QX)"},
+ {v:"MITSUBISHI",model:"FX5U-32MR/ES",dio:512,sk:64,us:0.034,cap:"64K 스텝",tm:1024,cn:1024,comm:"RS-485·Ethernet",prof:"MELSEC(X/Y 8진)"},
+ {v:"MITSUBISHI",model:"Q03UDECPU",dio:4096,sk:30,us:0.02,cap:"30K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC(X/Y 16진)"},
+ {v:"MITSUBISHI",model:"R04CPU",dio:4096,sk:40,us:0.0098,cap:"40K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC iQ-R"},
+ {v:"SIEMENS",model:"CPU 1212C",dio:282,sk:null,us:0.08,cap:"100KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
+ {v:"SIEMENS",model:"CPU 1214C",dio:284,sk:null,us:0.08,cap:"125KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
+ {v:"SIEMENS",model:"CPU 1515-2 PN",dio:8192,sk:null,us:0.01,cap:"500KB+3MB",tm:null,cn:null,comm:"PROFINET×2",prof:"S7(%I/%Q)"},
+ {v:"OMRON",model:"CP1L-EM30",dio:150,sk:10,us:0.55,cap:"10K 스텝",tm:256,cn:256,comm:"USB·Ethernet",prof:"OMRON CIO"},
+ {v:"OMRON",model:"CJ2M-CPU31",dio:2560,sk:60,us:0.04,cap:"60K 스텝",tm:4096,cn:4096,comm:"USB·Ethernet",prof:"OMRON CIO"},
+ {v:"OMRON",model:"NX1P2-1140DT",dio:256,sk:null,us:0.0031,cap:"1.5MB(IEC)",tm:null,cn:null,comm:"EtherCAT·EtherNet/IP",prof:"OMRON NX(IEC)"}];
 function estSteps(lad){
   let n=0;
   for(const r of lad.rungs){
@@ -523,6 +523,7 @@ function renderFit(){
   document.getElementById("fitbox").innerHTML=
    `<div>${m.v} <b style="color:#dce4f0">${m.model}</b> · ${m.cap} · I/O ${m.dio}점 · ${m.comm}</div>`+
    `<div>주소체계 ${m.prof} · 본 설계: I/O ${f.io}점 · TON ${f.tmr} · CTU ${f.cnt} · 추정 ${f.st2}스텝</div>`+
+   (m.us?`<div>기종 환산 로직 스캔 ≈ <b style="color:#8ec9ff">${(f.st2*m.us).toFixed(2)}µs</b>/사이클 (${m.us}µs/스텝 × ${f.st2}스텝 + I/O 리프레시 별도)</div>`:"")+
    (f.iss.length?f.iss.map(i=>`<div class="bad">⚠ ${i}</div>`).join("")
     :`<div class="ok">✓ 기종 적합 — 한계 내 설계</div>`);
 }
