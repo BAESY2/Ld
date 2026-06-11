@@ -56,7 +56,8 @@ function pfBelt(g,x0,y0,len,zTop){
   }
   /* drive(v,dt): 엔진 속도[m/s]를 그대로 적산 — UV = 이동거리/타일(1.1m) */
   let dist=0;
-  return {tex:bt,drive:(v,dt)=>{dist+=v*dt;bt.offset.x=-dist/1.1;}};
+  return {tex:bt,drive:(v,dt)=>{dist+=v*dt;bt.offset.x=-dist/1.1;},
+    sync:(phase)=>{dist=phase;bt.offset.x=-dist/1.1;}};
 }
 function pfFence(g,x0,y0,x1,y1){
   const ym=mat(0xcaa011),ht=hazardTex();ht.repeat.set(6,1);
@@ -111,6 +112,90 @@ function makePartsPool(env,n){
   return pool;
 }
 
+/* ── 공장 환경(벽·창·기둥·배관 랙·적재 랙·작업등·차선) ── */
+function buildFactoryEnv(sc){
+  const TT=T();
+  const g=new TT.Group();
+  const wc=document.createElement("canvas");wc.width=1024;wc.height=256;
+  const w=wc.getContext("2d");
+  w.fillStyle="#2b323c";w.fillRect(0,0,1024,256);
+  w.strokeStyle="rgba(0,0,0,.35)";w.lineWidth=2;
+  for(let x=0;x<=1024;x+=128){w.beginPath();w.moveTo(x,0);w.lineTo(x,256);w.stroke();}
+  w.fillStyle="#1d232b";w.fillRect(0,200,1024,56);
+  for(let x=40;x<1024-80;x+=170){
+    w.fillStyle="#9fc4e8";w.fillRect(x,28,110,52);
+    w.strokeStyle="#10151c";w.lineWidth=4;w.strokeRect(x,28,110,52);
+    w.beginPath();w.moveTo(x+55,28);w.lineTo(x+55,80);w.stroke();
+    w.fillStyle="rgba(255,255,255,.5)";w.beginPath();
+    w.moveTo(x+8,76);w.lineTo(x+34,32);w.lineTo(x+50,32);w.lineTo(x+22,76);w.closePath();w.fill();
+  }
+  w.fillStyle="#0f3d22";w.fillRect(380,118,264,58);
+  w.strokeStyle="#e8eef6";w.lineWidth=3;w.strokeRect(380,118,264,58);
+  w.fillStyle="#fff";w.font="bold 34px sans-serif";w.textAlign="center";
+  w.fillText("무재해 작업장",512,160);
+  const wt=new TT.CanvasTexture(wc);
+  const wall=new TT.Mesh(new TT.PlaneGeometry(26,6.5),
+    new TT.MeshStandardMaterial({map:wt,roughness:0.95}));
+  wall.position.set(0,3.25,-8);g.add(wall);
+  const swm=new TT.MeshStandardMaterial({color:0x252c35,roughness:0.95});
+  const swL=new TT.Mesh(new TT.PlaneGeometry(16,6.5),swm);
+  swL.rotation.y=Math.PI/2;swL.position.set(-13,3.25,0);g.add(swL);
+  const swR=new TT.Mesh(new TT.PlaneGeometry(16,6.5),swm);
+  swR.rotation.y=-Math.PI/2;swR.position.set(13,3.25,0);g.add(swR);
+  const cm=new TT.MeshStandardMaterial({color:0x3d4754,roughness:.6,metalness:.55});
+  for(let x=-12;x<=12;x+=6){
+    const c=new TT.Mesh(new TT.BoxGeometry(0.32,6.4,0.32),cm);
+    c.position.set(x,3.2,-7.8);c.castShadow=true;g.add(c);
+    const beam=new TT.Mesh(new TT.BoxGeometry(0.24,0.34,15.6),cm);
+    beam.position.set(x,6.1,0);g.add(beam);
+  }
+  const truss=new TT.Mesh(new TT.BoxGeometry(25.6,0.3,0.26),cm);
+  truss.position.set(0,6.1,-7.7);g.add(truss);
+  const truss2=truss.clone();truss2.position.z=7.7;g.add(truss2);
+  [[0xd24b4b,4.6],[0x3f7fd2,4.95],[0xd2b13f,5.3]].forEach(([col,y])=>{
+    const pm=new TT.MeshStandardMaterial({color:col,roughness:.45,metalness:.3});
+    const p=new TT.Mesh(new TT.CylinderGeometry(0.085,0.085,25.4,10),pm);
+    p.rotation.z=Math.PI/2;p.position.set(0,y,-7.45);g.add(p);
+    for(let x=-12;x<=12;x+=4){
+      const fl=new TT.Mesh(new TT.CylinderGeometry(0.13,0.13,0.07,10),pm);
+      fl.rotation.z=Math.PI/2;fl.position.set(x,y,-7.45);g.add(fl);
+    }
+  });
+  const rm=new TT.MeshStandardMaterial({color:0xd2691e,roughness:.7});
+  const bm=new TT.MeshStandardMaterial({color:0xa8825a,roughness:.9});
+  [[-10.5,-5.5],[10.5,-5.5]].forEach(([rx,rz],ri)=>{
+    for(let lv=0;lv<3;lv++){
+      const sh=new TT.Mesh(new TT.BoxGeometry(3.2,0.08,1.1),rm);
+      sh.position.set(rx,0.55+lv*0.85,rz);g.add(sh);
+      for(let b=0;b<3;b++){
+        if((ri*3+lv*7+b)%4===0)continue;
+        const bx=new TT.Mesh(new TT.BoxGeometry(0.72,0.6,0.78),bm);
+        bx.position.set(rx-1.1+b*1.1,0.55+lv*0.85+0.34,rz);bx.castShadow=true;g.add(bx);
+      }
+    }
+    for(const dx of[-1.6,1.6]){
+      const post=new TT.Mesh(new TT.BoxGeometry(0.1,2.6,0.1),rm);
+      post.position.set(rx+dx,1.3,rz);g.add(post);
+    }
+  });
+  for(let x=-8;x<=8;x+=8){
+    const pl=new TT.PointLight(0xffd9a0,0.55,18);
+    pl.position.set(x,5.6,0);g.add(pl);
+    const shade=new TT.Mesh(new TT.CylinderGeometry(0.05,0.42,0.34,12,1,true),
+      new TT.MeshStandardMaterial({color:0x2f3845,roughness:.5,metalness:.4,side:TT.DoubleSide}));
+    shade.position.set(x,5.62,0);g.add(shade);
+    const bulb=new TT.Mesh(new TT.SphereGeometry(0.13,10,8),
+      new TT.MeshBasicMaterial({color:0xffe9c4}));
+    bulb.position.set(x,5.5,0);g.add(bulb);
+  }
+  const lane=new TT.MeshBasicMaterial({color:0xd2b13f});
+  for(const z of[5.2,6.4]){
+    const ln=new TT.Mesh(new TT.PlaneGeometry(24,0.09),lane);
+    ln.rotation.x=-Math.PI/2;ln.position.set(0,0.004,z);g.add(ln);
+  }
+  sc.add(g);
+}
+
 /* ── 씬 빌더(라인별) ── */
 const BUILDERS={
  motor_start_stop(env){
@@ -130,8 +215,10 @@ const BUILDERS={
     const p=box(0.32,0.3,0.34,mat([0x3b82f6,0x7c5cff,0xd29922,0x3fa86b][i%4]));
     p.visible=false;env.set.add(p);parts.push(p);
   }
+  let synced=false;
   env.upd=(L,dt)=>{
-    bt.drive(L.sst.spd,dt); /* 엔진 램프 속도 그대로 */
+    if(!synced){bt.sync(L.sst.belt);synced=true;} /* 엔진 위상에서 시작 */
+    bt.drive(L.sst.spd,dt);
     lamp1.intensity=L.plc.val("MOTOR")?1.2:0;
     parts.forEach((p,i)=>{
       const sp=L.sst.parts[i];
@@ -467,7 +554,7 @@ const BUILDERS={
 const Twin3D={
  supported:Object.keys(BUILDERS),
  active:null,
- _r:null,_scene:null,_cam:null,_env:null,_orbit:{th:0.95,ph:0.42,d:12},
+ _r:null,_scene:null,_cam:null,_env:null,_orbit:{th:0.95,ph:0.40,d:9},
  mount(container,L,opts){
   const TT=T();
   this.destroy();
@@ -476,7 +563,7 @@ const Twin3D={
   r.setSize(W,H);r.setPixelRatio(Math.min(devicePixelRatio,2));
   r.shadowMap.enabled=true;
   if(TT.PCFSoftShadowMap!==undefined)r.shadowMap.type=TT.PCFSoftShadowMap;
-  if(TT.ACESFilmicToneMapping!==undefined){r.toneMapping=TT.ACESFilmicToneMapping;r.toneMappingExposure=1.05;}
+  if(TT.ACESFilmicToneMapping!==undefined){r.toneMapping=TT.ACESFilmicToneMapping;r.toneMappingExposure=1.3;}
   if(TT.SRGBColorSpace!==undefined)r.outputColorSpace=TT.SRGBColorSpace;
   else if(TT.sRGBEncoding!==undefined)r.outputEncoding=TT.sRGBEncoding;
   container.appendChild(r.domElement);
@@ -485,7 +572,7 @@ const Twin3D={
   sc.fog=new TT.Fog(0x0a0f16,20,55);
   sc.add(new TT.AmbientLight(0x7788aa,0.35));
   sc.add(new TT.HemisphereLight(0x9db4d8,0x1a1f27,0.5));
-  const sun=new TT.DirectionalLight(0xffeedd,1.0);
+  const sun=new TT.DirectionalLight(0xffeedd,1.35);
   sun.position.set(7,13,5);sun.castShadow=true;
   sun.shadow.mapSize.set(2048,2048);
   sun.shadow.camera.left=-12;sun.shadow.camera.right=12;
@@ -506,6 +593,7 @@ const Twin3D={
   floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;sc.add(floor);
   const grid=new TT.GridHelper(26,26,0x33404e,0x191f27);
   grid.position.y=0.002;sc.add(grid);
+  buildFactoryEnv(sc);
   const cam=new TT.PerspectiveCamera(50,W/H,0.1,120);
   const env={set:new TT.Group(),upd:null};
   sc.add(env.set);
