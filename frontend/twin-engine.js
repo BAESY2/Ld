@@ -749,15 +749,45 @@ function chrome(ctx,t,val){
     dq(opx+opy+2.5,c2=>lamp(c2,P(opx+0.08+i*0.15,opy+0.08,1.13),2.6,b.c,val(b.sym)));
   });
   tag3(opx+0.18,opy+0.18,1.1,"OP-01","조작반","#8b98a8");
-  /* PLC-01 */
+  /* CP-01 제어반 외함(0.8×0.46×1.9m) — 내부: DIN레일 PLC 모듈·배선덕트·단자대 */
   sh(plx,ply,0.85,0.5,0.24);
-  box3(plx,ply,0,0.82,0.46,1.9,"#1b2531");
-  dq(plx+ply+1.96,c2=>{
-    face(c2,[P(plx+0.08,ply+0.46,0.15),P(plx+0.74,ply+0.46,0.15),P(plx+0.74,ply+0.46,1.78),P(plx+0.08,ply+0.46,1.78)],"rgba(10,15,21,.9)",EDGE);
-    lamp(c2,P(plx+0.18,ply+0.46,1.64),2.6,"#3fb950",true);
-    lamp(c2,P(plx+0.32,ply+0.46,1.64),2.6,"#58a6ff",(t*5%1)<0.5);
+  box3(plx,ply,0,0.82,0.46,1.9,"#232b36");
+  dq(plx+ply+1.97,c2=>{
+    /* 내부 백패널(전면 개방) */
+    face(c2,[P(plx+0.06,ply+0.46,0.1),P(plx+0.76,ply+0.46,0.1),P(plx+0.76,ply+0.46,1.82),P(plx+0.06,ply+0.46,1.82)],"#39424d",EDGE);
+    /* 배선 덕트(슬롯형, 연회색) — 세로2 + 가로2 */
+    for(const dx of[0.09,0.66])
+      face(c2,[P(plx+dx,ply+0.47,0.18),P(plx+dx+0.07,ply+0.47,0.18),P(plx+dx+0.07,ply+0.47,1.74),P(plx+dx,ply+0.47,1.74)],"#aeb6bf",EDGE);
+    for(const dz of[0.95,1.5])
+      face(c2,[P(plx+0.09,ply+0.47,dz),P(plx+0.73,ply+0.47,dz),P(plx+0.73,ply+0.47,dz+0.07),P(plx+0.09,ply+0.47,dz+0.07)],"#aeb6bf",EDGE);
+    /* DIN 레일 + PLC 모듈열(실물 비율 — CPU 0.12kg 소형 모듈) */
+    face(c2,[P(plx+0.18,ply+0.47,1.22),P(plx+0.64,ply+0.47,1.22),P(plx+0.64,ply+0.47,1.25),P(plx+0.18,ply+0.47,1.25)],"#5d6c7c");
+    const vend=(PLC_CATALOG.find(x=>x.model===cur.cpu)||{}).v||"LS";
+    const cpuCol={LS:"#e3e0d5",MITSUBISHI:"#2a3550",SIEMENS:"#9aa48f",OMRON:"#23262b"}[vend]||"#e3e0d5";
+    face(c2,[P(plx+0.165,ply+0.475,1.13),P(plx+0.205,ply+0.475,1.13),P(plx+0.205,ply+0.475,1.34),P(plx+0.165,ply+0.475,1.34)],"#f0c050",EDGE); /* SMPS */
+    face(c2,[P(plx+0.215,ply+0.475,1.12),P(plx+0.275,ply+0.475,1.12),P(plx+0.275,ply+0.475,1.35),P(plx+0.215,ply+0.475,1.35)],cpuCol,EDGE);   /* CPU */
+    for(let k=0;k<4;k++)
+      face(c2,[P(plx+0.285+k*0.075,ply+0.475,1.13),P(plx+0.345+k*0.075,ply+0.475,1.13),P(plx+0.345+k*0.075,ply+0.475,1.33),P(plx+0.285+k*0.075,ply+0.475,1.33)],"#dfe3e8",EDGE); /* I/O 모듈 */
+    lamp(c2,P(plx+0.235,ply+0.48,1.31),1.6,"#3fb950",true);
+    lamp(c2,P(plx+0.255,ply+0.48,1.31),1.6,"#58a6ff",(t*5%1)<0.5);
+    /* 단자대 2열(녹색) + 결선점 */
+    for(const dz of[0.36,0.52]){
+      face(c2,[P(plx+0.12,ply+0.47,dz),P(plx+0.7,ply+0.47,dz),P(plx+0.7,ply+0.47,dz+0.09),P(plx+0.12,ply+0.47,dz+0.09)],"#2f6b4f",EDGE);
+      for(let k=0;k<9;k++){const p=P(plx+0.16+k*0.062,ply+0.475,dz+0.045);
+        c2.beginPath();c2.arc(p[0],p[1],1.1,0,7);c2.fillStyle="#cfd6df";c2.fill();}
+    }
   });
-  tag3(plx+0.4,ply+0.23,2.0,"PLC-01",(cur.cpu||"XGK")+" · 가상","#7ee787");
+  tag3(plx+0.4,ply+0.23,2.02,"CP-01","제어반 외함 0.8×1.9m","#8b98a8",2);
+  tag3(plx+0.24,ply+0.3,1.5,"PLC-01",(cur.cpu||"XGK")+" 모듈(0.12kg)","#7ee787");
+  /* 단자함 TB-01 + 바닥 케이블 덕트(기계측 결선 경유) */
+  box3(10.84,4.56,0,0.1,0.1,0.34,"#39434f");
+  box3(10.74,4.5,0.34,0.34,0.16,0.46,"#2f3a46");
+  dq(10.9+4.6+1,c2=>lamp(c2,P(10.91,4.66,0.72),1.8,"#8ec9ff",true));
+  tag3(10.91,4.62,1.0,"TB-01","단자함(현장 결선)","#8ec9ff",2);
+  (function(){
+    const x0=Math.min(11.1,plx-0.1), x1=Math.max(11.1,plx+0.1);
+    box3(Math.min(10.9,plx+0.2),4.58,0,Math.abs(plx+0.3-10.9)+0.2,0.12,0.08,"#333d49");
+  })();
   /* AVR-01 */
   sh(avx-0.03,avy-0.03,0.7,0.5,0.24);
   box3(avx,avy,0,0.62,0.46,1.6,"#222d3a");
@@ -880,7 +910,8 @@ conveyor:{
    st.spd=ramp(st.spd,o.MOTOR?0.95*(cur.speedF||1):0,1.4,dt);
    st.belt=(st.belt+st.spd*dt)%0.55;
    st.spawn-=dt;
-   if(st.spd>0.3&&st.spawn<=0&&st.parts.length<7){st.parts.push({x:2.45,z:0.75,fall:0});st.spawn=1.7/(cur.speedF||1);}
+   const clearIn=!st.parts.some(p=>!p.fall&&p.x<3.3);
+   if(st.spd>0.3&&st.spawn<=0&&st.parts.length<7&&clearIn){st.parts.push({x:2.45,z:0.75,fall:0});st.spawn=1.7/(cur.speedF||1);}
    for(const p of st.parts){
      if(!p.fall){p.x+=st.spd*dt;if(p.x>11.65)p.fall=1;}
      else{p.z-=dt*1.8;p.x+=dt*0.25;if(p.z<=0.18){p.fall=2;st.count++;}}
@@ -1031,13 +1062,19 @@ counter:{
    if(st.spawn<=0&&st.parts.length<9){st.parts.push({x:2.4,y:2.2,z:0.75,st:0});st.spawn=1.2/(cur.speedF||1);}
    st.rod=ramp(st.rod,o.EJECT?1:0,4,dt);
    st.blocked=false;
+   st.parts.sort((a,b)=>b.x-a.x);
+   let prevX=99;
    for(const p of st.parts){
      if(p.st===0){
-       p.x+=1.1*(cur.speedF||1)*dt;
+       let mv=1.1*(cur.speedF||1)*dt;
+       if(p.x+mv>prevX-0.4)mv=Math.max(0,prevX-0.4-p.x);
+       p.x+=mv;prevX=p.x;
        if(Math.abs(p.x-9.2)<0.17)st.blocked=true;
        if(p.x>10.45&&p.x<10.95&&st.rod>0.6)p.st=1;
        if(p.x>12.6)p.st=2;
-     }else if(p.st===1){
+       continue;
+     }
+     if(p.st===1){
        p.y+=dt*2.2;
        if(p.y>3.4){p.st=9;st.ejected++;}
      }else if(p.st===2){
@@ -1555,27 +1592,52 @@ function drawTrend(){
   const dpr=window.devicePixelRatio||1,W=tc.clientWidth,H=tc.clientHeight;
   if(tc.width!==(W*dpr|0)){tc.width=W*dpr;tc.height=H*dpr;}
   const c=tc.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,W,H);
-  c.font="10px ui-monospace,monospace";c.textAlign="left";c.fillStyle="#5d6c7c";
-  c.fillText("택타임 추이 s/개 (초록) · 소비전력 (파랑) · 점선 = 목표 택타임",8,13);
-  const D=cur.trend,cfg=KPI[cur.id]||{};
-  const vals=D.map(p=>p.takt).filter(v=>v!==null&&!isNaN(v));
-  if(D.length<3||!vals.length){c.fillText("가동 데이터 수집 중…",8,30);return;}
-  const vmax=Math.max(cfg.tt||0,...vals)*1.3+0.001;
-  const X=i=>8+(W-16)*i/(D.length-1), Y=v=>H-7-(H-28)*v/vmax;
-  if(cfg.tt){
-    c.strokeStyle="rgba(217,165,20,.65)";c.setLineDash([4,4]);c.lineWidth=1;
-    c.beginPath();c.moveTo(8,Y(cfg.tt));c.lineTo(W-8,Y(cfg.tt));c.stroke();c.setLineDash([]);
-  }
-  const kmax=Math.max(...D.map(p=>p.kw),0.1)*1.2;
-  c.strokeStyle="rgba(88,166,255,.65)";c.lineWidth=1.2;c.beginPath();
-  D.forEach((p,i)=>{const x=X(i),y=H-7-(H-28)*p.kw/kmax;i?c.lineTo(x,y):c.moveTo(x,y);});
-  c.stroke();
-  c.strokeStyle="#3fd97a";c.lineWidth=1.7;c.beginPath();let st0=false;
-  D.forEach((p,i)=>{if(p.takt===null||isNaN(p.takt))return;const x=X(i),y=Y(p.takt);st0?c.lineTo(x,y):(c.moveTo(x,y),st0=true);});
-  c.stroke();
-  const last=vals[vals.length-1];
-  c.fillStyle="#3fd97a";c.textAlign="right";
-  c.fillText(last.toFixed(1)+"s",W-8,Math.max(20,Y(last)-4));
+  const D=cur.trend;
+  if(D.length<3){c.fillStyle="#5d6c7c";c.font="10px ui-monospace";
+    c.fillText("가동 데이터 수집 중…",10,18);return;}
+  const cfg=KPI[cur.id]||{};
+  const panes=[
+   {title:"생산 누계 EA",col:"#3fd97a",fill:"rgba(63,217,122,.12)",get:p=>p.prod,area:true},
+   {title:"택타임 s/개"+(cfg.tt?" (점선=목표 "+cfg.tt+"s)":""),col:"#58a6ff",get:p=>p.takt,ref:cfg.tt},
+   {title:"소비 전력 kW",col:"#b9a3ff",fill:"rgba(185,163,255,.12)",get:p=>p.kw,area:true}
+  ];
+  const pw=(W-24)/3;
+  panes.forEach((pn,pi)=>{
+    const x0=8+pi*(pw+4), y0=16, ph2=H-30;
+    c.fillStyle="#6f7a8a";c.font="9.5px ui-monospace";c.textAlign="left";
+    c.fillText(pn.title,x0,11);
+    const vals=D.map(pn.get).filter(v=>v!==null&&!isNaN(v));
+    if(!vals.length){c.fillText("—",x0,y0+20);return;}
+    const vmax=Math.max(...vals,pn.ref||0)*1.15+1e-6, vmin=0;
+    /* 축·눈금 */
+    c.strokeStyle="rgba(90,105,120,.4)";c.lineWidth=1;
+    c.strokeRect(x0,y0,pw-8,ph2);
+    c.textAlign="right";
+    for(const f of[0,0.5,1]){
+      const yy=y0+ph2-(ph2-4)*f-2;
+      c.fillStyle="#4a5663";c.fillText((vmin+(vmax-vmin)*f).toFixed(vmax>20?0:1),x0+pw-12,yy+3);
+      c.strokeStyle="rgba(90,105,120,.18)";
+      c.beginPath();c.moveTo(x0+1,yy);c.lineTo(x0+pw-9,yy);c.stroke();
+    }
+    const X=i=>x0+2+(pw-14)*i/(D.length-1);
+    const Y=v=>y0+ph2-2-(ph2-6)*(v-vmin)/(vmax-vmin);
+    if(pn.ref){
+      c.setLineDash([4,4]);c.strokeStyle="rgba(217,165,20,.7)";
+      c.beginPath();c.moveTo(x0+2,Y(pn.ref));c.lineTo(x0+pw-10,Y(pn.ref));c.stroke();
+      c.setLineDash([]);
+    }
+    c.strokeStyle=pn.col;c.lineWidth=1.6;c.beginPath();let st0=false;
+    D.forEach((p,i)=>{const v=pn.get(p);if(v===null||isNaN(v))return;
+      const xx=X(i),yy=Y(v);st0?c.lineTo(xx,yy):(c.moveTo(xx,yy),st0=true);});
+    c.stroke();
+    if(pn.area){
+      c.lineTo(X(D.length-1),y0+ph2-2);c.lineTo(X(0),y0+ph2-2);c.closePath();
+      c.fillStyle=pn.fill;c.fill();
+    }
+    const last=vals[vals.length-1];
+    c.fillStyle=pn.col;c.textAlign="left";c.font="700 11px ui-monospace";
+    c.fillText(typeof last==="number"?(last>=100?last.toFixed(0):last.toFixed(1)):"—",x0+4,y0+12);
+  });
 }
 
 /* ============================================================
@@ -1653,10 +1715,11 @@ function drawScene(t){
   cur.m.buttons.forEach((b,i)=>wirePath(ctx,
     [[wopx+0.36,wopy+0.33+i*0.09],[(wopx+wplx)/2+0.4,Math.max(wopy,wply)+0.85],[wplx+0.02,wply+0.4+i*0.05]],
     val(b.sym),t,"#58a6ff"));
+  const TB=[10.91,4.62];
   (cur.scene.wiresIn||[]).forEach(([s,pts])=>
-    wirePath(ctx,pts.slice(0,-1).concat([[wplx-0.04,wply+0.22]]),val(s),t,"#58a6ff"));
+    wirePath(ctx,pts.slice(0,-1).concat([TB,[wplx-0.04,wply+0.22]]),val(s),t,"#58a6ff"));
   (cur.scene.wiresOut||[]).forEach(([s,pts],i)=>
-    wirePath(ctx,[[wplx+0.02,wply+0.06+i*0.06]].concat(pts.slice(1)),val(s),t,"#3fb950"));
+    wirePath(ctx,[[wplx+0.02,wply+0.06+i*0.06],[TB[0],TB[1]+i*0.04]].concat(pts.slice(1)),val(s),t,"#3fb950"));
   cur.scene.draw(ctx,cur.sst,val,t);
   chrome(ctx,t,val);
   drawShadows(ctx);
@@ -1752,7 +1815,7 @@ function updateDOM(r,dt,t){
    `<div class="kpi"><b class="${cl}">${v}</b><span>${l}</span></div>`).join("");
   if(nowMs-cur.lastTrendT>1500){
     cur.lastTrendT=nowMs;
-    cur.trend.push({takt:K.taktAvg,kw:K.kw});
+    cur.trend.push({takt:K.taktAvg,kw:K.kw,prod:prodN,oee:oee===null?null:oee});
     if(cur.trend.length>120)cur.trend.shift();
     drawTrend();
   }
