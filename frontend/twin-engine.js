@@ -602,7 +602,7 @@ try{LAYOUT=JSON.parse(localStorage.getItem("hands_layout")||"{}");}catch(e){}
 function LP(k){const d=DEF_POS[k],o=LAYOUT[k]||{dx:0,dy:0};return[d[0]+o.dx,d[1]+o.dy];}
 let labelMode=1,editMode=false,eDrag=null;
 let cam={z:1,px:0,py:0};
-let camT={z:1,px:0,py:0};
+let camT={z:1.14,px:-26,py:-30}; /* 기본 프레이밍: 라인 밴드 중심·약간 확대 */
 const dq=(d,f)=>DQ.push({d,f});
 function flushQ(ctx){DQ.sort((a,b)=>a.d-b.d);for(const o of DQ)o.f(ctx);DQ.length=0;}
 const EDGE="rgba(8,12,16,.35)";
@@ -650,9 +650,9 @@ function seg(ctx,a,b,st,w){ctx.strokeStyle=st;ctx.lineWidth=w||1;ctx.beginPath()
 function lamp(ctx,p,r,c,on){
   if(on){
     /* 할로(외광) — 점광원 느낌 */
-    const hg=ctx.createRadialGradient(p[0],p[1],r*0.4,p[0],p[1],r*3.4);
-    hg.addColorStop(0,c+"55");hg.addColorStop(1,c+"00");
-    ctx.fillStyle=hg;ctx.beginPath();ctx.arc(p[0],p[1],r*3.4,0,7);ctx.fill();
+    const hg=ctx.createRadialGradient(p[0],p[1],r*0.4,p[0],p[1],r*2.3);
+    hg.addColorStop(0,c+"3a");hg.addColorStop(1,c+"00");
+    ctx.fillStyle=hg;ctx.beginPath();ctx.arc(p[0],p[1],r*2.3,0,7);ctx.fill();
     ctx.save();ctx.shadowColor=c;ctx.shadowBlur=12;
   }
   ctx.beginPath();ctx.arc(p[0],p[1],r,0,7);ctx.fillStyle=on?c:"#1a2330";ctx.fill();
@@ -721,7 +721,7 @@ function wirePath(ctx,pts,on,t,color){
 /* 공장 바닥 — 콘크리트 타일 + 통로 라인 */
 function floorGrid(ctx){
   if(VIEW_MODE!=="top"){
-  face(ctx,[P(0,0,0),P(WX,0,0),P(WX,0,3.9),P(0,0,3.9)],"#151b23");
+  face(ctx,[P(0,0,0),P(WX,0,0),P(WX,0,3.9),P(0,0,3.9)],"#1b232d");
   for(let x=0.8;x<WX-1;x+=2.2)
     face(ctx,[P(x,0,2.35),P(x+1.5,0,2.35),P(x+1.5,0,3.35),P(x,0,3.35)],"rgba(140,180,220,.07)");
   seg(ctx,P(0,0,2.2),P(WX,0,2.2),"rgba(0,0,0,.35)",1);
@@ -731,8 +731,10 @@ function floorGrid(ctx){
   /* 에폭시 바닥: 그라데이션 + 광택 스트릭 + 신축줄눈 */
   const fA=P(0,0,0),fB=P(WX,WY,0);
   const fg2=ctx.createLinearGradient(fA[0],fA[1],fB[0],fB[1]);
-  fg2.addColorStop(0,"#242b34");fg2.addColorStop(0.55,"#1f2630");fg2.addColorStop(1,"#191f27");
+  fg2.addColorStop(0,"#2c343f");fg2.addColorStop(0.55,"#28303b");fg2.addColorStop(1,"#232b35");
   face(ctx,[P(0,0,0),P(WX,0,0),P(WX,WY,0),P(0,WY,0)],fg2);
+  /* 작업 밴드 광 — 라인이 놓이는 중앙 밴드를 무대처럼 밝게 */
+  face(ctx,[P(0,1.5,0),P(WX,1.5,0),P(WX,4.6,0),P(0,4.6,0)],"rgba(195,218,245,.055)");
   const sA=P(1.5,WY,0),sB=P(8,0,0);
   const sl=ctx.createLinearGradient(sA[0],sA[1],sB[0],sB[1]);
   sl.addColorStop(0,"rgba(160,200,255,0)");sl.addColorStop(0.5,"rgba(160,200,255,.055)");
@@ -1030,23 +1032,15 @@ function chrome(ctx,t,val){
     lamp(c2,P(avx+0.31,avy+0.46,0.82),2.2,"#d9a514",(t*1.3%1)<0.15);
   });
   tag3(avx+0.31,avy+0.23,1.75,"AVR-01","자동전압조정기 380V","#f0c26b");
-  /* AMR/AGV는 전용 물류 섹터에만 — 타 라인에 무관 차량 배치 금지(산업별 정합) */
-  const tri26=2*Math.abs((t/26)%1-0.5);
-  worker(3.6+5.2*(1-tri26),5.78,t);
-  worker(13.5,5.7);
-  rack(0.6,0.25,4);
-  /* 자재 스테이징(STG-01 — 이동 가능 그룹) */
+  /* 주제 집중: 장식 소품(드럼·파레트·배회 작업자·랙) 제거 — 라인 설비만 무대에.
+     작업자는 조작 페데스탈 옆 1명(오퍼레이터)만 유지. */
+  worker(LP("op")[0]-0.55,LP("op")[1]+0.55);
+  /* 자재 스테이징(STG-01 — 이동 가능 그룹, 최소화) */
   sh(sgx-0.05,sgy-0.05,1.3,1.1,0.22);
   box3(sgx,sgy,0,1.2,1.0,0.12,"#5a4a30");
   box3(sgx+0.1,sgy+0.1,0.12,0.45,0.42,0.42,"#6e532a");
   box3(sgx+0.6,sgy+0.1,0.12,0.45,0.42,0.42,"#7a5c2e");
-  box3(sgx+0.35,sgy+0.1,0.54,0.45,0.42,0.4,"#65512f");
   tag3(sgx+0.6,sgy+0.3,1.05,"STG-01","자재 스테이징","#6f7a8a");
-  sh(5.3,5.95,1.45,0.95,0.2);
-  cyl3(5.5,6.35,0,0.3,0.85,"#2e5e8e");cyl3(6.2,6.4,0,0.3,0.85,"#3a6a52");cyl3(5.85,5.98,0,0.3,0.85,"#71583a");
-  sh(8.3,5.9,1.3,1.05,0.2);
-  box3(8.35,5.95,0,1.2,1.0,0.12,"#5a4a30");
-  box3(8.5,6.05,0.12,0.9,0.75,0.55,"#414f61");
 
   /* ── 상위(천장) 인프라 ── */
   for(const cx2 of[0.5,4.5,8.5,12.5,16.5])
@@ -1239,9 +1233,9 @@ carwash:{
    box3(0.4,3.9,0,17.2,0.06,0.08,"#3c4854");
    const arch=(x,c,on,name,tg)=>{
      sh(x-0.2,1.6,0.45,2.5,0.22);
-     box3(x-0.14,1.62,0,0.28,0.28,2.45,on?shade(c,0.8):"#2b333d");
-     box3(x-0.14,3.62,0,0.28,0.28,2.45,on?shade(c,0.8):"#2b333d");
-     box3(x-0.2,1.62,2.45,0.4,2.28,0.3,on?c:"#2c3743");
+     box3(x-0.14,1.62,0,0.28,0.28,2.45,on?shade(c,0.8):"#3a4554");
+     box3(x-0.14,3.62,0,0.28,0.28,2.45,on?shade(c,0.8):"#3a4554");
+     box3(x-0.2,1.62,2.45,0.4,2.28,0.3,on?c:"#404d5e");
      tag3(x,1.62,3.1,tg,name,on?c:"#5d6c7c");
      if(on)dq(x+3.8+3,c2=>lamp(c2,P(x,2.7,2.42),3.5,c,true));
    };
@@ -1250,15 +1244,14 @@ carwash:{
    arch(11,"#d9a514",val("DRY"),"건조 블로워","FN-301");
    const drawCar=(cx,col)=>{
      if(cx<-3.6||cx>19.5)return;
-     const c=["#a83248","#3563a8","#6f7780"][col];
+     const c=["#c04a60","#4878c2","#8a939e"][col];
      sh(cx-2.1,2.1,4.2,1.75,0.3);
      box3(cx-2.15,2.12,0.32,4.3,1.7,0.6,c);
      box3(cx-0.95,2.22,0.92,2.05,1.5,0.55,"#1d2a3a");
      box3(cx-1.6,2.0,0,0.6,0.22,0.55,"#11161d");box3(cx+1.0,2.0,0,0.6,0.22,0.55,"#11161d");
      box3(cx-1.6,3.7,0,0.6,0.22,0.55,"#11161d");box3(cx+1.0,3.7,0,0.6,0.22,0.55,"#11161d");
    };
-   drawCar(st.carX,st.col);
-   if(st.exiting||st.carX>-1.4)drawCar(-2.8,(st.col+1)%3);
+   drawCar(st.carX,st.col); /* 차량은 1대만 — 대기열 중첩 제거(시인성) */
    st.parts.forEach(p=>{
      const q=P(p.x,p.y,p.z),a=Math.max(0,Math.min(1,p.life));
      dq(99,c2=>{
@@ -2136,6 +2129,8 @@ bodyline:{
    st.sparks=st.sparks.filter(p=>p.life>0).slice(-180);
  },
  draw(ctx,st,val,t){
+   /* 작업 패드 — 셀 내부 밝은 콘크리트(주제 강조) */
+   face(ctx,[P(1.1,1.4,0.008),P(15.5,1.4,0.008),P(15.5,4.55,0.008),P(1.1,4.55,0.008)],"rgba(205,225,250,.07)");
    fence(1.0,1.3,15.6,4.65,"front");
    /* 트랜스퍼 레일 2열 + 바 */
    box3(1.5,2.62,0.22,13.6,0.1,0.14,"#3c4854");
@@ -2160,8 +2155,8 @@ bodyline:{
        const grp=s<2?st.arm:st.armB;
        const on=(s<2?val("WELD_A"):val("WELD_B"))&&grp>0.9&&hasBody;
        sh(x-0.3,ry-0.26,0.62,0.55,0.26);
-       cyl3(x+(mir?0.55:-0.55),ry,0,0.22,0.24,"#3a4654");
-       cyl3(x+(mir?0.55:-0.55),ry,0.24,0.14,0.26,"#c96a16");
+       cyl3(x+(mir?0.55:-0.55),ry,0,0.28,0.26,"#3a4654");
+       cyl3(x+(mir?0.55:-0.55),ry,0.26,0.18,0.32,"#d9821c");
        dq(x+ry+1.6,c2=>{
          const e=grp*grp*(3-2*grp);
          const sxw=x+(mir?0.55:-0.55);
@@ -2187,10 +2182,10 @@ bodyline:{
    /* 차체(BIW 쉘): 트랜스퍼 시 전체 동기 이동 */
    const drawBody=bx=>{
      sh(bx-1.3,2.45,2.6,1.4,0.3);
-     box3(bx-1.3,2.5,0.42,2.6,1.3,0.42,"#8f97a1");
-     box3(bx-0.62,2.62,0.84,1.35,1.06,0.4,"#7d8590");
-     box3(bx-1.25,2.56,0.5,0.5,1.18,0.16,"#6f7780");
-     box3(bx+0.78,2.56,0.5,0.45,1.18,0.16,"#6f7780");
+     box3(bx-1.3,2.5,0.42,2.6,1.3,0.42,"#aab2bc");
+     box3(bx-0.62,2.62,0.84,1.35,1.06,0.4,"#959ea8");
+     box3(bx-1.25,2.56,0.5,0.5,1.18,0.16,"#878f99");
+     box3(bx+0.78,2.56,0.5,0.45,1.18,0.16,"#878f99");
    };
    for(const b of st.bodies)drawBody(stx(b)+st.tr*3.2);
    if(st.feedX>-1.99&&!st.bodies.includes(0))drawBody(stx(0)+st.feedX);
@@ -2404,10 +2399,6 @@ function drawScene(t){
   flushQ(ctx);
   drawLabels(ctx);
   ctx.restore();
-  /* 비네트 — 화면 가장자리 감광(시선 집중) */
-  const vg=ctx.createRadialGradient(view.W/2,view.H*0.44,view.H*0.3,view.W/2,view.H*0.5,view.W*0.74);
-  vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(2,6,12,.4)");
-  ctx.fillStyle=vg;ctx.fillRect(0,0,view.W,view.H);
   txt(ctx,[14,20],cur.scene.label,"#aebdcd",12.5,"left",true);
   txt(ctx,[14,37],"드래그=이동 · 휠=줌 · 더블클릭=초기화 · 기기 라벨 클릭=상세 — 1유닛=1m 실측","#5d6c7c",11,"left");
   const K=cur.kpi,cfg=KPI[cur.id]||{unit:"개"};
@@ -2710,7 +2701,7 @@ cvs.addEventListener("pointerup",e=>{
   if(pdrag&&!pdrag.moved)pickDevice(e);
   pdrag=null;
 });
-cvs.addEventListener("dblclick",()=>{camT={z:1,px:0,py:0};hideDev();});
+cvs.addEventListener("dblclick",()=>{camT={z:1.14,px:-26,py:-30};hideDev();});
 document.getElementById("lblbtn").onclick=()=>{
   labelMode=(labelMode+1)%3;
   document.getElementById("lblbtn").textContent="라벨: "+["숨김","핵심","전체"][labelMode];
