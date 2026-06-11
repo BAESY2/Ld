@@ -1000,6 +1000,67 @@ function agvFork(t){
   tag3(x,y,1.5,"AGV-02","지게차형 AGV","#7ee0a8",2);
 }
 
+/* 천장형 웨이퍼 이송(OHT/AMHS) — 정밀 라인 프로파일 */
+function ohtKey(ph){
+  const SEG=[
+    {a:0.00,b:0.24,x0:0.9,x1:5},
+    {a:0.24,b:0.40,stop:5},
+    {a:0.40,b:0.62,x0:5,x1:11},
+    {a:0.62,b:0.78,stop:11},
+    {a:0.78,b:1.00,x0:11,x1:16.2}
+  ];
+  for(const k of SEG){
+    if(ph<k.a||ph>=k.b)continue;
+    const p=(ph-k.a)/(k.b-k.a);
+    if(k.stop!==undefined){
+      const h=p<0.35?p/0.35:p>0.65?(1-p)/0.35:1;
+      return {x:k.stop,h:Math.max(0,Math.min(1,h)),busy:true};
+    }
+    const e=p*p*(3-2*p);
+    return {x:k.x0+(k.x1-k.x0)*e,h:0,busy:false};
+  }
+  return {x:0.9,h:0,busy:false};
+}
+function ohtSystem(t){
+  /* 레일 + 천장 행거 */
+  box3(0.8,2.26,3.28,15.5,0.1,0.12,"#4a5663");
+  dq(3,c2=>{for(let x=1.6;x<16.2;x+=3)seg(c2,P(x,2.31,3.4),P(x,2.31,3.78),"#33404e",1.4);});
+  /* FFU 클린룸 천장 필터 */
+  for(let x=2.2;x<15.5;x+=3.6){
+    box3(x,1.85,3.6,1.7,0.95,0.08,"#243140");
+    dq(x+2.3+3.6,c2=>{const p=P(x+0.85,2.32,3.58);
+      c2.fillStyle="rgba(120,180,255,.06)";
+      c2.beginPath();c2.moveTo(p[0]-22,p[1]);c2.lineTo(p[0]+22,p[1]);
+      c2.lineTo(p[0]+13,p[1]+34);c2.lineTo(p[0]-13,p[1]+34);c2.closePath();c2.fill();});
+  }
+  /* 로드포트 2개 */
+  for(const px of[5,11]){
+    box3(px-0.24,2.16,1.02,0.48,0.32,0.07,"#33404e");
+    dq(px+2.3+1.2,c2=>lamp(c2,P(px,2.32,1.14),2,"#8ec9ff",true));
+    tag3(px,2.32,0.98,px===5?"LP-01":"LP-02","로드포트","#8ec9ff",2);
+  }
+  /* 천장 스토커(FOUP 버퍼) */
+  box3(13.85,2.06,2.45,0.95,0.42,0.75,"#2b3743");
+  box3(13.95,2.12,2.52,0.32,0.3,0.28,"#cfd6df");
+  box3(14.4,2.12,2.52,0.32,0.3,0.28,"#cfd6df");
+  tag3(14.3,2.27,3.35,"STK-01","천장 스토커","#9fb3c8",2);
+  /* OHT 비히클 2대 — 주행→정지→권하강→권상승 */
+  [0,0.5].forEach((off,vi)=>{
+    const k=ohtKey(((t/36)+off)%1);
+    const vx=k.x, fz=2.96-1.72*k.h;
+    box3(vx-0.24,2.2,3.0,0.48,0.22,0.26,"#314153");
+    box3(vx-0.26,2.19,3.24,0.52,0.24,0.06,"#4a5663");
+    dq(vx+2.3+3.1,c2=>{
+      seg(c2,P(vx-0.1,2.31,3.0),P(vx-0.1,2.31,fz+0.32),"#9aa7b5",1);
+      seg(c2,P(vx+0.1,2.31,3.0),P(vx+0.1,2.31,fz+0.32),"#9aa7b5",1);
+      lamp(c2,P(vx+0.2,2.2,3.12),1.8,k.busy?"#d9a514":"#3fb950",(t*3%1)<0.6);
+    });
+    box3(vx-0.17,2.21,fz,0.34,0.2,0.32,"#cfd6df");
+    box3(vx-0.17,2.19,fz+0.05,0.34,0.03,0.22,"#8b98a8");
+    tag3(vx,2.31,3.85,"OHT-0"+(vi+1),"웨이퍼 이송(FOUP)","#9fd0ff",2);
+  });
+}
+
 function chrome(ctx,t,val){
   const [opx,opy]=LP("op"),[plx,ply]=LP("plc"),[avx,avy]=LP("avr"),[sgx,sgy]=LP("stg");
   /* 조작반 OP-01 */
@@ -1094,8 +1155,11 @@ function chrome(ctx,t,val){
       lamp(c2,[p[0],p[1]+6.5],2.4,"#ffe9b8",true);
     });
   }
+  /* 공장 상황별 상위 프로파일: oht(정밀)/crane(중량)/piping(프로세스) */
+  const ov=cur.scene.overhead||"crane";
+  if(ov==="oht")ohtSystem(t);
   /* CR-01 천장 크레인(후면 베이) — 권상 사이클 */
-  (function(){
+  if(ov==="crane")(function(){
     const ph=(t/52)%1, x1=2.6, x2=13.4;
     const sgm=(a,b)=>Math.min(1,Math.max(0,(ph-a)/(b-a)));
     let bx,hz,load;
@@ -1791,6 +1855,9 @@ SCENES.vision.quality=st=>(st.ok+st.ng)>0?(st.ok-(st.leak||0))/(st.ok+st.ng):1;
 SCENES.pumps.prod=st=>Math.floor(st.supplied); SCENES.pumps.wip=st=>Math.round(st.level*100);
 SCENES.pumps.avail=()=>1;
 SCENES.conveyor.speedCtl=SCENES.counter.speedCtl=SCENES.cascade.speedCtl=true;
+SCENES.counter.overhead="oht"; SCENES.vision.overhead="oht"; SCENES.weld.overhead="oht";
+SCENES.batch.overhead="piping"; SCENES.pumps.overhead="piping"; SCENES.carwash.overhead="piping";
+/* conveyor·shuttle·cascade = 기본 crane */
 SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCENES.cascade.speed=st=>Math.max(...st.spd);
 
 SCENES.counter.quality=st=>(st.good+st.ejected)>0?st.good/(st.good+st.ejected):1;
