@@ -178,6 +178,10 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 .xbtn:hover{color:var(--fg);border-color:var(--acc)}
 .xbtn.on{background:#1c4a7a;color:#cfe6ff;border-color:#58a6ff}
 .scol{position:absolute;left:10px;top:64px;display:flex;flex-direction:column;gap:6px;z-index:4}
+#setwrap{display:none;position:fixed;inset:0;background:rgba(4,7,11,.55);z-index:60;backdrop-filter:blur(2px)}
+#setpanel{position:absolute;right:0;top:0;bottom:0;width:min(380px,92vw);background:#0d141d;
+ border-left:1px solid var(--bd);padding:18px 18px 30px;overflow:auto;box-shadow:-18px 0 50px rgba(0,0,0,.5)}
+#setpanel .alhd h4{font-size:14px;color:var(--fg)}
 .alhd{display:flex;justify-content:space-between;align-items:center}
 .alhd h4{margin:0}
 details.engd{margin-top:14px}
@@ -320,18 +324,32 @@ table.io td.mut{color:var(--mut)}
     <canvas id="scene"></canvas>
     <div id="devpanel"></div>
     <div class="scol">
+     <button class="xbtn" id="setbtn">⚙ 설정</button>
      <button class="xbtn" id="lblbtn">라벨: 핵심</button>
      <button class="xbtn" id="editbtn">배치 편집</button>
      <button class="xbtn" id="rstbtn" style="display:none">배치 초기화</button>
+    </div>
+    <div id="setwrap">
+     <div id="setpanel">
+      <div class="alhd"><h4>⚙ 라인 설정 — <span id="settitle"></span></h4>
+       <button class="xbtn" id="setclose">닫기 ✕</button></div>
+      <div class="vrf"><h4>PLC 기종 · 적합성</h4></div>
+      <div class="plcsel" id="plcsel"></div>
+      <div class="fitbox" id="fitbox"></div>
+      <div class="vrf"><h4>운전 파라미터</h4></div>
+      <div class="ctrl" id="setsliders" style="margin-top:2px"></div>
+      <div class="vrf"><h4>고장 주입 — 디지털트윈 내고장 테스트</h4></div>
+      <div id="setfaults" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+      <div class="hint" style="margin-top:14px;font-size:12px;color:var(--mut)">
+       설정은 라인별로 유지됩니다. 라벨·배치 편집은 화면 좌측 상단 버튼.</div>
+     </div>
     </div>
     <div class="kpis" id="kpis"></div>
     <canvas id="trend" class="trend"></canvas>
     <div class="ctrl" id="ctrl"></div>
    </div>
    <div class="box">
-    <h3>② 가상 PLC — 기종 선택 · 적합성 · 실시간 I/O</h3>
-    <div class="plcsel" id="plcsel"></div>
-    <div class="fitbox" id="fitbox"></div>
+    <h3>② 가상 PLC — 실시간 I/O · 운전 데이터</h3>
     <div id="cosimbar" style="margin-bottom:8px"></div>
     <div class="scanline" id="scaninfo"></div>
     <table class="io" id="iotable"></table>
@@ -548,6 +566,40 @@ function buildPlcSel(){
     logEv("op","PLC 기종 변경 → "+cur.cpu);};
   el.appendChild(sel);
   renderFit();
+}
+
+/* 설정 드로어 — 기종·운전 파라미터·고장 주입(라인별) */
+function buildSettings(){
+  document.getElementById("settitle").textContent=OV[cur.id]||cur.d.title;
+  buildPlcSel();
+  const sl=document.getElementById("setsliders");sl.innerHTML="";
+  const mkSlider=(label,id,min,max,val,suffix,oninput)=>{
+    const w=document.createElement("div");w.className="sld";
+    w.innerHTML=`<small>${label} <b id="${id}v">${val}${suffix}</b></small><input id="${id}" type="range" min="${min}" max="${max}" value="${val}"/>`;
+    sl.appendChild(w);
+    w.querySelector("input").addEventListener("input",e=>{
+      w.querySelector("b").textContent=e.target.value+suffix;
+      oninput(+e.target.value);
+    });
+  };
+  if(cur.scene.speedCtl)mkSlider("생산속도","spdr",50,150,Math.round(cur.speedF*100),"%",
+    v=>{cur.speedF=v/100;logEv("op","생산속도 변경 → "+v+"%");});
+  if(cur.scene.ngCtl)mkSlider("불량 주입률","ngr",0,25,cur.ngRate,"%",
+    v=>{cur.ngRate=v;logEv("op","불량 주입률 변경 → "+v+"%");});
+  if(cur.scene.demandCtl)mkSlider("수요 부하","dmr",20,170,Math.round(cur.demandF*100),"%",
+    v=>{cur.demandF=v/100;logEv("op","공정 수요 부하 변경 → "+v+"%");});
+  if(!cur.scene.speedCtl&&!cur.scene.ngCtl&&!cur.scene.demandCtl)
+    sl.innerHTML='<span class="hint" style="font-size:12px;color:var(--mut)">이 라인은 조정 파라미터가 없습니다.</span>';
+  const ff=document.getElementById("setfaults");ff.innerHTML="";
+  (cur.m.faults||[]).forEach(f=>{
+    const fb=document.createElement("button");
+    fb.className="fbtn"+(cur.faults[f.id]?" on":"");fb.textContent=f.label;
+    fb.onclick=()=>{cur.faults[f.id]=!cur.faults[f.id];fb.classList.toggle("on",!!cur.faults[f.id]);
+      logEv("warn",f.label+(cur.faults[f.id]?" — 고장 발생(주입)":" — 복구 완료"));};
+    ff.appendChild(fb);
+  });
+  if(!(cur.m.faults||[]).length)
+    ff.innerHTML='<span class="hint" style="font-size:12px;color:var(--mut)">이 라인은 고장 주입 항목이 없습니다.</span>';
 }
 
 /* 생산 파라미터 — 제품 단위·개당 중량(kg)·목표 택타임(s) */
@@ -2155,6 +2207,15 @@ document.getElementById("editbtn").onclick=()=>{
   document.getElementById("rstbtn").style.display=editMode?"block":"none";
   logEv("op",editMode?"배치 편집 시작 — OP-01·PLC-01·AVR-01·STG-01 드래그로 이동":"배치 편집 종료");
 };
+document.getElementById("setbtn").onclick=()=>{
+  document.getElementById("setwrap").style.display="block";
+};
+document.getElementById("setclose").onclick=()=>{
+  document.getElementById("setwrap").style.display="none";
+};
+document.getElementById("setwrap").addEventListener("click",e=>{
+  if(e.target.id==="setwrap")document.getElementById("setwrap").style.display="none";
+});
 document.getElementById("rstbtn").onclick=()=>{
   LAYOUT={};
   try{localStorage.removeItem("hands_layout");}catch(e2){}
@@ -2337,53 +2398,14 @@ function show(id){
     logEv("op","자동 시연 "+(cur.auto?"ON":"OFF"));};
   const aw=document.createElement("div");aw.className="sld";aw.appendChild(ab);
   ctrl.appendChild(aw);
-  if(cur.scene.speedCtl){
-    const w=document.createElement("div");w.className="sld";
-    const v0=Math.round(cur.speedF*100);
-    w.innerHTML=`<small>생산속도 <b id="spdv">${v0}%</b></small><input id="spdr" type="range" min="50" max="150" value="${v0}"/>`;
-    ctrl.appendChild(w);
-    w.querySelector("#spdr").addEventListener("input",e=>{
-      cur.speedF=+e.target.value/100;
-      w.querySelector("#spdv").textContent=e.target.value+"%";
-      logEv("op","생산속도 변경 → "+e.target.value+"%");
-    });
-  }
-  if(cur.scene.ngCtl){
-    const w=document.createElement("div");w.className="sld";
-    w.innerHTML=`<small>불량 주입률 <b id="ngv">${cur.ngRate}%</b></small><input id="ngr" type="range" min="0" max="25" value="${cur.ngRate}"/>`;
-    ctrl.appendChild(w);
-    w.querySelector("#ngr").addEventListener("input",e=>{
-      cur.ngRate=+e.target.value;
-      w.querySelector("#ngv").textContent=e.target.value+"%";
-      logEv("op","불량 주입률 변경 → "+e.target.value+"%");
-    });
-  }
-  if(cur.scene.demandCtl){
-    const w=document.createElement("div");w.className="sld";
-    const v0=Math.round(cur.demandF*100);
-    w.innerHTML=`<small>수요 부하 <b id="dmv">${v0}%</b></small><input id="dmr" type="range" min="20" max="170" value="${v0}"/>`;
-    ctrl.appendChild(w);
-    w.querySelector("#dmr").addEventListener("input",e=>{
-      cur.demandF=+e.target.value/100;
-      w.querySelector("#dmv").textContent=e.target.value+"%";
-      logEv("op","공정 수요 부하 변경 → "+e.target.value+"%");
-    });
-  }
-  if((cur.m.faults||[]).length){
-    const w=document.createElement("div");w.className="sld";
-    const lb=document.createElement("small");lb.textContent="고장 주입 — 디지털트윈 내고장 테스트";w.appendChild(lb);
-    const row=document.createElement("div");row.style.cssText="display:flex;gap:6px;flex-wrap:wrap";
-    cur.m.faults.forEach(f=>{
-      const fb=document.createElement("button");
-      fb.className="fbtn"+(cur.faults[f.id]?" on":"");fb.textContent=f.label;
-      fb.onclick=()=>{cur.faults[f.id]=!cur.faults[f.id];fb.classList.toggle("on",!!cur.faults[f.id]);
-        logEv("warn",f.label+(cur.faults[f.id]?" — 고장 발생(주입)":" — 복구 완료"));};
-      row.appendChild(fb);
-    });
-    w.appendChild(row);ctrl.appendChild(w);
-  }
+  const sb=document.createElement("button");
+  sb.className="fbtn abtn";sb.textContent="⚙ 설정";
+  sb.onclick=()=>{document.getElementById("setwrap").style.display="block";};
+  const sw2=document.createElement("div");sw2.className="sld";sw2.appendChild(sb);
+  ctrl.appendChild(sw2);
+  buildSettings();
   const hint=document.createElement("div");hint.className="hint";
-  hint.textContent=m.autoInputs
+  hint.textContent=cur.m.autoInputs
     ?"센서 입력은 라인 위 부품/수위가 실제로 만들어냅니다. 버튼을 누르면 자동 시연이 꺼지고 수동 모드가 됩니다."
     :"자동 시연이 라인을 운전 중입니다. 버튼을 누르면 즉시 수동 모드 — 자기유지는 래더가 합니다.";
   ctrl.appendChild(hint);
@@ -2396,7 +2418,6 @@ function show(id){
       `<tr><td><span class="dot on-i" style="background:#7c5cff;box-shadow:0 0 8px #7c5cff"></span></td>`+
       `<td><b>${addr}</b></td><td class="mut">${a.name}</td>`+
       `<td colspan="2"><b id="an_${addr}" style="color:#b9a3ff">—</b> <span class="mut">${a.unit} · 아날로그 D(트윈 계측)</span></td></tr>`).join("");
-  buildPlcSel();
   document.getElementById("st").textContent=d.st;
   document.getElementById("explain").textContent=d.explain;
   document.getElementById("sim").innerHTML=tg(d.sim);
