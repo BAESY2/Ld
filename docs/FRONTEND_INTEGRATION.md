@@ -17,7 +17,7 @@
 
 ## 2. 통합 단계
 
-### P-A. 트윈 엔진 모듈화 (저위험·선행)
+### P-A. 트윈 엔진 모듈화 — ✅ 완료 (frontend/twin-engine.js 161KB 추출, scripts/build_demo.py 인라인 빌드, 동기화 강제 pytest 3건)
 - 가동 화면의 PLC/SCENES/KPI/알람 코드를 `frontend/twin-engine.js`(`window.TwinEngine`)로 추출.
 - 가동 화면은 이를 `<script src>`로 로드(file:// 호환 위해 인라인 폴백 유지 또는 빌드 시 인라인).
 - 산출: 양쪽 페이지가 같은 엔진을 공유할 수 있는 단일 소스.
