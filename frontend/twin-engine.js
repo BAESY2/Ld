@@ -586,7 +586,8 @@ function box3(x,y,z,w,d,h,c){
 }
 function cyl3(x,y,z,r,h,c){
   dq(x+y+r+z*0.02,ctx=>{
-    const rx=r*1.22*view.s, ry=r*0.62*view.s;
+    const rx=Math.abs(r*1.22*view.s), ry=Math.abs(r*0.62*view.s);
+    if(rx<0.01)return;
     const b=P(x,y,z), t=P(x,y,z+h);
     ctx.beginPath();
     ctx.moveTo(b[0]-rx,b[1]);ctx.lineTo(t[0]-rx,t[1]);
@@ -1793,7 +1794,7 @@ fnb:{
    });
    if(st.spill>0.02)dq(8.05+2.6+1,c2=>{
      const p2=P(8.05,2.55,0.76);
-     c2.beginPath();c2.ellipse(p2[0],p2[1],14*st.spill,6*st.spill,0,0,7);
+     c2.beginPath();c2.ellipse(p2[0],p2[1],Math.abs(14*st.spill),Math.abs(6*st.spill),0,0,7);
      c2.fillStyle="rgba(201,138,58,.5)";c2.fill();
    });
    sh(13.0,1.85,1.0,0.95,0.25);
@@ -2199,6 +2200,7 @@ function lineOEE(L){
   return Pf===null?null:A*Pf*Q*100;
 }
 function drawScene(t){
+  if(cvs.clientWidth<40)return; /* WebGL 전환 갭: 숨겨진 캔버스(폭0)에 음수 스케일 드로잉 금지 */
   if(cvs.clientWidth!==view.W||cvs.clientHeight!==view.H)resize();
   const ctx=g2;
   ctx.clearRect(0,0,view.W,view.H);
@@ -2417,7 +2419,7 @@ function glContainer(){
 function glPick(tag){
   devOpen=tag;
   document.getElementById("devpanel").style.display="block";
-  renderDev();
+  renderDev();renderDevList();
   cur.lastKey="";
   wtab("setup");
   if(tag==="RB-401")openPendant();
@@ -2584,6 +2586,7 @@ function chipAt(e){
 function wtab(name){
   document.querySelectorAll(".wtab").forEach(b=>b.classList.toggle("on",b.dataset.w===name));
   document.querySelectorAll(".wview").forEach(v=>v.classList.toggle("on",v.id==="w-"+name));
+  if(name==="setup")renderDevList();
 }
 document.getElementById("wtabs").addEventListener("click",e=>{
   const b=e.target.closest(".wtab");
@@ -2599,6 +2602,43 @@ function pickDevice(e){
     wtab("setup");
     if(hit.tg==="RB-401")openPendant();
   } else hideDev();
+}
+/* 셋업 탭 기기 목록 — 렌더러(2D/WebGL/공장뷰) 무관하게 모든 기기 진입·편집 보장 */
+const DEV_EXTRA={conveyor_divert:[["VS-701","비전 카메라"]],
+  weld_cell:[["WT-401","용접 지그"]],count_eject:[["SN-101","광전센서"]],
+  motion_home_move:[["ACS","상위 관제(플릿)"]]};
+function renderDevList(){
+  if(!cur)return;
+  let dl=document.getElementById("devlist");
+  if(!dl){
+    dl=document.createElement("div");dl.id="devlist";
+    dl.style.cssText="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px";
+    const ws=document.getElementById("w-setup");
+    if(!ws)return;
+    ws.insertBefore(dl,ws.firstChild);
+  }
+  const items=[["PLC-01","PLC 컨트롤러"]];
+  for(const[,info]of Object.entries(cur.m.tags||{}))items.push([info.tag,info.name]);
+  (DEV_EXTRA[cur.id]||[]).forEach(x=>items.push(x));
+  dl.innerHTML='<div style="width:100%;font:700 11px ui-monospace,monospace;color:#8b98a8">기기 선택 — 클릭하면 파라미터 편집·전용 툴</div>'+
+   items.map(([tg,nm])=>
+    `<button class="xbtn dlb" data-tg="${tg}" style="${devOpen===tg?"background:#1c3a4f;border-color:#2b86c8":""}">${tg} <small style="color:var(--mut)">${nm}</small></button>`).join("");
+  dl.querySelectorAll(".dlb").forEach(b=>{
+    b.onclick=()=>{
+      const tg=b.dataset.tg;
+      if(tg==="ACS"){wtab("acs");openFleetTool();return;}
+      devOpen=tg;
+      document.getElementById("devpanel").style.display="block";
+      renderDev();renderDevList();
+      if(tg==="RB-401")openPendant();
+      if(tg==="VS-701")openVisionTool();
+      if(/^PLC/.test(tg))openPlcTool();
+      logEv("op","기기 선택 — "+tg);
+    };
+  });
+  const dp=document.getElementById("devpanel");
+  if(dp&&!devOpen){dp.style.display="block";
+    dp.innerHTML='<div class="dvr" style="border:0"><span>위 목록에서 기기를 선택하세요 — 정격·광학·티칭 등 편집값이 시뮬에 즉시 반영됩니다.</span></div>';}
 }
 function renderDev(){
   if(!devOpen)return;
@@ -3227,6 +3267,7 @@ function show(id){
   document.getElementById("safety").textContent=
     "⚠️ 안전 경계: 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061). 3D 설비는 디지털트윈 시각화입니다.";
   cur.lastKey="";
+  renderDevList();
   document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr,devSym());
   const wd0=document.getElementById("wiring");
   if(wd0)wd0.innerHTML=wiringSvg(cur);

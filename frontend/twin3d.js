@@ -40,20 +40,42 @@ function labelSprite(text,color){
 
 /* ── 프리팹 ── */
 function pfBelt(g,x0,y0,len,zTop){
-  const dark=mat(0x39434f),steel=mat(0x274b73,{metalness:0.4,roughness:0.55});
-  for(let lx=x0+0.3;lx<x0+len;lx+=1.9)for(const dy of[0.07,0.55]){
-    g.add(at(box(0.09,zTop-0.13,0.09,dark),lx,y0+dy,(zTop-0.13)/2));
+  const dark=mat(0x39434f),steel=mat(0x2c3a4a,{metalness:0.55,roughness:0.45});
+  const frame=mat(0x274b73,{metalness:0.5,roughness:0.5});
+  const z=zTop-0.13;
+  /* 다리 + 발판(레벨링 풋) + 가로 보강재 */
+  for(let lx=x0+0.3;lx<x0+len;lx+=1.9){
+    for(const dy of[0.07,0.55]){
+      g.add(at(box(0.09,z-0.05,0.09,dark),lx,y0+dy,(z-0.05)/2));
+      g.add(at(box(0.18,0.05,0.18,dark),lx,y0+dy,0.025));
+    }
+    g.add(at(box(0.07,0.07,0.42,dark),lx,y0+0.31,z*0.45));
   }
-  for(const dy of[0.035,0.585])
-    g.add(at(box(len,0.13,0.07,steel),x0+len/2,y0+dy,zTop-0.065));
+  /* 사이드 C채널 프레임(웹+상부 플랜지) */
+  for(const dy of[0.035,0.585]){
+    g.add(at(box(len,0.06,0.13,frame),x0+len/2,y0+dy,z-0.065));
+    g.add(at(box(len,0.10,0.02,frame),x0+len/2,y0+dy,z+0.01));
+  }
+  /* 리턴 롤러(하부 노출) */
+  for(let lx=x0+0.6;lx<x0+len-0.3;lx+=1.05){
+    const rr=cyl(0.032,0.5,steel);rr.rotation.x=Math.PI/2;
+    g.add(at(rr,lx,y0+0.31,z-0.09));
+  }
   const bt=beltTex(len);
   const belt=new (T()).Mesh(new (T()).BoxGeometry(len,0.02,0.46),
     new (T()).MeshStandardMaterial({map:bt,roughness:0.9}));
   at(belt,x0+len/2,y0+0.31,zTop);belt.receiveShadow=true;g.add(belt);
+  /* 엔드 드럼(헤드/테일 풀리) + 베어링 블록 */
   for(const e of[x0,x0+len]){
-    const dr=cyl(0.09,0.5,dark);dr.rotation.x=Math.PI/2;
+    const dr=cyl(0.105,0.52,steel);dr.rotation.x=Math.PI/2;
     g.add(at(dr,e,y0+0.31,zTop-0.05));
+    for(const dy of[0.04,0.58])
+      g.add(at(box(0.14,0.05,0.14,dark),e,y0+dy,zTop-0.05));
   }
+  /* 사이드 가드레일(스테인리스) */
+  for(const dy of[0.0,0.62])
+    g.add(at(box(len,0.025,0.05,mat(0x8a93a0,{metalness:0.65,roughness:0.3})),
+      x0+len/2,y0+dy,zTop+0.10));
   /* drive(v,dt): 엔진 속도[m/s]를 그대로 적산 — UV = 이동거리/타일(1.1m) */
   let dist=0;
   return {tex:bt,drive:(v,dt)=>{dist+=v*dt;bt.offset.x=-dist/1.1;},
@@ -88,16 +110,50 @@ function pfAGV(){
   return {group:g,beacon,pallet:pal};
 }
 function pfRobot(){
-  const g=new (T()).Group();
-  const ym=mat(0xd9a514,{roughness:0.4,metalness:0.3});
-  g.add(at(cyl(0.28,0.3,mat(0xcaa011)),0,0,0.15));
-  const turret=cyl(0.18,0.34,ym);turret.position.y=0.47;g.add(turret);
-  const sh=new (T()).Group();sh.position.y=0.66;g.add(sh);
-  const upper=box(0.16,0.85,0.16,ym);upper.position.y=0.42;sh.add(upper);
-  const el=new (T()).Group();el.position.y=0.85;sh.add(el);
-  const fore=box(0.13,0.8,0.13,ym);fore.position.y=0.4;el.add(fore);
-  const torch=box(0.05,0.3,0.05,mat(0x39434f));torch.position.set(0,0.84,0);el.add(torch);
-  const arc=new (T()).PointLight(0xbfe3ff,0,4);arc.position.set(0,1.0,0);el.add(arc);
+  const TT=T();
+  const g=new TT.Group();
+  const ym=mat(0xd9821c,{roughness:0.42,metalness:0.22}); /* 산업 오렌지 도장 */
+  const jm=mat(0x2b323c,{roughness:0.5,metalness:0.55});  /* 조인트/커버 다크 */
+  /* 베이스 플레이트 + 앵커 볼트 6개 */
+  g.add(at(cyl(0.33,0.06,jm),0,0,0.03));
+  for(let i=0;i<6;i++){
+    const b2=cyl(0.026,0.035,mat(0x11161d,{metalness:0.7}));
+    b2.position.set(Math.cos(i*Math.PI/3)*0.27,0.07,Math.sin(i*Math.PI/3)*0.27);
+    g.add(b2);
+  }
+  g.add(at(cyl(0.26,0.26,ym),0,0,0.19));
+  /* J1 터릿 + 회전 커버 링 */
+  const turret=cyl(0.19,0.3,ym);turret.position.y=0.47;g.add(turret);
+  const j1c=cyl(0.215,0.07,jm);j1c.position.y=0.345;g.add(j1c);
+  const sh=new TT.Group();sh.position.y=0.66;g.add(sh);
+  /* J2 조인트 캡(양측 원통) */
+  for(const sx of[-0.13,0.13]){
+    const c2=cyl(0.12,0.07,jm);c2.rotation.z=Math.PI/2;c2.position.set(sx,0,0);sh.add(c2);
+  }
+  const upper=box(0.18,0.85,0.22,ym);upper.position.y=0.42;sh.add(upper);
+  const rib=box(0.20,0.5,0.045,jm);rib.position.set(0,0.38,0.13);sh.add(rib);
+  const el=new TT.Group();el.position.y=0.85;sh.add(el);
+  for(const sx of[-0.11,0.11]){
+    const c3=cyl(0.10,0.06,jm);c3.rotation.z=Math.PI/2;c3.position.set(sx,0,0);el.add(c3);
+  }
+  const fore=box(0.14,0.8,0.16,ym);fore.position.y=0.4;el.add(fore);
+  /* 손목(J5) + 토치 넥 + 컨택트 팁(구리색 콘) */
+  const wrist=cyl(0.07,0.1,jm);wrist.position.y=0.82;el.add(wrist);
+  const torch=cyl(0.034,0.26,mat(0x39434f,{metalness:0.6,roughness:0.35}));
+  torch.position.set(0,0.97,0);el.add(torch);
+  const tip=new TT.Mesh(new TT.ConeGeometry(0.024,0.08,10),
+    mat(0xb87333,{metalness:0.75,roughness:0.3}));
+  tip.rotation.x=Math.PI;tip.position.set(0,1.13,0);el.add(tip);
+  /* 케이블 드레싱(상완 등쪽 튜브) */
+  if(TT.TubeGeometry&&TT.CatmullRomCurve3){
+    const crv=new TT.CatmullRomCurve3([
+      new TT.Vector3(0.02,0.08,-0.15),new TT.Vector3(0.07,0.45,-0.22),
+      new TT.Vector3(0.03,0.78,-0.17)]);
+    const tube=new TT.Mesh(new TT.TubeGeometry(crv,12,0.022,6),
+      mat(0x15191f,{roughness:0.85}));
+    sh.add(tube);
+  }
+  const arc=new TT.PointLight(0xbfe3ff,0,4);arc.position.set(0,1.0,0);el.add(arc);
   return {group:g,sh,el,arc};
 }
 
