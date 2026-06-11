@@ -827,6 +827,57 @@ function worker(x,y,t){
     ctx.fillRect(h[0]-0.12*view.s,h[1]-0.052*view.s,0.21*view.s,0.022*view.s);
   });
 }
+/* 회전 박스 — 임의 헤딩의 차체(AGV/AMR/지게차) 렌더: 4측면 깊이정렬 + 상면 */
+function rotBox(cx,cy,ang,w,d,h,z0,c){
+  const ca=Math.cos(ang),sa=Math.sin(ang);
+  const pts=[[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]]
+    .map(([x,y])=>[cx+x*ca-y*sa,cy+x*sa+y*ca]);
+  dq(cx+cy+z0*0.02+h,c2=>{
+    const fcs=[];
+    for(let i=0;i<4;i++){
+      const a=pts[i],b2=pts[(i+1)%4];
+      fcs.push({k:(a[0]+a[1]+b2[0]+b2[1])/2,
+        q:[P(a[0],a[1],z0),P(b2[0],b2[1],z0),P(b2[0],b2[1],z0+h),P(a[0],a[1],z0+h)],
+        s:i%2?0.84:0.64});
+    }
+    fcs.sort((f1,f2)=>f1.k-f2.k);
+    for(const f of fcs)face(c2,f.q,shade(c,f.s),EDGE);
+    face(c2,pts.map(p2=>P(p2[0],p2[1],z0+h)),shade(c,1.12),EDGE);
+  });
+}
+/* 폴리라인 경로: 누적거리 → 위치+헤딩 (AGV 코너 회전 주행) */
+function pathLen(path){
+  let L2=0;
+  for(let i=0;i<path.length-1;i++)
+    L2+=Math.hypot(path[i+1][0]-path[i][0],path[i+1][1]-path[i][1]);
+  return L2;
+}
+function pathPos(path,dist){
+  let acc=0;
+  for(let i=0;i<path.length-1;i++){
+    const a=path[i],b2=path[i+1];
+    const L2=Math.hypot(b2[0]-a[0],b2[1]-a[1]);
+    if(dist<=acc+L2+1e-6){
+      const f=Math.max(0,Math.min(1,(dist-acc)/L2));
+      return {x:a[0]+(b2[0]-a[0])*f,y:a[1]+(b2[1]-a[1])*f,
+        ang:Math.atan2(b2[1]-a[1],b2[0]-a[0])};
+    }
+    acc+=L2;
+  }
+  const a=path[path.length-2],b2=path[path.length-1];
+  return {x:b2[0],y:b2[1],ang:Math.atan2(b2[1]-a[1],b2[0]-a[0])};
+}
+function drawPath(ctx,path,col,t){
+  for(let i=0;i<path.length-1;i++){
+    const a=path[i],b2=path[i+1];
+    const L2=Math.hypot(b2[0]-a[0],b2[1]-a[1]),n=Math.max(1,Math.round(L2/0.55));
+    for(let k=0;k<n;k++){
+      const f0=k/n,f1=(k+0.45)/n;
+      seg(ctx,P(a[0]+(b2[0]-a[0])*f0,a[1]+(b2[1]-a[1])*f0,0.014),
+          P(a[0]+(b2[0]-a[0])*f1,a[1]+(b2[1]-a[1])*f1,0.014),col,2);
+    }
+  }
+}
 /* 자재 랙(배경 스케일감) */
 function rack(x,y,bays){
   for(let i=0;i<=bays;i++)box3(x+i*1.35,y,0,0.09,0.8,2.6,"#3d4854");
@@ -1141,6 +1192,13 @@ function ramp(v,target,acc,dt){
 }
 const PARTC=["#3b82f6","#7c5cff","#d29922","#3fa86b"];
 
+/* AGV/AMR 경로 정의 — 코너가 있는 실경로(폴리라인) */
+const AGV_MAIN=[[2.6,3.0],[6.2,3.0],[6.2,2.1],[10.4,2.1],[10.4,3.0],[13.4,3.0]];
+const FLEET_PATHS={
+  amr:[[4.2,4.45],[13.2,4.45],[13.2,5.4],[4.2,5.4],[4.2,4.45]],
+  fork:[[3.2,1.5],[8.0,1.5],[8.0,0.9],[12.4,0.9]]};
+const NODE_DIST={"ST-A":["amr",0],"ST-C":["amr",5.6],"CHG-2":["amr",9.0],
+  "RACK":["fork",0],"OUT":["fork",9.8]};
 const SCENES={
 /* ---- 1. 벨트컨베이어 (모터 기동/정지) ---- */
 conveyor:{
@@ -1320,7 +1378,9 @@ counter:{
        continue;
      }
      if(p.st===1){
-       p.y+=dt*2.2;
+       /* 실린더 로드 선단에 밀착되어 밀려남 — 로드보다 앞설 수 없음 */
+       const rodTip=1.82+st.rod*0.85+0.22;
+       p.y=p.y<rodTip?Math.min(rodTip,p.y+dt*3.2):p.y+dt*1.4;
        if(p.y>3.2)p.z=Math.max(0.55,p.z-dt*2.4); /* 배출 박스 안으로 낙하 */
        if(p.y>3.6){p.st=9;st.ejected++;}
      }else if(p.st===2){
@@ -1587,7 +1647,7 @@ vision:{
        if(p.x>=10.35&&p.x<10.8&&st.armB>0.5&&(p.ng||p.rej))p.st=1;
        if(p.x>12.9)p.st=2;
      }else if(p.st===1){
-       p.y+=dt*2.0;
+       p.y+=dt*2.3*Math.max(0.15,st.armB); /* 게이트 암 전개량에 비례해 분기(밀착) */
        if(p.y>3.1)p.z=Math.max(0.5,p.z-dt*2.2); /* 박스 안으로 낙하(공중 소멸 금지) */
        if(p.y>3.55){p.st=9;st.ng++;}
      }else if(p.st===2){
@@ -1885,30 +1945,35 @@ fnb:{
 
 /* ---- AGV 전용 물류 섹터 — PLC 미션 폐루프 ---- */
 agv:{
- label:"AGV 전용 물류 섹터 — 미션: 도크 복귀 → 적재 운송 → 정위치 하역 (E-STOP 우선)",
+ label:"AGV·AMR 물류 섹터 — 경로 주행(코너 회전) · 무인 지게차 · ACS 상위 코딩",
  overhead:"piping",
  wiresOut:[["HOMING",[[14.72,4.95],[3.0,4.4],[2.6,3.6]]],
            ["MOVING",[[14.72,5.0],[8.0,4.5],[8.0,3.6]]],
            ["IN_POS_LAMP",[[14.72,5.05],[13.5,4.4],[13.5,3.6]]]],
- init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[],nodesOv:{},
-   /* 플릿: 차종별 AMR — ACS 프로그램(상위 코딩)으로 구동 */
+ init:()=>({dist:0,x:2.6,y:3.0,ang:0,carry:false,hd0:0,done:0,stack:0,
+   unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[],nodesOv:{},
    fleet:[
-    {id:"AMR-902",type:"amr",name:"잠입·롤러탑재 AMR 600kg",lane:4.45,x:5.2,batt:74,carry:false,lift:0,wait:0,pc:0,done:0,
+    {id:"AMR-902",type:"amr",name:"잠입·롤러탑재 AMR 600kg",path:"amr",
+     nodes:["ST-A","ST-C","CHG-2"],dist:2.0,x:6.2,y:4.45,ang:0,
+     batt:74,carry:false,lift:0,wait:0,pc:0,done:0,
      prog:[{op:"MOVE",arg:"ST-A"},{op:"LOAD"},{op:"MOVE",arg:"ST-C"},{op:"UNLOAD"},{op:"WAIT",arg:1.5}]},
-    {id:"FLT-903",type:"fork",name:"무인 지게차 AMR 1.5t",lane:1.55,x:11.2,batt:91,carry:false,lift:0,wait:0,pc:0,done:0,
+    {id:"FLT-903",type:"fork",name:"무인 지게차 AMR 1.5t",path:"fork",
+     nodes:["RACK","OUT"],dist:6.0,x:8.0,y:1.2,ang:0,
+     batt:91,carry:false,lift:0,wait:0,pc:0,done:0,
      prog:[{op:"MOVE",arg:"RACK"},{op:"LIFT"},{op:"MOVE",arg:"OUT"},{op:"DROP"},{op:"WAIT",arg:2}]}
    ]}),
  sense(st,plc){
    plc.set("ESTOP_OK",!cur.faults.estop);
  },
  tick(st,o,dt){
+   const L=pathLen(AGV_MAIN);
    const tH=cur.plc.timers.T0,tM=cur.plc.timers.T1,tP=cur.plc.timers.T2;
    if(o.HOMING){
-     if(!st.wasHoming){st.hx0=st.x;st.wasHoming=true;}
-     st.x=st.hx0+(2.6-st.hx0)*Math.min(1,tH.acc/tH.preset);
+     if(!st.wasHoming){st.hd0=st.dist;st.wasHoming=true;}
+     st.dist=st.hd0*(1-Math.min(1,tH.acc/tH.preset));
      if(tH.acc/tH.preset>0.85)st.loadAnim=Math.min(1,st.loadAnim+dt*2);
    }else st.wasHoming=false;
-   if(o.MOVING){st.carry=true;st.x=2.6+(13.4-2.6)*Math.min(1,tM.acc/tM.preset);}
+   if(o.MOVING){st.carry=true;st.dist=L*Math.min(1,tM.acc/tM.preset);}
    if(o.IN_POS_LAMP){
      const p2=tP.acc/tP.preset;
      if(p2>0.45&&!st.unloaded){st.unloaded=true;st.stack=(st.stack%6)+1;st.done++;
@@ -1918,65 +1983,96 @@ agv:{
          st.mlog=st.mlog.slice(0,8);}}
      st.prevPos=true;
    }else{
-     if(st.prevPos){st.unloaded=false;}
+     if(st.prevPos)st.unloaded=false;
      st.prevPos=false;
    }
-   /* 배터리 물리: 주행 방전 / 도크 정차 충전 */
+   const pp=pathPos(AGV_MAIN,st.dist);
+   st.x=pp.x;st.y=pp.y;st.ang=pp.ang;
+   /* 배터리 물리 */
    const driving=o.MOVING||o.HOMING;
-   const atDock=Math.abs(st.x-2.6)<0.3&&!driving;
+   const atDock=st.dist<0.3&&!driving;
    st.batt=Math.max(0,Math.min(100,st.batt+(atDock?1.2:driving?-0.45:-0.02)*dt));
    if(st.batt<20&&!st.lowWarn){st.lowWarn=true;logEv("warn","ACS: AGV-901 배터리 "+st.batt.toFixed(0)+"% — 미션 차단·충전 복귀");}
    if(st.batt>40)st.lowWarn=false;
-   /* ── 플릿 실행기: ACS가 다운로드한 프로그램(MOVE/LOAD/UNLOAD/WAIT/DOCK)을 차량별 수행 ── */
+   /* ── 플릿 실행기: 경로 주행(코너 회전) + 승강 모션 ── */
    for(const v of st.fleet){
      if(cur.faults.estop||v.batt<=3)continue;
+     const path=FLEET_PATHS[v.path],PL=pathLen(path),loop=v.path==="amr";
      const cmd=v.prog.length?v.prog[v.pc%v.prog.length]:null;
      if(!cmd)continue;
-     const spd=v.type==="fork"?0.75:1.05;
-     const nx=n=>st.nodesOv[n]!==undefined?st.nodesOv[n]:(NODEXY[n]||[v.x])[0];
+     const spd=v.type==="fork"?0.7:1.0;
+     const nd=n=>{
+       const base=NODE_DIST[n]?NODE_DIST[n][1]:0;
+       const ov=st.nodesOv[n]!==undefined?st.nodesOv[n]-NODEXY[n][0]:0;
+       return Math.max(0,Math.min(PL,base+ov));
+     };
      let mv=false;
      if(cmd.op==="MOVE"||cmd.op==="DOCK"){
-       const tx2=cmd.op==="DOCK"?nx(v.type==="fork"?"OUT":"CHG-2"):nx(cmd.arg);
-       const d2=tx2-v.x;
-       if(Math.abs(d2)>0.04){v.x+=Math.sign(d2)*Math.min(Math.abs(d2),spd*dt);mv=true;}
-       else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
-       else v.pc++;
+       const tgt=cmd.op==="DOCK"?nd(v.type==="fork"?"OUT":"CHG-2"):nd(cmd.arg);
+       if(loop){
+         const fwd=(tgt-v.dist+PL)%PL;
+         if(fwd>0.05){v.dist=(v.dist+Math.min(fwd,spd*dt))%PL;mv=true;}
+         else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
+         else v.pc++;
+       }else{
+         const d2=tgt-v.dist;
+         if(Math.abs(d2)>0.05){v.dist+=Math.sign(d2)*Math.min(Math.abs(d2),spd*dt);mv=true;}
+         else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
+         else v.pc++;
+       }
      }else if(cmd.op==="LOAD"){
-       v.lift=Math.min(1,v.lift+dt*1.3);
+       v.lift=Math.min(1,v.lift+dt*0.8);
        if(v.lift>=1){v.carry=true;v.pc++;}
      }else if(cmd.op==="UNLOAD"){
-       v.lift=Math.max(0,v.lift-dt*1.3);
+       v.lift=Math.max(0,v.lift-dt*0.8);
        if(v.lift<=0){if(v.carry){v.carry=false;v.done++;}v.pc++;}
      }else if(cmd.op==="WAIT"){
        v.wait+=dt;if(v.wait>=(cmd.arg||1)){v.wait=0;v.pc++;}
      }else v.pc++;
+     const vp=pathPos(path,v.dist);
+     /* 헤딩은 부드럽게 회전(실차 선회) */
+     let da=vp.ang-(v.ang||0);
+     while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+     v.ang=(v.ang||0)+da*Math.min(1,dt*4);
+     v.x=vp.x;v.y=vp.y;
      v.batt=Math.max(0,v.batt+(mv?-0.3:-0.02)*dt);
      if(v.batt<18&&!v.lowW){v.lowW=true;logEv("warn","ACS: "+v.id+" 배터리 "+v.batt.toFixed(0)+"% — 충전 권고");}
      if(v.batt>40)v.lowW=false;
    }
  },
  draw(ctx,st,val,t){
-   /* 전용 섹터 바닥: 메인 유도선 + 스테이션 마커 */
-   seg(ctx,P(2.6,3.0,0.015),P(13.4,3.0,0.015),"rgba(88,224,255,.55)",2.4);
-   for(let x=3.2;x<13.2;x+=0.8)seg(ctx,P(x,3.0,0.016),P(x+0.4,3.0,0.016),"rgba(88,224,255,.25)",4);
-   const stMark=(x,c,name,tg)=>{
-     seg(ctx,P(x-0.7,2.4,0.015),P(x+0.7,2.4,0.015),c,2);
-     seg(ctx,P(x-0.7,3.6,0.015),P(x+0.7,3.6,0.015),c,2);
-     seg(ctx,P(x-0.7,2.4,0.015),P(x-0.7,3.6,0.015),c,2);
-     seg(ctx,P(x+0.7,2.4,0.015),P(x+0.7,3.6,0.015),c,2);
-     tag3(x,3.3,0.9,tg,name,c,2);
+   /* 경로(코너 포함) — 차종별 색 */
+   drawPath(ctx,AGV_MAIN,"rgba(88,224,255,.5)",t);
+   drawPath(ctx,FLEET_PATHS.amr,"rgba(185,163,255,.4)",t);
+   drawPath(ctx,FLEET_PATHS.fork,"rgba(240,194,107,.38)",t);
+   const stMark=(x,y,c,name,tg)=>{
+     seg(ctx,P(x-0.55,y-0.45,0.015),P(x+0.55,y-0.45,0.015),c,2);
+     seg(ctx,P(x-0.55,y+0.45,0.015),P(x+0.55,y+0.45,0.015),c,2);
+     seg(ctx,P(x-0.55,y-0.45,0.015),P(x-0.55,y+0.45,0.015),c,2);
+     seg(ctx,P(x+0.55,y-0.45,0.015),P(x+0.55,y+0.45,0.015),c,2);
+     tag3(x,y+0.25,0.8,tg,name,c,2);
    };
-   stMark(2.6,"#3fb950","충전·적재 도크","ST-H");
-   stMark(13.4,"#d9a514","하역 스테이션","ST-B");
+   stMark(2.6,3.0,"#3fb950","충전·적재 도크","ST-H");
+   stMark(13.4,3.0,"#d9a514","하역 스테이션","ST-B");
+   const node=(n,c)=>{
+     const ny2=NODEXY[n][1],X2=st.nodesOv[n]!==undefined?st.nodesOv[n]:NODEXY[n][0];
+     seg(ctx,P(X2-0.26,ny2-0.26,0.015),P(X2+0.26,ny2+0.26,0.015),c,1.6);
+     seg(ctx,P(X2-0.26,ny2+0.26,0.015),P(X2+0.26,ny2-0.26,0.015),c,1.6);
+     tag3(X2,ny2+0.12,0.5,n,"",c,2);
+   };
+   node("ST-A","#b9a3ff");node("ST-C","#b9a3ff");node("CHG-2","#3fb950");
+   node("RACK","#f0c26b");node("OUT","#f0c26b");
    /* 충전 도크 + 파레트 공급대 */
    box3(1.7,2.55,0,0.3,0.9,0.85,"#2f3a46");
    dq(2+3+1,c2=>lamp(c2,P(1.85,3.0,0.95),2.6,"#3fb950",val("HOMING")||(t*2%1)<0.5));
    box3(1.6,3.85,0,1.1,0.95,0.12,"#5a4a30");
    box3(1.75,3.95,0.12,0.8,0.75,0.5,"#7a5c2e");
-   /* 하역장 스택 */
+   /* RACK 자재 + 하역장 스택 */
+   box3(2.75,0.95,0,0.95,0.85,0.12,"#5a4a30");
+   box3(2.9,1.05,0.12,0.65,0.6,0.5,"#7a5c2e");
    for(let i=0;i<st.stack;i++)
-     box3(14.3+(i%3)*0.62,2.55+((i/3|0))*0.62,0.05+0,0.55,0.55,0.42,"#7a5c2e");
-   /* 천장 위치 센서 어레이(요청: 상위 천장 센서) */
+     box3(14.3+(i%3)*0.62,2.55+((i/3|0))*0.62,0.05,0.55,0.55,0.42,"#7a5c2e");
+   /* 천장 위치 센서 어레이 */
    for(const sx of[3.5,6.5,9.5,12.5]){
      const lit=Math.abs(st.x-sx)<0.45;
      box3(sx-0.09,2.86,3.15,0.18,0.14,0.1,"#1a212b");
@@ -1989,66 +2085,49 @@ agv:{
      });
    }
    tag3(8,2.9,3.5,"OHS-1~4","천장 위치센서 어레이","#58e0ff",2);
-   /* AGV 본체(중량형) */
-   const x=st.x;
-   sh(x-0.9,2.55,1.8,1.2,0.28);
-   box3(x-0.85,2.6,0,1.7,1.1,0.34,"#2e5e8e");
-   box3(x-0.92,2.65,0.08,0.1,1.0,0.18,"#d9a514");
-   box3(x+0.82,2.65,0.08,0.1,1.0,0.18,"#d9a514");
-   cyl3(x+0.6,2.78,0.34,0.08,0.14,"#1a212b");
+   /* ── AGV-901: 경로 헤딩으로 회전 주행 ── */
    const moving=val("MOVING")||val("HOMING");
-   dq(x+3+1.4,c2=>{
-     lamp(c2,P(x+0.6,2.78,0.52),2.6,"#58e0ff",moving&&(t*3%1)<0.6);
-     lamp(c2,P(x-0.7,3.55,0.4),2.2,cur.faults.estop?"#f85149":"#3fb950",true);
-   });
+   sh(st.x-0.9,st.y-0.55,1.8,1.1,0.28);
+   rotBox(st.x,st.y,st.ang,1.7,1.1,0.34,0,"#2e5e8e");
    if(st.carry||st.loadAnim>0.05){
-     const lz=0.34+(1-Math.min(1,st.loadAnim||1))*0;
-     box3(x-0.6,2.72,lz,1.2,0.85,0.12,"#5a4a30");
-     box3(x-0.5,2.8,lz+0.12,1.0,0.7,0.45,"#7a5c2e");
+     rotBox(st.x,st.y,st.ang,1.2,0.85,0.12,0.34,"#5a4a30");
+     rotBox(st.x,st.y,st.ang,1.0,0.7,0.45,0.46,"#7a5c2e");
    }
-   tag3(x,3.0,1.1,"AGV-901","중량형 AGV 2t — 미션 수행","#58e0ff");
-   /* ── 차종별 전용 레인 + 노드(티칭 반영) ── */
-   for(let lx=3.6;lx<13.6;lx+=0.55)seg(ctx,P(lx,4.45,0.014),P(lx+0.26,4.45,0.014),"rgba(185,163,255,.35)",2);
-   for(let lx=2.6;lx<13.2;lx+=0.55)seg(ctx,P(lx,1.55,0.014),P(lx+0.26,1.55,0.014),"rgba(240,194,107,.30)",2);
-   const node=(n,c)=>{const ny2=NODEXY[n][1],X2=st.nodesOv[n]!==undefined?st.nodesOv[n]:NODEXY[n][0];
-     seg(ctx,P(X2-0.28,ny2-0.28,0.015),P(X2+0.28,ny2+0.28,0.015),c,1.6);
-     seg(ctx,P(X2-0.28,ny2+0.28,0.015),P(X2+0.28,ny2-0.28,0.015),c,1.6);
-     tag3(X2,ny2+0.12,0.5,n,"",c,2);};
-   node("ST-A","#b9a3ff");node("ST-C","#b9a3ff");node("CHG-2","#3fb950");
-   node("RACK","#f0c26b");node("OUT","#f0c26b");
-   /* ── 플릿 차량(차종별 실물 형태) ── */
+   dq(st.x+st.y+1.6,c2=>{
+     const fx=st.x+Math.cos(st.ang)*0.62,fy=st.y+Math.sin(st.ang)*0.62;
+     lamp(c2,P(fx,fy,0.5),2.6,"#58e0ff",moving&&(t*3%1)<0.6);
+     lamp(c2,P(st.x,st.y,0.42),2.2,cur.faults.estop?"#f85149":"#3fb950",true);
+   });
+   tag3(st.x,st.y,1.15,"AGV-901","중량형 AGV 2t","#58e0ff");
+   /* ── 플릿: AMR 루프 순환 · 무인 지게차(마스트·포크 승강) ── */
    for(const v of st.fleet){
-     const vx=v.x,vy=v.lane;
+     const ca=Math.cos(v.ang),sa=Math.sin(v.ang);
      if(v.type==="amr"){
-       /* 잠입 리프트·롤러탑재형: 저상 본체 + 라이다 돔 + 롤러데크 */
-       sh(vx-0.5,vy-0.38,1.05,0.8,0.22);
-       box3(vx-0.48,vy-0.35,0,0.96,0.7,0.24,"#3a4f66");
-       box3(vx-0.5,vy-0.37,0.1,0.06,0.74,0.08,"#58e0ff");
-       for(let i=0;i<4;i++)box3(vx-0.4+i*0.22,vy-0.3,0.24,0.16,0.6,0.035,"#222a34");
-       cyl3(vx+0.34,vy-0.22,0.24,0.055,0.09,"#1a212b");
-       dq(vx+vy+0.8,c2=>lamp(c2,P(vx+0.34,vy-0.22,0.36),2.2,"#b9a3ff",(t*2.4%1)<0.6));
-       if(v.carry||v.lift>0.05)box3(vx-0.38,vy-0.26,0.275+v.lift*0.06,0.76,0.55,0.4,"#46627a");
-       tag3(vx,vy,0.95,v.id,v.name,"#b9a3ff");
+       sh(v.x-0.5,v.y-0.38,1.0,0.78,0.22);
+       rotBox(v.x,v.y,v.ang,0.96,0.7,0.24,0,"#3a4f66");
+       if(v.carry||v.lift>0.05)rotBox(v.x,v.y,v.ang,0.76,0.55,0.4,0.24+v.lift*0.06,"#46627a");
+       dq(v.x+v.y+0.9,c2=>lamp(c2,P(v.x+ca*0.36,v.y+sa*0.36,0.34),2.2,"#b9a3ff",(t*2.4%1)<0.6));
+       tag3(v.x,v.y,0.95,v.id,v.name,"#b9a3ff");
      }else{
-       /* 무인 지게차형: 본체 + 마스트 + 포크 승강 + 파레트 */
-       sh(vx-0.6,vy-0.42,1.45,0.95,0.24);
-       box3(vx-0.45,vy-0.4,0,1.05,0.8,0.5,"#c98a16");
-       box3(vx+0.3,vy-0.28,0.5,0.34,0.56,0.42,"#8a5e0e");
-       box3(vx-0.62,vy-0.34,0,0.08,0.08,1.55,"#3a4654");
-       box3(vx-0.62,vy+0.24,0,0.08,0.08,1.55,"#3a4654");
+       sh(v.x-0.6,v.y-0.45,1.3,0.95,0.24);
+       rotBox(v.x,v.y,v.ang,1.05,0.8,0.5,0,"#c98a16");
+       rotBox(v.x-ca*0.28,v.y-sa*0.28,v.ang,0.34,0.56,0.42,0.5,"#8a5e0e");
+       /* 마스트(전방) + 포크 승강 */
+       const mx=v.x+ca*0.62,my=v.y+sa*0.62,px2=-sa,py2=ca;
+       rotBox(mx+px2*0.28,my+py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
+       rotBox(mx-px2*0.28,my-py2*0.28,v.ang,0.08,0.08,1.55,0,"#3a4654");
        const fz=0.1+v.lift*0.85;
-       box3(vx-1.12,vy-0.3,fz,0.52,0.09,0.05,"#9aa7b5");
-       box3(vx-1.12,vy+0.2,fz,0.52,0.09,0.05,"#9aa7b5");
+       rotBox(mx+ca*0.3+px2*0.24,my+sa*0.3+py2*0.24,v.ang,0.55,0.09,0.05,fz,"#9aa7b5");
+       rotBox(mx+ca*0.3-px2*0.24,my+sa*0.3-py2*0.24,v.ang,0.55,0.09,0.05,fz,"#9aa7b5");
        if(v.carry||v.lift>0.4){
-         box3(vx-1.16,vy-0.36,fz+0.05,0.62,0.86,0.1,"#5a4a30");
-         box3(vx-1.08,vy-0.28,fz+0.15,0.5,0.7,0.42,"#7a5c2e");
+         rotBox(mx+ca*0.34,my+sa*0.34,v.ang,0.62,0.86,0.1,fz+0.05,"#5a4a30");
+         rotBox(mx+ca*0.34,my+sa*0.34,v.ang,0.5,0.7,0.42,fz+0.15,"#7a5c2e");
        }
-       cyl3(vx+0.42,vy-0.34,0.92,0.05,0.07,"#1a212b");
-       dq(vx+vy+1.2,c2=>lamp(c2,P(vx+0.42,vy-0.34,1.02),2.2,"#f0c26b",(t*2.7%1)<0.55));
-       tag3(vx,vy,1.7,v.id,v.name,"#f0c26b");
+       dq(v.x+v.y+1.3,c2=>lamp(c2,P(v.x-ca*0.4,v.y-sa*0.4,1.0),2.2,"#f0c26b",(t*2.7%1)<0.55));
+       tag3(v.x,v.y,1.75,v.id,v.name,"#f0c26b");
      }
    }
-   worker(5.0,5.6,t);worker(12.6,5.5);
+   worker(5.0,5.85);
    if(cur.faults.estop)txt(ctx,P(8,2.2,1.6),"⛔ E-STOP — 안전회로 개방(전 구동 차단)","#f85149",13,"center",true);
    const ph2=val("HOMING")?"원점(도크) 복귀 중":val("MOVING")?"적재 운송 중 ▶":val("IN_POS_LAMP")?"정위치 도킹·하역":"미션 대기";
    txt(ctx,P(8,1.7,1.2),ph2,"#9fb3c8",12);
@@ -3310,16 +3389,16 @@ function openVisionTool(){
 /* ── AMR 플릿 매니저(ACS 상위 코딩: 미션 DSL·노드 티칭·라이브 맵) ── */
 const NODEXY={"ST-H":[2.6,3.0],"ST-B":[13.4,3.0],
   "ST-A":[4.2,4.45],"ST-C":[9.8,4.45],"CHG-2":[13.2,4.45],
-  "RACK":[3.2,1.55],"OUT":[12.4,1.55]};
+  "RACK":[3.2,1.5],"OUT":[12.4,0.9]};
 function fmtProg(prog){return prog.map(p2=>p2.op+(p2.arg!==undefined?" "+p2.arg:"")).join("\n");}
-function parseFleetProg(txt,lane){
+function parseFleetProg(txt,allowed){
   const errs=[],prog=[];
   txt.split(/\n/).forEach((ln,i)=>{
     const s=ln.trim();if(!s||s.startsWith("#"))return;
     const m=s.toUpperCase().split(/\s+/);
     if(m[0]==="MOVE"){
       if(!NODEXY[m[1]])errs.push((i+1)+"행: 미지 노드 '"+(m[1]||"")+"'");
-      else if(Math.abs(NODEXY[m[1]][1]-lane)>0.01)errs.push((i+1)+"행: "+m[1]+"는 이 차량 레인 밖(경로 계획 불가)");
+      else if(allowed&&!allowed.includes(m[1]))errs.push((i+1)+"행: "+m[1]+"는 이 차량 경로 밖(경로 계획 불가)");
       else prog.push({op:"MOVE",arg:m[1]});
     }
     else if(m[0]==="LOAD"||m[0]==="LIFT")prog.push({op:"LOAD"});
@@ -3359,8 +3438,7 @@ function openFleetTool(){
   const posUpd=()=>{document.getElementById("ft_pos").textContent=nodeSel.value?nodeX(nodeSel.value).toFixed(2)+" m":"—";};
   const fillNodes=()=>{
     const v=vsel();
-    nodeSel.innerHTML=Object.keys(NODEXY).filter(n=>Math.abs(NODEXY[n][1]-v.lane)<0.01)
-      .map(n=>`<option>${n}</option>`).join("");
+    nodeSel.innerHTML=(v.nodes||[]).map(n=>`<option>${n}</option>`).join("");
     posUpd();
   };
   sel.onchange=()=>{ta.value=fmtProg(vsel().prog);fillNodes();};
@@ -3373,7 +3451,7 @@ function openFleetTool(){
   document.getElementById("ft_tsave").onclick=()=>{
     logEv("op","ACS 노드 티칭 저장 — "+nodeSel.value+" = "+nodeX(nodeSel.value).toFixed(2)+"m");};
   const check=()=>{
-    const r2=parseFleetProg(ta.value,vsel().lane);
+    const r2=parseFleetProg(ta.value,vsel().nodes);
     document.getElementById("ft_err").style.color=r2.errs.length?"#ff8f8f":"#7ee787";
     document.getElementById("ft_err").textContent=r2.errs.length?r2.errs.join("\n"):"✓ 검증 통과 — "+r2.prog.length+"개 명령";
     return r2.errs.length?null:r2.prog;
@@ -3388,9 +3466,12 @@ function openFleetTool(){
     if(!cur||!cur.sst.fleet)return;
     const X=x=>40+(x-1)*(mp.width-80)/14, Y=y=>mp.height-(y-0.8)*(mp.height-60)/4.6;
     mc.fillStyle="#0a0f16";mc.fillRect(0,0,mp.width,mp.height);
-    const lane=(y,c2)=>{mc.strokeStyle=c2;mc.setLineDash([7,6]);mc.lineWidth=1.6;
-      mc.beginPath();mc.moveTo(X(1.5),Y(y));mc.lineTo(X(14.5),Y(y));mc.stroke();mc.setLineDash([]);};
-    lane(3.0,"rgba(88,224,255,.5)");lane(4.45,"rgba(185,163,255,.5)");lane(1.55,"rgba(240,194,107,.5)");
+    const pl=(path,c2)=>{mc.strokeStyle=c2;mc.setLineDash([7,6]);mc.lineWidth=1.6;
+      mc.beginPath();mc.moveTo(X(path[0][0]),Y(path[0][1]));
+      for(let i2=1;i2<path.length;i2++)mc.lineTo(X(path[i2][0]),Y(path[i2][1]));
+      mc.stroke();mc.setLineDash([]);};
+    pl(AGV_MAIN,"rgba(88,224,255,.5)");pl(FLEET_PATHS.amr,"rgba(185,163,255,.5)");
+    pl(FLEET_PATHS.fork,"rgba(240,194,107,.5)");
     mc.font="10px ui-monospace,monospace";
     for(const[n,xy]of Object.entries(NODEXY)){
       const ox=st.nodesOv[n]!==undefined?st.nodesOv[n]:xy[0];
@@ -3399,8 +3480,8 @@ function openFleetTool(){
     }
     const dot=(x,y,c2,id)=>{mc.fillStyle=c2;mc.beginPath();mc.arc(X(x),Y(y),6,0,7);mc.fill();
       mc.fillStyle="#dce4f0";mc.fillText(id,X(x)+9,Y(y)+4);};
-    dot(st.x,3.0,"#58e0ff","AGV-901");
-    st.fleet.forEach(v=>dot(v.x,v.lane,v.type==="fork"?"#f0c26b":"#b9a3ff",v.id));
+    dot(st.x,st.y||3.0,"#58e0ff","AGV-901");
+    st.fleet.forEach(v=>dot(v.x,v.y||4.45,v.type==="fork"?"#f0c26b":"#b9a3ff",v.id));
     const vh=document.getElementById("ft_veh");
     if(vh)vh.innerHTML=
      [`AGV-901 — ${st.batt.toFixed(0)}% · ${st.carry?"적재":"공차"} · PLC 래더 구동(메인 레인)`,
