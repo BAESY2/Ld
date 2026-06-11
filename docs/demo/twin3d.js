@@ -112,9 +112,34 @@ function makePartsPool(env,n){
   return pool;
 }
 
-/* ── 공장 환경(벽·창·기둥·배관 랙·적재 랙·작업등·차선) ── */
-function buildFactoryEnv(sc){
+/* ── PBR 환경맵: 절차 생성 공장 실내(천창·벽)를 PMREM으로 — 금속 반사 질감 ── */
+function makeEnvMap(r){
   const TT=T();
+  if(!TT.PMREMGenerator)return null;
+  try{
+    const pm=new TT.PMREMGenerator(r);
+    const es=new TT.Scene();
+    es.background=new TT.Color(0x171d26);
+    const top=new TT.Mesh(new TT.PlaneGeometry(20,20),new TT.MeshBasicMaterial({color:0xbfd4ee}));
+    top.rotation.x=Math.PI/2;top.position.y=8;es.add(top);
+    for(let i=0;i<4;i++){
+      const w=new TT.Mesh(new TT.PlaneGeometry(20,6),new TT.MeshBasicMaterial({color:i%2?0x3a4656:0x2c3743}));
+      w.position.y=3;w.rotation.y=i*Math.PI/2;
+      w.position.x=Math.sin(i*Math.PI/2)*-10;w.position.z=Math.cos(i*Math.PI/2)*-10;
+      es.add(w);
+    }
+    const strip=new TT.Mesh(new TT.PlaneGeometry(14,1.4),new TT.MeshBasicMaterial({color:0xfff2d8}));
+    strip.rotation.x=Math.PI/2;strip.position.y=7.9;es.add(strip);
+    const tex=pm.fromScene(es,0.05).texture;
+    pm.dispose();
+    return tex;
+  }catch(e){return null;}
+}
+
+/* ── 공장 환경(벽·창·기둥·배관 랙·적재 랙·작업등·차선) — 크기 파라미터화 ── */
+function buildFactoryEnv(sc,o){
+  const TT=T();
+  const W=(o&&o.W)||26, D=(o&&o.D)||16, HW=W/2, HD=D/2;
   const g=new TT.Group();
   const wc=document.createElement("canvas");wc.width=1024;wc.height=256;
   const w=wc.getContext("2d");
@@ -134,36 +159,37 @@ function buildFactoryEnv(sc){
   w.fillStyle="#fff";w.font="bold 34px sans-serif";w.textAlign="center";
   w.fillText("무재해 작업장",512,160);
   const wt=new TT.CanvasTexture(wc);
-  const wall=new TT.Mesh(new TT.PlaneGeometry(26,6.5),
+  wt.wrapS=TT.RepeatWrapping;wt.repeat.set(Math.max(1,Math.round(W/26)),1);
+  const wall=new TT.Mesh(new TT.PlaneGeometry(W,6.5),
     new TT.MeshStandardMaterial({map:wt,roughness:0.95}));
-  wall.position.set(0,3.25,-8);g.add(wall);
+  wall.position.set(0,3.25,-HD);g.add(wall);
   const swm=new TT.MeshStandardMaterial({color:0x252c35,roughness:0.95});
-  const swL=new TT.Mesh(new TT.PlaneGeometry(16,6.5),swm);
-  swL.rotation.y=Math.PI/2;swL.position.set(-13,3.25,0);g.add(swL);
-  const swR=new TT.Mesh(new TT.PlaneGeometry(16,6.5),swm);
-  swR.rotation.y=-Math.PI/2;swR.position.set(13,3.25,0);g.add(swR);
+  const swL=new TT.Mesh(new TT.PlaneGeometry(D,6.5),swm);
+  swL.rotation.y=Math.PI/2;swL.position.set(-HW,3.25,0);g.add(swL);
+  const swR=new TT.Mesh(new TT.PlaneGeometry(D,6.5),swm);
+  swR.rotation.y=-Math.PI/2;swR.position.set(HW,3.25,0);g.add(swR);
   const cm=new TT.MeshStandardMaterial({color:0x3d4754,roughness:.6,metalness:.55});
-  for(let x=-12;x<=12;x+=6){
+  for(let x=-HW+1;x<=HW-1;x+=6){
     const c=new TT.Mesh(new TT.BoxGeometry(0.32,6.4,0.32),cm);
-    c.position.set(x,3.2,-7.8);c.castShadow=true;g.add(c);
-    const beam=new TT.Mesh(new TT.BoxGeometry(0.24,0.34,15.6),cm);
+    c.position.set(x,3.2,-HD+0.2);c.castShadow=true;g.add(c);
+    const beam=new TT.Mesh(new TT.BoxGeometry(0.24,0.34,D-0.4),cm);
     beam.position.set(x,6.1,0);g.add(beam);
   }
-  const truss=new TT.Mesh(new TT.BoxGeometry(25.6,0.3,0.26),cm);
-  truss.position.set(0,6.1,-7.7);g.add(truss);
-  const truss2=truss.clone();truss2.position.z=7.7;g.add(truss2);
+  const truss=new TT.Mesh(new TT.BoxGeometry(W-0.4,0.3,0.26),cm);
+  truss.position.set(0,6.1,-HD+0.3);g.add(truss);
+  const truss2=truss.clone();truss2.position.z=HD-0.3;g.add(truss2);
   [[0xd24b4b,4.6],[0x3f7fd2,4.95],[0xd2b13f,5.3]].forEach(([col,y])=>{
     const pm=new TT.MeshStandardMaterial({color:col,roughness:.45,metalness:.3});
-    const p=new TT.Mesh(new TT.CylinderGeometry(0.085,0.085,25.4,10),pm);
-    p.rotation.z=Math.PI/2;p.position.set(0,y,-7.45);g.add(p);
-    for(let x=-12;x<=12;x+=4){
+    const p=new TT.Mesh(new TT.CylinderGeometry(0.085,0.085,W-0.6,10),pm);
+    p.rotation.z=Math.PI/2;p.position.set(0,y,-HD+0.55);g.add(p);
+    for(let x=-HW+1;x<=HW-1;x+=4){
       const fl=new TT.Mesh(new TT.CylinderGeometry(0.13,0.13,0.07,10),pm);
-      fl.rotation.z=Math.PI/2;fl.position.set(x,y,-7.45);g.add(fl);
+      fl.rotation.z=Math.PI/2;fl.position.set(x,y,-HD+0.55);g.add(fl);
     }
   });
   const rm=new TT.MeshStandardMaterial({color:0xd2691e,roughness:.7});
   const bm=new TT.MeshStandardMaterial({color:0xa8825a,roughness:.9});
-  [[-10.5,-5.5],[10.5,-5.5]].forEach(([rx,rz],ri)=>{
+  [[-(HW-2.5),-(HD-2.5)],[HW-2.5,-(HD-2.5)]].forEach(([rx,rz],ri)=>{
     for(let lv=0;lv<3;lv++){
       const sh=new TT.Mesh(new TT.BoxGeometry(3.2,0.08,1.1),rm);
       sh.position.set(rx,0.55+lv*0.85,rz);g.add(sh);
@@ -178,7 +204,7 @@ function buildFactoryEnv(sc){
       post.position.set(rx+dx,1.3,rz);g.add(post);
     }
   });
-  for(let x=-8;x<=8;x+=8){
+  for(let x=-HW+5;x<=HW-5;x+=8){
     const pl=new TT.PointLight(0xffd9a0,0.55,18);
     pl.position.set(x,5.6,0);g.add(pl);
     const shade=new TT.Mesh(new TT.CylinderGeometry(0.05,0.42,0.34,12,1,true),
@@ -189,8 +215,8 @@ function buildFactoryEnv(sc){
     bulb.position.set(x,5.5,0);g.add(bulb);
   }
   const lane=new TT.MeshBasicMaterial({color:0xd2b13f});
-  for(const z of[5.2,6.4]){
-    const ln=new TT.Mesh(new TT.PlaneGeometry(24,0.09),lane);
+  for(const z of[HD-2.8,HD-1.6]){
+    const ln=new TT.Mesh(new TT.PlaneGeometry(W-2,0.09),lane);
     ln.rotation.x=-Math.PI/2;ln.position.set(0,0.004,z);g.add(ln);
   }
   sc.add(g);
@@ -596,12 +622,87 @@ const Twin3D={
   grid.position.y=0.002;sc.add(grid);
   buildFactoryEnv(sc);
   const cam=new TT.PerspectiveCamera(50,W/H,0.1,120);
+  const envTex=makeEnvMap(r);if(envTex)sc.environment=envTex;
   const env={set:new TT.Group(),upd:null};
   sc.add(env.set);
   BUILDERS[L.id](env);
   this._r=r;this._scene=sc;this._cam=cam;this._env=env;this.active=L.id;this._opts=opts||this._opts||{};
+  this._omax=34;this._multi=null;
+  this._orbit={th:0.95,ph:0.40,d:9};
   this._bindOrbit(container);
   this._camUpd();
+ },
+ /* ── 전체 공장 메가 뷰: 가동 전 라인을 한 공장에 배치, 각 라인 PLC 상태 실시간 ── */
+ mountFactory(container,idList,lines,opts){
+  const TT=T();
+  this.destroy();
+  const W=container.clientWidth,H=container.clientHeight;
+  const r=new TT.WebGLRenderer({antialias:true});
+  r.setSize(W,H);r.setPixelRatio(Math.min(devicePixelRatio,2));
+  r.shadowMap.enabled=true;
+  if(TT.PCFSoftShadowMap!==undefined)r.shadowMap.type=TT.PCFSoftShadowMap;
+  if(TT.ACESFilmicToneMapping!==undefined){r.toneMapping=TT.ACESFilmicToneMapping;r.toneMappingExposure=1.3;}
+  if(TT.SRGBColorSpace!==undefined)r.outputColorSpace=TT.SRGBColorSpace;
+  else if(TT.sRGBEncoding!==undefined)r.outputEncoding=TT.sRGBEncoding;
+  container.appendChild(r.domElement);
+  const sc=new TT.Scene();
+  sc.background=new TT.Color(0x0a0f16);
+  sc.fog=new TT.Fog(0x0a0f16,60,170);
+  const envTex=makeEnvMap(r);if(envTex)sc.environment=envTex;
+  sc.add(new TT.AmbientLight(0x7788aa,0.4));
+  sc.add(new TT.HemisphereLight(0x9db4d8,0x1a1f27,0.55));
+  const sun=new TT.DirectionalLight(0xffeedd,1.25);
+  sun.position.set(25,40,18);sun.castShadow=true;
+  sun.shadow.mapSize.set(2048,2048);
+  sun.shadow.camera.left=-55;sun.shadow.camera.right=55;
+  sun.shadow.camera.top=55;sun.shadow.camera.bottom=-55;
+  sc.add(sun);
+  const sup=idList.filter(id=>BUILDERS[id]);
+  const cols=Math.max(1,Math.ceil(sup.length/2));
+  const CW=19,CD=13;
+  const FW=cols*CW+8, FD=2*CD+9;
+  const floor=new TT.Mesh(new TT.PlaneGeometry(FW,FD),
+    new TT.MeshStandardMaterial({color:0x262c34,roughness:0.93}));
+  floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;sc.add(floor);
+  const grid=new TT.GridHelper(Math.max(FW,FD),Math.max(FW,FD)|0,0x33404e,0x191f27);
+  grid.position.y=0.002;sc.add(grid);
+  buildFactoryEnv(sc,{W:FW,D:FD});
+  this._multi=[];
+  sup.forEach((id,i)=>{
+    const cx=(i%cols)*CW-(cols-1)*CW/2;
+    const cz=(i<cols?-1:1)*(CD/2+0.5);
+    const env={set:new TT.Group(),upd:null};
+    env.set.position.set(cx,0,cz);
+    env.set.userData.lineTag=id;
+    sc.add(env.set);
+    BUILDERS[id](env);
+    const lb=labelSprite((opts&&opts.names&&opts.names[id])||id,"#dce4f0");
+    lb.scale.multiplyScalar(2.0);
+    lb.position.set(cx,4.6,cz);sc.add(lb);
+    /* 베이 경계선 */
+    const edge=new TT.Mesh(new TT.PlaneGeometry(CW-1.6,0.06),
+      new TT.MeshBasicMaterial({color:0x2f3b49}));
+    edge.rotation.x=-Math.PI/2;edge.position.set(cx,0.003,cz+(i<cols?CD/2:-CD/2));
+    sc.add(edge);
+    this._multi.push({id,env});
+  });
+  const cam=new TT.PerspectiveCamera(50,W/H,0.1,420);
+  this._r=r;this._scene=sc;this._cam=cam;
+  this._env={set:sc,upd:null};
+  this.active="__factory__";this._opts=opts||{};
+  this._omax=Math.max(FW,FD)*1.6;
+  this._orbit={th:0.9,ph:0.5,d:Math.max(FW,FD)*0.8};
+  this._bindOrbit(container);
+  this._camUpd();
+ },
+ updateFactory(lines,dt,t){
+  if(!this._r||this.active!=="__factory__"||!this._multi)return;
+  for(const m of this._multi){
+    const L=lines[m.id];
+    if(L&&m.env.upd)m.env.upd(L,dt,t);
+  }
+  this._camUpd();
+  this._r.render(this._scene,this._cam);
  },
  _bindOrbit(el){
   let drag=null,moved=0;
@@ -615,7 +716,7 @@ const Twin3D={
     if(drag&&moved<6)this._pick(el,e);
     drag=null;};
   el.onwheel=e=>{e.preventDefault();
-    this._orbit.d=Math.min(34,Math.max(3.5,this._orbit.d*Math.exp(e.deltaY*0.001)));};
+    this._orbit.d=Math.min(this._omax||34,Math.max(3.5,this._orbit.d*Math.exp(e.deltaY*0.001)));};
  },
  _pick(el,e){
   if(!this._opts||!this._opts.onPick)return;
@@ -628,7 +729,8 @@ const Twin3D={
   for(const h of hits){
     let o=h.object;
     while(o){
-      if(o.userData&&o.userData.devTag){this._opts.onPick(o.userData.devTag);return;}
+      if(o.userData&&o.userData.devTag&&this._opts.onPick){this._opts.onPick(o.userData.devTag);return;}
+      if(o.userData&&o.userData.lineTag&&this._opts.onPickLine){this._opts.onPickLine(o.userData.lineTag);return;}
       o=o.parent;
     }
   }
@@ -663,7 +765,7 @@ const Twin3D={
  destroy(){
   if(this._r){this._r.dispose();
     if(this._r.domElement.parentNode)this._r.domElement.parentNode.removeChild(this._r.domElement);}
-  this._r=null;this._scene=null;this._env=null;this.active=null;
+  this._r=null;this._scene=null;this._env=null;this.active=null;this._multi=null;
  }
 };
 window.Twin3D=Twin3D;
