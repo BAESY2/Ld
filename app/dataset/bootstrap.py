@@ -154,8 +154,11 @@ def _expr_vars(node: Node) -> set[str]:
     match node:
         case Var(name):
             return {name}
-        case Cmp(var, _, _):
-            return {var}  # 아날로그 비교 — 구동원으로 인정
+        case Cmp(var, op, value):
+            # 비교식은 독립 의사-불리언 리터럴로 추상화(DNF 리터럴과 동일).
+            # 같은 변수의 양측 밴드(< lo, > hi)도 각각 토글 가능해져
+            # 공허 판정이 과잉 차단되지 않는다.
+            return {f"{var} {op} {value}"}
         case Not(operand):
             return _expr_vars(operand)
         case And(operands) | Or(operands):
@@ -196,10 +199,8 @@ def _eval_const(node: Node, table: dict[str, bool]) -> bool:
         case Var(name):
             return table.get(name, False)
         case Cmp(var, op, value):
-            # 불리언 탐색 테이블에서는 ON=만수(1000)/OFF=0 으로 해석
-            left = 1000 if table.get(var, False) else 0
-            return {"<": left < value, ">": left > value, "<=": left <= value,
-                    ">=": left >= value, "=": left == value, "<>": left != value}[op]
+            # 진리표 전수탐색 전용: 비교 리터럴 자체를 의사-불리언으로 평가
+            return table.get(f"{var} {op} {value}", False)
         case Not(operand):
             return not _eval_const(operand, table)
         case And(operands):

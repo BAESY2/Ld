@@ -237,6 +237,56 @@ def _analog_level(a: Answers) -> StateMachineSpec:
     )
 
 
+def _pill_inspect(a: Answers) -> StateMachineSpec:
+    weight = _val(a, "weight", "WEIGHT")
+    reject = _val(a, "reject", "REJECT")
+    lo = _pint(a, "lo", 450, lo=1)
+    hi = _pint(a, "hi", 550, lo + 1)
+    return StateMachineSpec(
+        title=f"정제 중량 선별({lo}~{hi}mg 합격·이탈 배출)",
+        io_points=[
+            IOPoint(symbol=weight, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="정제 중량(mg) 아날로그"),
+            _io(reject, _OUT, "불량 배출기"),
+        ],
+        states=[
+            SfcState(name="PASS", is_initial=True),
+            SfcState(name="REJECTING", on_entry=[f"{reject} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("PASS", "REJECTING", f"{weight} < {lo} OR {weight} > {hi}"),
+            _tr("REJECTING", "PASS", f"{weight} >= {lo} AND {weight} <= {hi}"),
+        ],
+    )
+
+
+def _tablet_count_bottle(a: Answers) -> StateMachineSpec:
+    sensor = _val(a, "sensor", "TAB_SENSOR")
+    ack = _val(a, "ack", "BOTTLE_ACK")
+    index = _val(a, "index", "INDEXER")
+    n = _pint(a, "count", 30, lo=1)
+    return StateMachineSpec(
+        title=f"정제 병입 카운트({n}정 충전 후 보틀 교체)",
+        io_points=[
+            _io(sensor, _IN, "정제 낙하 센서"),
+            _io(ack, _IN, "보틀 교체 완료"),
+            _io(index, _OUT, "보틀 인덱서"),
+        ],
+        counters=[
+            CounterSpec(name="C1", preset=n, count_condition=sensor,
+                        reset_condition=ack, description=f"{n}정 카운트"),
+        ],
+        states=[
+            SfcState(name="FILLING", is_initial=True),
+            SfcState(name="INDEXING", on_entry=[f"{index} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("FILLING", "INDEXING", f"C1.Q AND NOT {ack}"),
+            _tr("INDEXING", "FILLING", f"{ack}"),
+        ],
+    )
+
+
 def _count_eject(a: Answers) -> StateMachineSpec:
     sensor = _val(a, "sensor", "PART_SENSOR")
     reset = _val(a, "reset", "RESET_PB")
@@ -1086,6 +1136,22 @@ RECIPES: dict[str, Recipe] = {
             _analog_level,
             safety_note="아날로그 센서 고장(단선=0) 시 거동을 검토하고 "
             "하드와이어 고/저 레벨 트립을 별도로 두세요.",
+        ),
+        Recipe(
+            "pill_inspect", "정제 중량 선별", "중량(mg) 임계 이탈 정제를 배출.", "제약",
+            (_f("weight", "중량 입력(아날로그 mg)", "WEIGHT"), _f("lo", "하한 mg", "450", "int"),
+             _f("hi", "상한 mg", "550", "int"), _f("reject", "배출기", "REJECT")),
+            _pill_inspect,
+            safety_note="GMP 라인은 배출 확인 센서(리젝트 검증)를 이중화하고 "
+            "기록(감사 추적)을 별도 시스템으로 남기세요.",
+        ),
+        Recipe(
+            "tablet_count_bottle", "정제 병입 카운트", "N정 충전 후 보틀 인덱싱.", "제약",
+            (_f("sensor", "정제 낙하 센서", "TAB_SENSOR"),
+             _f("ack", "보틀 교체 완료", "BOTTLE_ACK"),
+             _f("index", "보틀 인덱서", "INDEXER"), _f("count", "병당 정수", "30", "int")),
+            _tablet_count_bottle,
+            safety_note="인덱서 구동부 접근 가드를 하드와이어 인터록으로 구성하세요.",
         ),
         Recipe(
             "count_eject", "부품 카운터", "N개 세면 배출(카운터).", "카운터",
