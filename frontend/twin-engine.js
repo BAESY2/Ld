@@ -224,12 +224,16 @@ function visionCfg(L){
 }
 function visionOptics(L){
   const c=visionCfg(L);
+  if(c.exp===undefined){c.exp=8;c.gain=4;c.thr=45;}
   const fovW=7.2*c.wd/c.f, fovH=5.4*c.wd/c.f;
   const res=fovW/1920*1000; /* µm/px */
-  const cLux=Math.min(1,c.lux/600);
+  /* 노출량(EV) = 조도×노출×게인 — 부족/과다 노출 모두 검출력 저하, 게인 과다=노이즈 */
+  const ev=(c.lux/600)*(c.exp/8)*(1+c.gain/24);
+  const cExp=ev<1?Math.max(0.3,0.45+0.55*ev):Math.max(0.55,1-(ev-1)*0.35);
+  const noise=1-Math.max(0,c.gain-8)*0.022;
   const cRes=res<=120?1:Math.max(0.3,120/res);
-  const conf=Math.max(0.3,Math.min(1,(0.45+0.55*cLux)*cRes));
-  return {fovW,fovH,res,conf};
+  const conf=Math.max(0.25,Math.min(1,cExp*noise*cRes));
+  return {fovW,fovH,res,conf,ev};
 }
 
 /* 결선도(직배선도) 자동 생성 — 라이브 통전 표시 */
@@ -1237,7 +1241,8 @@ counter:{
      }
      if(p.st===1){
        p.y+=dt*2.2;
-       if(p.y>3.4){p.st=9;st.ejected++;}
+       if(p.y>3.2)p.z=Math.max(0.55,p.z-dt*2.4); /* 배출 박스 안으로 낙하 */
+       if(p.y>3.6){p.st=9;st.ejected++;}
      }else if(p.st===2){
        p.z-=dt*1.8;p.x+=dt*0.2;
        if(p.z<0.2){p.st=9;st.good++;}
@@ -1305,7 +1310,7 @@ weld:{
    /* 벨트 위상: 공물이 실제 이동 중일 때만 진행(부품·벨트 1:1 동기) */
    st.feeding=(!st.partOn&&!cycle&&st.partX<7.54)||st.out!==undefined;
    if(st.feeding)st.bph=((st.bph||0)+dt*1.1)%0.55;
-   if(o.WELD){st.weaveT+=dt;
+   if(o.WELD&&st.arm>0.93){st.weaveT+=dt; /* 토치가 공물에 도달한 뒤에만 아크·스패터 */
      const rc=cur.devCfg["RB-401"]||{};
      const ro=rc.off||[0,0,0];
      const tip=P(7.55+ro[0]+Math.sin(st.weaveT*9)*0.07,2.28+ro[1],1.02+ro[2]);
@@ -1353,7 +1358,7 @@ weld:{
        {c2.beginPath();c2.arc(j[0],j[1],0.11*view.s,0,7);c2.fillStyle="#5c4a0e";c2.fill();}
      c2.strokeStyle="#39434f";c2.lineWidth=0.07*view.s;
      c2.beginPath();c2.moveTo(T[0],T[1]);c2.lineTo(T[0]+4,T[1]+0.16*view.s);c2.stroke();
-     if(val("WELD")){
+     if(val("WELD")&&st.arm>0.93){
        const f=0.6+Math.random()*0.4;
        c2.save();c2.shadowColor="#bfe3ff";c2.shadowBlur=22*f;
        c2.beginPath();c2.arc(T[0]+4,T[1]+0.16*view.s,3.2*f,0,7);
@@ -1484,9 +1489,14 @@ vision:{
            st.lastShot={off:true};
          }else{
            st.insp++;st.flash=1;st.lastNG=p.ng;
+           const vc=visionCfg(cur);
            const det=p.ng?(Math.random()<visionOptics(cur).conf):true;
-           const judgedNG=p.ng&&det;
-           if(p.ng&&!det)logEv("warn","VS-701 미검출 — 조도/분해능 부족(NG 통과)");
+           /* 임계 과민(낮음) → 양품 과검(false reject) — 셋업값이 즉시 판정에 반영 */
+           const falseRej=!p.ng&&(vc.thr??45)<25&&Math.random()<(25-(vc.thr??45))*0.012;
+           const judgedNG=(p.ng&&det)||falseRej;
+           if(p.ng&&!det)logEv("warn","VS-701 미검출 — 노출/분해능 부족(NG 통과)");
+           if(falseRej)logEv("warn","VS-701 과검 — 블롭 임계 과민(양품 NG 판정)");
+           p.rej=falseRej;
            st.sel=judgedNG?-1:1;st.selT=0.35;
            st.verdicts.push({x:p.x,ng:p.ng,life:1});
            st.lastShot={ng:p.ng,dx:0.25+Math.random()*0.5,dy:0.25+Math.random()*0.5,
@@ -1494,11 +1504,12 @@ vision:{
            if(p.ng)logEv("warn","VS-701 NG 판정 — 게이트 B 분기 지시");
          }
        }
-       if(p.x>=10.35&&p.x<10.8&&st.armB>0.5&&p.ng)p.st=1;
+       if(p.x>=10.35&&p.x<10.8&&st.armB>0.5&&(p.ng||p.rej))p.st=1;
        if(p.x>12.9)p.st=2;
      }else if(p.st===1){
        p.y+=dt*2.0;
-       if(p.y>3.35){p.st=9;st.ng++;}
+       if(p.y>3.1)p.z=Math.max(0.5,p.z-dt*2.2); /* 박스 안으로 낙하(공중 소멸 금지) */
+       if(p.y>3.55){p.st=9;st.ng++;}
      }else if(p.st===2){
        p.z-=dt*1.8;p.x+=dt*0.2;
        if(p.z<0.2){p.st=9;st.ok++;
@@ -1981,12 +1992,20 @@ cascade:{
    if(st.spd[0]>0.3&&st.spawn<=0&&st.parts.length<10){st.parts.push({x:1.3,b:0,z:1.35,fall:0});st.spawn=2.1/(cur.speedF||1);}
    const ends=[6.0,11.2,16.4],starts=[1.2,6.4,11.6],tops=[1.35,0.95,0.55];
    for(const p of st.parts){
-     if(p.fall){p.z-=dt*1.6;p.x+=dt*0.3;
-       if(p.b>2){if(p.z<0.2){p.done=1;st.count++;}}
-       else if(p.z<=tops[p.b]){p.z=tops[p.b];p.fall=0;p.x=starts[p.b];}
+     if(p.fall){
+       /* 이송 슈트: 시작→착지점을 z 진행에 비례해 보간(텔레포트·허공 통과 금지) */
+       const zt=p.b>2?0.2:tops[p.b];
+       p.z=Math.max(zt,p.z-dt*1.6);
+       const f=(p.zs-p.z)/Math.max(0.001,p.zs-zt);
+       const xt=p.b>2?p.xs+0.65:starts[p.b];
+       p.x=p.xs+(xt-p.xs)*f;
+       if(p.z<=zt+0.001){
+         if(p.b>2){p.done=1;st.count++;}
+         else{p.fall=0;p.x=starts[p.b];}
+       }
      }else{
        p.x+=st.spd[p.b]*dt;
-       if(p.x>ends[p.b]){p.b++;p.fall=1;}
+       if(p.x>ends[p.b]){p.b++;p.fall=1;p.xs=p.x;p.zs=p.z;}
      }
    }
    st.parts=st.parts.filter(p=>!p.done);
@@ -1995,6 +2014,14 @@ cascade:{
    beltUnit(1.0,2.0,5.0,st.ph[0],st.spd[0]>0.02,1.35);
    beltUnit(6.2,2.0,5.0,st.ph[1],st.spd[1]>0.02,0.95);
    beltUnit(11.4,2.0,5.0,st.ph[2],st.spd[2]>0.02,0.55);
+   /* 단간 이송 슈트(경사 플레이트) — 부품 낙하 경로와 일치 */
+   const chute=(xa,xb,za,zb)=>dq(xa+2.3+za,c2=>{
+     face(c2,[P(xa,2.08,za),P(xb,2.08,zb),P(xb,2.56,zb),P(xa,2.56,za)],"#303b47",EDGE);
+     seg(c2,P(xa,2.08,za),P(xb,2.08,zb),"#46535f",2);
+     seg(c2,P(xa,2.56,za),P(xb,2.56,zb),"#46535f",2);
+   });
+   chute(5.98,6.45,1.3,0.93);
+   chute(11.18,11.65,0.9,0.53);
    tag3(3.4,2.3,1.55,"CV-601","상류 벨트",val("CONV_UP")?"#7ee787":"#5d6c7c");
    tag3(8.6,2.3,1.15,"CV-602","중간 벨트",val("CONV_MID")?"#7ee787":"#5d6c7c");
    tag3(13.8,2.3,0.75,"CV-603","하류 벨트",val("CONV_DOWN")?"#7ee787":"#5d6c7c");
@@ -2396,12 +2423,14 @@ function glPick(tag){
   if(tag==="RB-401")openPendant();
   logEv("op","WebGL 기기 선택 — "+tag);
 }
-async function setRenderer(on){
+function prefGL(){try{return localStorage.getItem("hands_gl")!=="0";}catch(e){return true;}}
+async function setRenderer(on,auto){
   const btn=document.getElementById("glbtn");
+  if(!auto)try{localStorage.setItem("hands_gl",on?"1":"0");}catch(e){}
   if(on){
     if(!(await ensureGL()))return;
     if(!window.Twin3D.supported.includes(cur.id)){
-      logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 유지(지원: 포장·AGV·용접)");
+      if(!auto)logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 유지");
       return;
     }
     GL3D.on=true;
@@ -3098,7 +3127,7 @@ function show(id){
     if(window.Twin3D.supported.includes(id)){
       setTimeout(()=>{if(GL3D.on){window.Twin3D.mount(glContainer(),LINES[id],{onPick:glPick});}},0);
     }else{
-      setRenderer(false);
+      setRenderer(false,true);
       setTimeout(()=>logEv("op","이 라인은 WebGL 이식 진행 중 — 캔버스 모드 전환"),0);
     }
   }
@@ -3168,6 +3197,8 @@ function show(id){
   if(wd0)wd0.innerHTML=wiringSvg(cur);
   updateOverview();
   if(!rafId){resize();lastT=performance.now();rafId=requestAnimationFrame(loop);}
+  /* WebGL(z-buffer) 기본 — 관통·투시 없는 실3D. 미지원 라인·실패 시 캔버스 폴백 */
+  if(!GL3D.on&&prefGL())setTimeout(()=>{if(cur&&LINES[id]===cur&&!GL3D.on)setRenderer(true,true);},0);
 }
 /* 유저 프로젝트(라인 빌더): DEMO_ALL 의 임의 레시피를 라인 인스턴스로 */
 let USER_LINES=[];
