@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from app.boolexpr import And, Node, Not, Or, Var, parse
+from app.boolexpr import And, Cmp, Node, Not, Or, Var, parse
 from app.memory_map import detect_double_coils
 from app.models import IODirection, StateMachineSpec
 from app.simulator import (
@@ -154,6 +154,8 @@ def _expr_vars(node: Node) -> set[str]:
     match node:
         case Var(name):
             return {name}
+        case Cmp(var, _, _):
+            return {var}  # 아날로그 비교 — 구동원으로 인정
         case Not(operand):
             return _expr_vars(operand)
         case And(operands) | Or(operands):
@@ -193,6 +195,11 @@ def _eval_const(node: Node, table: dict[str, bool]) -> bool:
     match node:
         case Var(name):
             return table.get(name, False)
+        case Cmp(var, op, value):
+            # 불리언 탐색 테이블에서는 ON=만수(1000)/OFF=0 으로 해석
+            left = 1000 if table.get(var, False) else 0
+            return {"<": left < value, ">": left > value, "<=": left <= value,
+                    ">=": left >= value, "=": left == value, "<>": left != value}[op]
         case Not(operand):
             return not _eval_const(operand, table)
         case And(operands):
