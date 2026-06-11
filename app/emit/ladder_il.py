@@ -13,6 +13,8 @@ L1 ``VendorProfile`` 의 니모닉·주소 표기를 사용해, Sum-of-Products 
 
 from __future__ import annotations
 
+import re
+
 from app.models import ElementType, LadderBranch, LadderElement, LadderProgram
 from app.vendors.profiles import DEFAULT_PROFILE, VendorProfile
 
@@ -20,6 +22,27 @@ from app.vendors.profiles import DEFAULT_PROFILE, VendorProfile
 def _operand(el: LadderElement) -> str:
     """주소가 할당돼 있으면 주소, 없으면 심볼명."""
     return el.address or el.symbol
+
+
+# 비교 접점(아날로그): 트랜스파일러가 'VAR op N' 정규화 문자열로 생성한다.
+_CMP_RE = re.compile(r"^(\S+) (<=|>=|<>|<|>|=) (\d+)$")
+_IEC_CMP = {"<": "LT", ">": "GT", "<=": "LE", ">=": "GE", "=": "EQ", "<>": "NE"}
+
+
+def _cmp_parts(el: LadderElement) -> tuple[str, str, str] | None:
+    """비교 접점이면 (변수, 연산자, 정수 리터럴) — 아니면 None."""
+    if el.address:
+        return None
+    m = _CMP_RE.match(el.symbol)
+    if m is None:
+        return None
+    var, op, lit = m.group(1), m.group(2), m.group(3)
+    return var, op, lit
+
+
+def _cmp_literal(profile: VendorProfile, lit: str) -> str:
+    """벤더 상수 표기 — MELSEC 계열은 K 접두."""
+    return f"K{lit}" if profile.name.startswith("MITSUBISHI") else lit
 
 
 def _coil_mnemonic(profile: VendorProfile, el: LadderElement) -> str:
@@ -64,11 +87,15 @@ def _emit_orb(program: LadderProgram, profile: VendorProfile) -> list[str]:
         for i, br in enumerate(branches):
             for j, el in enumerate(br.elements):
                 is_nc = el.element_type == ElementType.CONTACT_NC
-                if j == 0:
-                    mnem = ld_nc if is_nc else ld_no
+                base_ld, base_and = (ld_nc, and_nc) if is_nc else (ld_no, and_no)
+                mnem = base_ld if j == 0 else base_and
+                cmp_ = _cmp_parts(el)
+                if cmp_ is not None:
+                    var, op, lit_ = cmp_
+                    # 비교 명령: LD< VAR N / AND>= VAR N (NNF 보장으로 NC 비교 없음)
+                    lines.append(f"{mnem}{op} {var} {_cmp_literal(profile, lit_)}")
                 else:
-                    mnem = and_nc if is_nc else and_no
-                lines.append(f"{mnem} {_operand(el)}")
+                    lines.append(f"{mnem} {_operand(el)}")
             if i > 0:
                 lines.append(orb)  # 이전 블록과 OR 결합
         for out in rung.outputs:
@@ -128,6 +155,19 @@ def _emit_iec_il(program: LadderProgram, profile: VendorProfile) -> list[str]:
                 mnem = first_nc if is_nc else first_mnem
             else:
                 mnem = rest_nc if is_nc else rest_mnem
+            cmp_ = _cmp_parts(el)
+            if cmp_ is not None:
+                var, op, lit_ = cmp_
+                cmp_op = _IEC_CMP[op]
+                if j == 0:
+                    out.append(f"{indent}{first_mnem} {var}")
+                    out.append(f"{indent}{cmp_op} {lit_}")
+                else:
+                    # IEC IL 괄호식: AND( VAR / LT N / )
+                    out.append(f"{indent}{rest_mnem}( {var}")
+                    out.append(f"{indent}  {cmp_op} {lit_}")
+                    out.append(f"{indent})")
+                continue
             out.append(f"{indent}{mnem} {_operand(el)}")
         return out
 
@@ -156,6 +196,9 @@ def _scl_term(profile: VendorProfile, br: LadderBranch) -> str:
     """직렬 브랜치(AND) → SCL 부분식: A AND NOT B AND C."""
     parts: list[str] = []
     for el in br.elements:
+        if _cmp_parts(el) is not None:
+            parts.append(f"({el.symbol})")  # SCL 은 비교식 그대로 유효
+            continue
         operand = _operand(el)
         if el.element_type == ElementType.CONTACT_NC:
             parts.append(f"{profile.op_not} {operand}")
