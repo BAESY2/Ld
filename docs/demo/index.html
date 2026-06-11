@@ -900,7 +900,10 @@ duty_standby:{unit:"㎥",w:1000,tt:3},
  cascade_conveyor:{unit:"박스",w:8.0,tt:2.1},
  transfer_line:{unit:"차체",w:310,tt:15},
  oht_transport:{unit:"FOUP",w:8.4,tt:16},
- battery_formation:{unit:"트레이",w:96,tt:42}
+ battery_formation:{unit:"트레이",w:96,tt:42},
+ paint_booth:{unit:"패널",w:14,tt:40},
+ stretch_wrap:{unit:"파레트",w:680,tt:22},
+ palletizer:{unit:"파레트",w:540,tt:38}
 };
 
 /* ============================================================
@@ -1292,11 +1295,11 @@ function worker(x,y,t){
   });
 }
 /* 회전 박스 — 임의 헤딩의 차체(AGV/AMR/지게차) 렌더: 4측면 깊이정렬 + 상면 */
-function rotBox(cx,cy,ang,w,d,h,z0,c){
+function rotBox(cx,cy,ang,w,d,h,z0,c,kb){
   const ca=Math.cos(ang),sa=Math.sin(ang);
   const pts=[[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]]
     .map(([x,y])=>[cx+x*ca-y*sa,cy+x*sa+y*ca]);
-  dq(cx+cy+z0*0.02+h,c2=>{
+  dq(cx+cy+z0*0.02+h+(kb||0),c2=>{
     const fcs=[];
     for(let i=0;i<4;i++){
       const a=pts[i],b2=pts[(i+1)%4];
@@ -2778,6 +2781,222 @@ bodyline:{
    ledBoard(13.2,0.95,"재공 WIP",String(st.bodies.length));
  }},
 
+/* ---- 도장부스: 퍼지→분사→세정 ---- */
+paint:{
+ label:"도장부스 — 급기 퍼지 → 도료 분사 → 건 세정(ATEX 구역)",
+ overhead:"piping",
+ wiresOut:[["PURGE_FAN",[[14.72,4.95],[5.2,4.7],[5.2,3.7]]],
+           ["SPRAY",[[14.72,5.0],[8.0,4.8],[8.0,3.7]]],
+           ["FLUSH",[[14.72,5.05],[10.6,4.9],[10.6,3.7]]]],
+ init:()=>({hx:1.4,paint:0,fan:0,mist:[],count:0,phase:"in"}),
+ tick(st,o,dt){
+   st.fan=ramp(st.fan,o.PURGE_FAN||o.SPRAY?1:0,1.5,dt);
+   const busy=o.PURGE_FAN||o.SPRAY||o.FLUSH;
+   /* 행거 패널 진입 → 부스 중앙 정지 → 도장 → 배출 */
+   if(st.phase==="in"){st.hx=Math.min(7.9,st.hx+dt*1.1);if(st.hx>=7.89)st.phase="ready";}
+   else if(st.phase==="ready"&&o.SPRAY)st.phase="paint";
+   else if(st.phase==="paint"){
+     if(o.SPRAY)st.paint=Math.min(1,st.paint+dt/18);
+     if(!busy&&st.paint>0.5)st.phase="out";
+   }
+   else if(st.phase==="out"){st.hx+=dt*1.1;
+     if(st.hx>15.5){st.count++;st.paint=0;st.hx=1.4;st.phase="in";}}
+   /* 스프레이 미스트 — 분사 중 + 패널 재석 시에만 */
+   if(o.SPRAY&&st.phase==="paint"){
+     for(let i=0;i<4;i++){
+       const gun=Math.random()<0.5?-1:1;
+       const q=P(7.9+(Math.random()-0.5)*0.8,2.95+gun*0.85,1.0+Math.random()*0.9);
+       st.mist.push({x:q[0],y:q[1],vx:(Math.random()-0.5)*22,vy:-gun*30-Math.random()*15,life:0.5});
+     }
+   }
+   st.mist.forEach(p2=>{p2.life-=dt;p2.x+=p2.vx*dt;p2.y+=p2.vy*dt;});
+   st.mist=st.mist.filter(p2=>p2.life>0).slice(-140);
+ },
+ draw(ctx,st,val,t){
+   /* 부스 챔버(개구부 양측) */
+   face(ctx,[P(5.6,1.9,0.008),P(10.4,1.9,0.008),P(10.4,4.0,0.008),P(5.6,4.0,0.008)],"rgba(210,228,248,.07)");
+   box3(5.6,1.9,0,0.16,0.16,2.6,"#46535f");box3(10.3,1.9,0,0.16,0.16,2.6,"#46535f");
+   box3(5.6,3.9,0,0.16,0.16,2.6,"#46535f");box3(10.3,3.9,0,0.16,0.16,2.6,"#46535f");
+   /* 개방형 천장 프레임(내부 시인성) — 빔 3개만 */
+   for(const byy of[1.9,2.95,3.9])box3(5.6,byy-0.07,2.6,4.86,0.14,0.14,"#39434f");
+   /* 급기 팬(상부) — 퍼지/분사 중 회전 */
+   for(const fx of[6.6,9.4]){
+     cyl3(fx,2.95,2.78,0.34,0.18,"#2f3a46");
+     dq(fx+2.95+3,c2=>{
+       const c=P(fx,2.95,2.96);
+       c2.save();c2.translate(c[0],c[1]);c2.rotate(t*st.fan*9);
+       c2.strokeStyle=st.fan>0.1?"#8ec9ff":"#3c4956";c2.lineWidth=2;
+       for(let k=0;k<3;k++){c2.rotate(Math.PI*2/3);
+         c2.beginPath();c2.moveTo(0,0);c2.lineTo(7,2);c2.stroke();}
+       c2.restore();
+     });
+   }
+   tag3(8,2.95,3.45,"AHU-91","급기 퍼지 팬",val("PURGE_FAN")?"#8ec9ff":"#5d6c7c");
+   /* 행거 레일 + 패널(도장 진행에 따라 색) */
+   box3(1.2,2.88,2.3,14.4,0.1,0.08,"#3c4854");
+   const px=st.hx;
+   dq(px+2.93+2.3,c2=>seg(c2,P(px,2.93,2.3),P(px,2.93,1.78),"#9aa7b5",1.4));
+   const mix=(a,b2,f)=>{
+     const A=parseInt(a.slice(1),16),B=parseInt(b2.slice(1),16);
+     const ch=s2=>Math.round(((A>>s2&255)*(1-f))+((B>>s2&255)*f));
+     return "#"+[16,8,0].map(s2=>ch(s2).toString(16).padStart(2,"0")).join("");
+   };
+   box3(px-0.55,2.86,0.8,1.1,0.14,1.0,mix("#cdd5de","#c0392b",st.paint));
+   tag3(px,2.93,2.05,"PNL",st.phase==="paint"?"도장 "+Math.round(st.paint*100)+"%":"행거 패널","#9fb3c8",2);
+   /* 스프레이 건 2기 — 분사 중 표시 */
+   for(const[gy,gz]of[[2.0,1.3],[3.9,1.3]]){
+     box3(7.7,gy-0.07,gz-0.1,0.4,0.14,0.2,val("SPRAY")?"#d9821c":"#39434f");
+     if(val("SPRAY")&&st.phase==="paint")
+       dq(99,c2=>{
+         const a=P(8.0,gy+(gy<3?0.2:-0.2),gz),b2=P(7.9,2.95+(gy<3?-0.35:0.35),1.05);
+         c2.save();c2.strokeStyle="rgba(192,57,43,.35)";c2.lineWidth=6;c2.lineCap="round";
+         c2.beginPath();c2.moveTo(a[0],a[1]);c2.lineTo(b2[0],b2[1]);c2.stroke();c2.restore();
+       });
+   }
+   tag3(7.9,2.0,1.7,"SG-91A","도장 스프레이 건",val("SPRAY")?"#ffae6b":"#5d6c7c",2);
+   if(val("FLUSH"))dq(99,c2=>{
+     const q=P(7.9,2.0,1.35);
+     c2.fillStyle="rgba(150,200,255,.4)";
+     c2.beginPath();c2.arc(q[0]+Math.sin(t*9)*3,q[1]-6,3,0,7);c2.fill();
+   });
+   st.mist.forEach(p2=>{
+     dq(99,c2=>{c2.beginPath();c2.arc(p2.x,p2.y,2.2,0,7);
+       c2.fillStyle=`rgba(192,80,60,${(p2.life*0.5).toFixed(2)})`;c2.fill();});
+   });
+   stackLight(11.2,1.8,false,val("FLUSH"),val("SPRAY")||val("PURGE_FAN"));
+   ledBoard(3.4,1.1,"도장 완료",String(st.count).padStart(4,"0"));
+ }},
+
+/* ---- 파레트 랩핑기 ---- */
+wrap:{
+ label:"파레트 랩핑기 — 턴테이블 권취 → 톱프레스 → 필름 컷",
+ overhead:"piping",
+ wiresOut:[["TURNTABLE",[[14.72,4.95],[7.4,4.8],[7.4,3.8]]],
+           ["TOP_PRESS",[[14.72,5.0],[7.8,4.9],[7.8,3.8]]],
+           ["FILM_CUT",[[14.72,5.05],[9.2,4.9],[9.2,3.8]]]],
+ init:()=>({rot:0,filmH:0,press:0,carrH:0.3,count:0,outX:0,loaded:true,cutFlash:0}),
+ tick(st,o,dt){
+   if(o.TURNTABLE){
+     st.rot+=dt*2.4;
+     st.filmH=Math.min(1,st.filmH+dt/11);
+     st.carrH=0.3+st.filmH*1.1;
+   }
+   st.press=ramp(st.press,o.TOP_PRESS?1:0,2.5,dt);
+   if(o.FILM_CUT&&st.cutFlash<=0)st.cutFlash=0.5;
+   st.cutFlash=Math.max(0,st.cutFlash-dt);
+   const busy=o.TURNTABLE||o.TOP_PRESS||o.FILM_CUT;
+   if(!busy&&st.filmH>0.9&&!st.out){st.out=true;st.outX=0;}
+   if(st.out){st.outX+=dt*1.3;
+     if(st.outX>7){st.out=false;st.count++;st.filmH=0;st.carrH=0.3;st.rot=0;}}
+ },
+ draw(ctx,st,val,t){
+   /* 턴테이블 */
+   cyl3(7.4,2.95,0,1.25,0.16,val("TURNTABLE")?"#3f6fae":"#39434f");
+   /* 마스트 + 필름 캐리지 */
+   box3(5.5,2.85,0,0.22,0.22,2.6,"#46535f");
+   box3(5.46,2.8,st.carrH,0.34,0.34,0.4,"#d9821c");
+   tag3(5.6,2.85,2.9,"WM-95","랩핑 마스트·캐리지",val("TURNTABLE")?"#ffae6b":"#5d6c7c",2);
+   /* 파레트+박스 스택(회전 표현: rot 헤딩) */
+   const bx=7.4+(st.out?st.outX:0);
+   if(!st.out||st.outX<6.8){
+     /* 적재물은 턴테이블 디스크(깊이키 +r)보다 뒤에 그려지지 않도록 키 보정 */
+     rotBox(bx,2.95,st.rot,1.15,0.95,0.13,0.16,"#5a4a30",1.6);
+     rotBox(bx,2.95,st.rot,0.95,0.8,0.55,0.29,"#7a5c2e",1.6);
+     rotBox(bx,2.95,st.rot,0.85,0.7,0.45,0.84,"#6e532a",1.6);
+     /* 권취 필름(반투명) — 감긴 높이만큼 */
+     if(st.filmH>0.03)dq(bx+2.95+1.6,c2=>{
+       const b2=P(bx,2.95,0.16),t2=P(bx,2.95,0.16+st.filmH*1.1);
+       c2.save();c2.globalAlpha=0.3;c2.strokeStyle="#bfe3ff";c2.lineWidth=0.62*view.s;
+       c2.beginPath();c2.moveTo(b2[0],b2[1]);c2.lineTo(t2[0],t2[1]);c2.stroke();c2.restore();
+     });
+     /* 필름 가닥: 캐리지→파레트 */
+     if(val("TURNTABLE"))dq(99,c2=>{
+       const a=P(5.62,2.85,st.carrH+0.2),b2=P(bx+Math.cos(st.rot)*0.5,2.95+Math.sin(st.rot)*0.4,st.carrH);
+       seg(c2,a,b2,"rgba(191,227,255,.6)",1.6);
+     });
+   }
+   /* 톱프레스 */
+   box3(7.25,2.8,2.3-st.press*0.75,0.34,0.34,0.18,val("TOP_PRESS")?"#d9821c":"#39434f");
+   dq(7.4+2.95+2.6,c2=>seg(c2,P(7.4,2.95,2.6),P(7.4,2.95,2.45-st.press*0.75),"#566472",2));
+   /* 컷터 플래시 */
+   if(st.cutFlash>0)dq(99,c2=>{
+     const q=P(6.2,2.9,0.5+st.filmH*0.9);
+     c2.save();c2.shadowColor="#ffd76b";c2.shadowBlur=14;
+     c2.fillStyle=`rgba(255,225,150,${st.cutFlash.toFixed(2)})`;
+     c2.beginPath();c2.arc(q[0],q[1],3.2,0,7);c2.fill();c2.restore();
+   });
+   tag3(7.4,2.95,0.55,"TT-95","턴테이블 1.2t",val("TURNTABLE")?"#8ec9ff":"#8b98a8");
+   stackLight(9.6,1.9,false,val("FILM_CUT"),val("TURNTABLE")||val("TOP_PRESS"));
+   ledBoard(4.0,1.1,"랩핑 완료",String(st.count).padStart(4,"0"));
+ }},
+
+/* ---- 파레타이저: 층 적재 ---- */
+palletz:{
+ label:"파레타이저 — 박스 8개 층 형성 → 푸셔 적재(3층 = 파레트 완성)",
+ overhead:"crane",
+ wiresIn:[["BOX_SENSOR",[[6.9,2.7],[6.9,4.4],[14.66,5.15]]]],
+ wiresOut:[["LAYER_PUSH",[[14.72,5.0],[9.2,4.7],[9.2,3.4]]]],
+ init:()=>({belt:0,boxes:[],spawn:0.6,row:0,push:0,layers:0,count:0,pushed:false}),
+ sense(st,plc){
+   plc.set("BOX_SENSOR",st.boxes.some(b2=>!b2.row&&Math.abs(b2.x-6.85)<0.14));
+ },
+ tick(st,o,dt){
+   st.belt=(st.belt+0.9*dt)%0.55;
+   st.spawn-=dt;
+   const rowN=st.boxes.filter(b2=>b2.row).length;
+   if(st.spawn<=0&&st.boxes.length<11&&rowN<8){st.boxes.push({x:1.4,row:0});st.spawn=1.5;}
+   st.push=ramp(st.push,o.LAYER_PUSH?1:0,2.2,dt);
+   st.boxes.sort((a,b2)=>b2.x-a.x);
+   let prev=99;
+   for(const b2 of st.boxes){
+     if(b2.row)continue;
+     let mv=0.9*dt;
+     if(b2.x+mv>prev-0.5)mv=Math.max(0,prev-0.5-b2.x);
+     /* 행 형성 컨베이어 끝에서 정렬 */
+     if(b2.x+mv>8.3-rowN*0.52)mv=Math.max(0,8.3-rowN*0.52-b2.x);
+     b2.x+=mv;prev=b2.x;
+     if(b2.x>=8.29-rowN*0.52-0.01&&!b2.row){b2.row=1;}
+   }
+   /* 푸셔가 행을 파레트로 밀어냄 */
+   if(st.push>0.92&&!st.pushed){
+     st.pushed=true;
+     st.boxes=st.boxes.filter(b2=>!b2.row);
+     st.layers=(st.layers+1);
+     if(st.layers>=3){st.count++;st.layers=0;}
+   }
+   if(st.push<0.1)st.pushed=false;
+ },
+ draw(ctx,st,val,t){
+   beltUnit(1.2,2.0,5.2,st.belt,true,0.75);
+   beltUnit(6.5,2.0,2.4,st.belt,true,0.75); /* 행 형성 구간 */
+   /* 박스 센서 */
+   box3(6.85,1.86,0,0.05,0.05,1.0,"#222a34");
+   dq(6.9+2.3+1.4,c2=>{
+     const a=P(6.87,1.9,0.9),b2=P(6.87,2.7,0.9);
+     seg(c2,a,b2,st.boxes.some(x2=>!x2.row&&Math.abs(x2.x-6.85)<0.14)?"#ff5b5b":"rgba(255,91,91,.3)",1.6);
+   });
+   tag3(6.87,2.7,1.15,"SN-96","박스 카운트 센서","#ff8f8f",2);
+   /* 푸셔 */
+   box3(7.0,1.55,0.78,1.6,0.12,0.5,"#39434f");
+   box3(7.0,1.67+st.push*0.85,0.78,1.6,0.1,0.45,val("LAYER_PUSH")?"#d9821c":"#566472");
+   tag3(7.8,1.6,1.5,"PU-96","층 푸셔",val("LAYER_PUSH")?"#ffae6b":"#5d6c7c",2);
+   /* 행 박스들 */
+   st.boxes.forEach((b2,i)=>{
+     const by=b2.row?2.16+st.push*0.9:2.16;
+     sh(b2.x-0.22,by-0.05,0.45,0.42,0.14);
+     box3(b2.x-0.22,by,0.76,0.45,0.42,0.4,PARTC[i%4]);
+   });
+   /* 적재 파레트(3층) */
+   box3(7.0,3.3,0,1.7,1.3,0.13,"#5a4a30");
+   for(let l2=0;l2<st.layers;l2++)
+     box3(7.05,3.35,0.13+l2*0.42,1.6,1.2,0.4,"#7a5c2e");
+   tag3(7.85,3.95,1.7,"PLT-96",`적재 ${st.layers}/3층`,"#8ec9ff",2);
+   const c1=cur.plc.counters.C1;
+   ledBoard(3.6,1.1,"층 형성",`${String(c1?c1.cnt:0)}/${c1?c1.preset:8}`,c1&&c1.q?"#f5b14c":"#7ee787");
+   ledBoard(10.6,1.2,"완성 파레트",String(st.count).padStart(4,"0"));
+   stackLight(10.0,3.0,false,false,val("LAYER_PUSH"));
+ }},
+
 /* ---- 반도체 팹 베이: OHT 천장반송(FOUP) ---- */
 fab:{
  label:"반도체 팹 베이 — OHT 천장반송(FOUP) · LP-01 픽업 → LP-02 하역",
@@ -2929,6 +3148,9 @@ SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCEN
 SCENES.bodyline.prod=st=>st.count; SCENES.bodyline.wip=st=>st.bodies.length;
 SCENES.bodyline.avail=()=>1;
 SCENES.fab.prod=st=>st.count; SCENES.fab.wip=st=>st.carry?1:0; SCENES.fab.avail=()=>1;
+SCENES.paint.prod=st=>st.count; SCENES.paint.wip=st=>st.phase!=="in"?1:0; SCENES.paint.avail=()=>1;
+SCENES.wrap.prod=st=>st.count; SCENES.wrap.wip=st=>st.out?0:1; SCENES.wrap.avail=()=>1;
+SCENES.palletz.prod=st=>st.count; SCENES.palletz.wip=st=>st.boxes.length; SCENES.palletz.avail=()=>1;
 SCENES.battery.prod=st=>st.count; SCENES.battery.wip=st=>st.trayX>-4.9&&st.trayX<4.9?1:0;
 SCENES.battery.avail=()=>1;
 
@@ -3011,7 +3233,8 @@ const LINES={};
 const OV={motor_start_stop:"포장 컨베이어",fwd_rev:"이송 대차",car_wash:"세차 터널",
   count_eject:"검수 카운트",conveyor_divert:"비전 분기",weld_cell:"용접 셀",
   batch_fill_mix_drain:"배치 플랜트",duty_standby:"급수 펌프장",fnb_fill_cutoff:"정량 충전 라인",cascade_conveyor:"다단 반송",motion_home_move:"AGV 물류 섹터",
-  transfer_line:"차체 트랜스퍼 라인",oht_transport:"반도체 OHT 베이",battery_formation:"배터리 화성 라인"};
+  transfer_line:"차체 트랜스퍼 라인",oht_transport:"반도체 OHT 베이",battery_formation:"배터리 화성 라인",
+  paint_booth:"도장부스",stretch_wrap:"랩핑 셀",palletizer:"파레타이저"};
 
 /* ---- 자동 시연 오토파일럿: 라인별 가상 조작 시퀀스 ---- */
 const AUTO={
@@ -3056,6 +3279,17 @@ const AUTO={
  battery_formation(L){
    if(L.sst.phase==="chg"&&!L.plc.val("CHARGER")&&L.sst.v<4190&&!L.faults.hotCell)
      return["CHG_START",0.4,3];
+ },
+ paint_booth(L){
+   const busy=["PURGE_FAN","SPRAY","FLUSH"].some(x=>L.plc.val(x));
+   if(!busy&&L.sst.phase==="ready")return["PAINT_START",0.3,2];
+ },
+ stretch_wrap(L){
+   const busy=["TURNTABLE","TOP_PRESS","FILM_CUT"].some(x=>L.plc.val(x));
+   if(!busy&&!L.sst.out&&L.sst.filmH<0.05)return["WRAP_START",0.3,2];
+ },
+ palletizer(L){
+   if(L.plc.val("LAYER_PUSH")&&L.sst.push>0.92)return["LAYER_DONE",0.4,2];
  }
 };
 function autopilot(L,dt){
@@ -4098,7 +4332,8 @@ function makeLine(id){
       count_eject:"XBC-DR32H",conveyor_divert:"NX1P2-1140DT",weld_cell:"R04CPU",
       batch_fill_mix_drain:"CJ2M-CPU31",duty_standby:"CPU 1214C",
       cascade_conveyor:"XGK-CPUH",transfer_line:"CPU 1515-2 PN",
-      oht_transport:"NX1P2-1140DT",battery_formation:"Q03UDECPU"})[id]||"XGK-CPUH",
+      oht_transport:"NX1P2-1140DT",battery_formation:"Q03UDECPU",
+      paint_booth:"CPU 1212C",stretch_wrap:"XBC-DR32H",palletizer:"FX5U-32MR/ES"})[id]||"XGK-CPUH",
     devCfg:{}};
   L.sst=L.scene.init();
   d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
@@ -4261,6 +4496,32 @@ registerBuiltin("battery_formation",{scene:"battery",
   verify:["CV 컷오프 — CELL_V ≥ 4200 도달 시 충전 차단(비교 접점, Z3 Int 검증)",
           "과열 차단 — CELL_TEMP > 45 즉시 차단(이중 조건 OR)",
           "이중 코일 0건 · 도달성 검사 통과","OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+registerBuiltin("paint_booth",{scene:"paint",
+  buttons:[{sym:"PAINT_START",label:"도장 시작",c:"#1f9d4d"},{sym:"PAINT_STOP",label:"정지",c:"#c93c3c"}],
+  tags:{PURGE_FAN:{tag:"AHU-91",name:"급기 퍼지 팬 5.5kW",rated:10.5},
+        SPRAY:{tag:"SG-91",name:"도장 스프레이 건×2",rated:1.4},
+        FLUSH:{tag:"FL-91",name:"건 세정 솔레노이드",rated:0.6}},
+  faults:[{id:"tripFan",label:"AHU-91 급기 팬 트립",sym:"PURGE_FAN",type:"trip"}],
+  verify:["퍼지 선행 — 분사 전 급기 퍼지 단계 강제(one-hot 시퀀스)",
+          "단계 배타 — 퍼지/분사/세정 동시 ON 불가","PAINT_STOP 지배성 · TON 3단 도달성",
+          "OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+registerBuiltin("stretch_wrap",{scene:"wrap",
+  buttons:[{sym:"WRAP_START",label:"랩핑 시작",c:"#1f9d4d"},{sym:"WRAP_STOP",label:"정지",c:"#c93c3c"}],
+  tags:{TURNTABLE:{tag:"TT-95",name:"턴테이블 모터 2.2kW",rated:4.6},
+        TOP_PRESS:{tag:"TP-95",name:"톱프레스 실린더",rated:0.9},
+        FILM_CUT:{tag:"FC-95",name:"필름 컷터",rated:0.7}},
+  faults:[{id:"tripTT",label:"TT-95 턴테이블 트립",sym:"TURNTABLE",type:"trip"}],
+  verify:["권취→프레스→컷 순서만 도달 가능(상태 전이 검사)",
+          "WRAP_STOP 지배성 — 회전체 즉시 정지","이중 코일 0건 · TON 3단 도달성",
+          "OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+registerBuiltin("palletizer",{scene:"palletz",
+  buttons:[{sym:"LAYER_DONE",label:"적재 완료",c:"#b8860b"}],
+  autoInputs:{BOX_SENSOR:"박스 센서 · 자동",LAYER_DONE:"적재 완료 · 자동"},
+  tags:{LAYER_PUSH:{tag:"PU-96",name:"층 푸셔 실린더",rated:1.6}},
+  faults:[{id:"stuckBox",label:"SN-96 센서 고착(ON)",sym:"BOX_SENSOR",type:"stuck_on"}],
+  verify:["CTU 8카운트 도달 시에만 푸셔 작동(과밀 방지)",
+          "적재 완료 신호로 카운터 리셋·복귀(래치 도달성)","이중 코일 0건",
+          "OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
 USER_LINES=USER_LINES.filter(u=>registerUserLine(u));
 USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});
