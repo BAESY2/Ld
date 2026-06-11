@@ -205,6 +205,11 @@ table.cmp td.themwin{color:#f0c26b}
 .kpi b{display:block;font:700 15px/1.2 ui-monospace,monospace;color:#7ee787;white-space:nowrap}
 .kpi b.blue{color:#8ec9ff}.kpi b.amber{color:#f0c26b}
 .kpi span{display:block;font-size:10.5px;color:var(--mut);margin-top:2px;white-space:nowrap}
+.plcsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.plcsel select{background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:12.5px ui-monospace,monospace;padding:6px 8px;border-radius:8px;outline:none;max-width:100%}
+.plcsel select:focus{border-color:var(--acc)}
+.fitbox{font:11.5px/1.6 ui-monospace,monospace;color:var(--mut);margin-bottom:10px;border:1px solid #1d2733;border-radius:9px;padding:8px 10px;background:rgba(10,15,22,.6)}
+.fitbox .ok{color:#7ee787}.fitbox .bad{color:#f0c26b}
 .scanline{font:12px/1.7 ui-monospace,monospace;color:var(--mut);margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap}
 .scanline b{color:#7ee787;font-weight:600}
 table.io{width:100%;border-collapse:collapse;font:12px ui-monospace,monospace}
@@ -317,7 +322,9 @@ table.io td.mut{color:var(--mut)}
     <div class="ctrl" id="ctrl"></div>
    </div>
    <div class="box">
-    <h3>② 가상 PLC 상태 · LS XGK 주소 자동 할당 · 실시간 I/O</h3>
+    <h3>② 가상 PLC — 기종 선택 · 적합성 · 실시간 I/O</h3>
+    <div class="plcsel" id="plcsel"></div>
+    <div class="fitbox" id="fitbox"></div>
     <div id="cosimbar" style="margin-bottom:8px"></div>
     <div class="scanline" id="scaninfo"></div>
     <table class="io" id="iotable"></table>
@@ -476,6 +483,64 @@ const META={
   verify:["하류 우선 기동 — 3초 간격 순차(자재 적체 방지)","STOP 지배성 — 전 벨트 정지 보장",
           "이중 코일 0건 · TON 4개 도달성","OpenPLC 런타임 차분검증 bit-for-bit 일치"]}
 };
+
+/* PLC 기종 카탈로그 — app/catalog.py 동일 데이터(공개 사양 요약·납품 전 데이터시트 확인) */
+const PLC_CATALOG=[
+ {v:"LS",model:"XGK-CPUE",dio:1536,sk:32,cap:"32K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XGK-CPUH",dio:6144,sk:64,cap:"64K 스텝",tm:2048,cn:2048,comm:"RS-232C·USB·Ethernet",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XBC-DR32H",dio:384,sk:15,cap:"15K 스텝",tm:256,cn:256,comm:"RS-232C·RS-485",prof:"LS XGK(P/T/C 10진)"},
+ {v:"LS",model:"XGI-CPUU",dio:6144,sk:null,cap:"1MB(IEC)",tm:2048,cn:2048,comm:"USB·Ethernet",prof:"LS XGI(%IX/%QX)"},
+ {v:"MITSUBISHI",model:"FX5U-32MR/ES",dio:512,sk:64,cap:"64K 스텝",tm:1024,cn:1024,comm:"RS-485·Ethernet",prof:"MELSEC(X/Y 8진)"},
+ {v:"MITSUBISHI",model:"Q03UDECPU",dio:4096,sk:30,cap:"30K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC(X/Y 16진)"},
+ {v:"MITSUBISHI",model:"R04CPU",dio:4096,sk:40,cap:"40K 스텝",tm:2048,cn:1024,comm:"USB·Ethernet",prof:"MELSEC iQ-R"},
+ {v:"SIEMENS",model:"CPU 1212C",dio:282,sk:null,cap:"100KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
+ {v:"SIEMENS",model:"CPU 1214C",dio:284,sk:null,cap:"125KB",tm:null,cn:null,comm:"PROFINET",prof:"S7(%I/%Q)"},
+ {v:"SIEMENS",model:"CPU 1515-2 PN",dio:8192,sk:null,cap:"500KB+3MB",tm:null,cn:null,comm:"PROFINET×2",prof:"S7(%I/%Q)"},
+ {v:"OMRON",model:"CP1L-EM30",dio:150,sk:10,cap:"10K 스텝",tm:256,cn:256,comm:"USB·Ethernet",prof:"OMRON CIO"},
+ {v:"OMRON",model:"CJ2M-CPU31",dio:2560,sk:60,cap:"60K 스텝",tm:4096,cn:4096,comm:"USB·Ethernet",prof:"OMRON CIO"},
+ {v:"OMRON",model:"NX1P2-1140DT",dio:256,sk:null,cap:"1.5MB(IEC)",tm:null,cn:null,comm:"EtherCAT·EtherNet/IP",prof:"OMRON NX(IEC)"}];
+function estSteps(lad){
+  let n=0;
+  for(const r of lad.rungs){
+    for(const b of r.input_branches)n+=b.elements.length;
+    for(const o of r.outputs)n+=(o.element_type==="TIMER"||o.element_type==="COUNTER")?3:2;
+  }
+  return n;
+}
+function fitCheck(L,m){
+  const io=L.d.sim.inputs.length+L.d.sim.outputs.length;
+  const tmr=Object.keys(L.plc.timers).length,cnt=Object.keys(L.plc.counters).length;
+  const st2=estSteps(L.d.ladder),iss=[];
+  if(io>m.dio)iss.push(`I/O ${io}점 > 최대 ${m.dio}점`);
+  if(m.tm!==null&&tmr>m.tm)iss.push(`타이머 ${tmr} > ${m.tm}`);
+  if(m.cn!==null&&cnt>m.cn)iss.push(`카운터 ${cnt} > ${m.cn}`);
+  if(m.sk!==null&&st2>m.sk*1000)iss.push(`추정 ${st2}스텝 > ${m.cap}`);
+  return {io,tmr,cnt,st2,iss};
+}
+function renderFit(){
+  const m=PLC_CATALOG.find(x=>x.model===cur.cpu)||PLC_CATALOG[1];
+  const f=fitCheck(cur,m);
+  document.getElementById("fitbox").innerHTML=
+   `<div>${m.v} <b style="color:#dce4f0">${m.model}</b> · ${m.cap} · I/O ${m.dio}점 · ${m.comm}</div>`+
+   `<div>주소체계 ${m.prof} · 본 설계: I/O ${f.io}점 · TON ${f.tmr} · CTU ${f.cnt} · 추정 ${f.st2}스텝</div>`+
+   (f.iss.length?f.iss.map(i=>`<div class="bad">⚠ ${i}</div>`).join("")
+    :`<div class="ok">✓ 기종 적합 — 한계 내 설계</div>`);
+}
+function buildPlcSel(){
+  const el=document.getElementById("plcsel");
+  el.innerHTML='<small style="color:var(--mut)">기종</small>';
+  const sel=document.createElement("select");
+  PLC_CATALOG.forEach(m=>{
+    const o=document.createElement("option");
+    o.value=m.model;o.textContent=`${m.v} · ${m.model} (${m.cap})`;
+    if(m.model===cur.cpu)o.selected=true;
+    sel.appendChild(o);
+  });
+  sel.onchange=()=>{cur.cpu=sel.value;renderFit();
+    logEv("op","PLC 기종 변경 → "+cur.cpu);};
+  el.appendChild(sel);
+  renderFit();
+}
 
 /* 생산 파라미터 — 제품 단위·개당 중량(kg)·목표 택타임(s) */
 const KPI={
@@ -658,6 +723,7 @@ function face(ctx,pts,fill,stroke){
 /* 깊이 정렬 큐 — 모든 입체는 여기로 들어가 뒤→앞 순서로 그려진다 */
 let DQ=[],LB=[],SH=[],CHIPS=[];
 let cam={z:1,px:0,py:0};
+let camT={z:1,px:0,py:0};
 const dq=(d,f)=>DQ.push({d,f});
 function flushQ(ctx){DQ.sort((a,b)=>a.d-b.d);for(const o of DQ)o.f(ctx);DQ.length=0;}
 const EDGE="rgba(8,12,16,.35)";
@@ -778,10 +844,11 @@ function fence(x0,y0,x1,y1,gap){
   else rail([x0,y1],[x1,y1]);
 }
 /* 작업자(키 1.75m — 스케일 기준) */
-function worker(x,y){
+function worker(x,y,t){
+  const sw=t!==undefined?Math.sin(t*7)*0.09:0;
   sh(x-0.25,y-0.2,0.5,0.4,0.2);
-  box3(x-0.13,y-0.15,0,0.11,0.13,0.78,"#2b3440");
-  box3(x+0.02,y-0.15,0,0.11,0.13,0.78,"#2b3440");
+  box3(x-0.13+sw,y-0.15,0,0.11,0.13,0.78,"#2b3440");
+  box3(x+0.02-sw,y-0.15,0,0.11,0.13,0.78,"#2b3440");
   box3(x-0.18,y-0.17,0.78,0.36,0.24,0.62,"#33567f");
   dq(x+y+1.5,ctx=>{
     const h=P(x,y,1.56);
@@ -828,6 +895,30 @@ function stackLight(x,y,r,a,g){
   });
 }
 /* 제어 구역(공통): 조작 페데스탈 + PLC 캐비닛(0.8×0.45×1.9m) + 작업자 */
+function forklift(t){
+  const ph=(t/34)%1, tri=2*Math.abs(ph-0.5);
+  const fx=2.2+9.8*(1-tri), fy=6.85, fwd=ph<0.5;
+  sh(fx-0.7,fy-0.55,1.6,1.1,0.26);
+  box3(fx-0.55,fy-0.45,0.18,1.25,0.95,0.55,"#c98a16");
+  box3(fx+0.18,fy-0.3,0.73,0.5,0.65,0.55,"#8a5e0e");
+  box3(fx-0.42,fy-0.38,0,0.3,0.22,0.2,"#11161d");
+  box3(fx+0.42,fy-0.38,0,0.3,0.22,0.2,"#11161d");
+  box3(fx-0.42,fy+0.28,0,0.3,0.22,0.2,"#11161d");
+  box3(fx+0.42,fy+0.28,0,0.3,0.22,0.2,"#11161d");
+  const mx=fwd?fx-0.78:fx+0.7;
+  box3(mx,fy-0.4,0,0.09,0.09,1.35,"#3a4654");
+  box3(mx,fy+0.26,0,0.09,0.09,1.35,"#3a4654");
+  const fz=0.12;
+  box3(fwd?mx-0.55:mx+0.09,fy-0.34,fz,0.55,0.1,0.06,"#9aa7b5");
+  box3(fwd?mx-0.55:mx+0.09,fy+0.22,fz,0.55,0.1,0.06,"#9aa7b5");
+  if(fwd){
+    box3(mx-0.6,fy-0.4,fz+0.06,0.62,0.78,0.1,"#5a4a30");
+    box3(mx-0.52,fy-0.3,fz+0.16,0.46,0.6,0.42,"#7a5c2e");
+  }
+  dq(fx+fy+1.6,c2=>lamp(c2,P(fx+0.4,fy-0.25,1.32),2.4,"#d9a514",(t*2%1)<0.5));
+  tag3(fx,fy,1.6,"FL-01","지게차 운행","#d9a514");
+}
+
 function chrome(ctx,t,val){
   sh(12.3,5.05,0.4,0.4,0.22);
   box3(12.3,5.05,0,0.36,0.36,1.0,"#252e39");
@@ -843,9 +934,12 @@ function chrome(ctx,t,val){
     lamp(c2,P(14.88,5.36,1.64),2.6,"#3fb950",true);
     lamp(c2,P(15.02,5.36,1.64),2.6,"#58a6ff",(t*5%1)<0.5);
   });
-  tag3(15.1,5.13,2.0,"PLC-01","LS XGK · 가상","#7ee787");
+  tag3(15.1,5.13,2.0,"PLC-01",(cur.cpu||"XGK")+" · 가상","#7ee787");
+  const tri26=2*Math.abs((t/26)%1-0.5);
+  worker(3.6+5.2*(1-tri26),5.78,t);
   worker(13.5,5.7);
   rack(0.6,0.25,4);
+  forklift(t);
   sh(2.3,5.85,1.3,1.1,0.22);
   box3(2.35,5.9,0,1.2,1.0,0.12,"#5a4a30");
   box3(2.45,6.0,0.12,0.45,0.42,0.42,"#6e532a");box3(2.95,6.0,0.12,0.45,0.42,0.42,"#7a5c2e");
@@ -1101,10 +1195,10 @@ weld:{
    }
    if(o.WELD){st.weaveT+=dt;
      const tip=P(7.55+Math.sin(st.weaveT*9)*0.07,2.28,1.02);
-     for(let i=0;i<3;i++)st.sparks.push({x:tip[0],y:tip[1],vx:(Math.random()-0.5)*90,vy:-Math.random()*70,life:0.5+Math.random()*0.4});
+     for(let i=0;i<6;i++)st.sparks.push({x:tip[0],y:tip[1],vx:(Math.random()-0.5)*150,vy:-Math.random()*110,life:0.4+Math.random()*0.5});
    }
    st.sparks.forEach(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=220*dt;});
-   st.sparks=st.sparks.filter(p=>p.life>0).slice(-120);
+   st.sparks=st.sparks.filter(p=>p.life>0).slice(-200);
  },
  draw(ctx,st,val,t){
    fence(5.0,1.2,9.7,4.5,"front");
@@ -1128,7 +1222,7 @@ weld:{
    cyl3(6.3,2.95,0,0.27,0.3,"#caa011");
    cyl3(6.3,2.95,0.3,0.18,0.35,"#d9a514");
    dq(6.3+2.95+1.4,c2=>{
-     const a=st.arm;
+     const a0=st.arm,a=a0*a0*(3-2*a0);
      const S=P(6.3,2.95,0.66);
      const wv=val("WELD")?Math.sin(st.weaveT*9)*0.07:0;
      const T=a<0.02?P(6.85,2.95,2.0):P(6.85+( (7.55+wv) -6.85)*a,2.95+(2.3-2.95)*a,2.0+(1.04-2.0)*a);
@@ -1637,6 +1731,7 @@ function drawScene(t){
   const ctx=g2;
   ctx.clearRect(0,0,view.W,view.H);
   CHIPS.length=0;
+  cam.z+=(camT.z-cam.z)*0.22; cam.px+=(camT.px-cam.px)*0.22; cam.py+=(camT.py-cam.py)*0.22;
   ctx.save();
   ctx.translate(cam.px,cam.py);
   ctx.scale(cam.z,cam.z);
@@ -1766,25 +1861,25 @@ const COSIM={ws:null,on:false,ready:false,acc:0,lastSent:{},t_ms:0,pend:0,line:n
 cvs.addEventListener("wheel",e=>{
   e.preventDefault();
   const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-  const nz=Math.min(3,Math.max(0.55,cam.z*Math.exp(-e.deltaY*0.0012)));
-  const kk=nz/cam.z;
-  cam.px=mx-(mx-cam.px)*kk; cam.py=my-(my-cam.py)*kk; cam.z=nz;
+  const nz=Math.min(8,Math.max(0.55,camT.z*Math.exp(-e.deltaY*0.0012)));
+  const kk=nz/camT.z;
+  camT.px=mx-(mx-camT.px)*kk; camT.py=my-(my-camT.py)*kk; camT.z=nz;
 },{passive:false});
 cvs.addEventListener("pointerdown",e=>{
-  pdrag={x:e.clientX,y:e.clientY,px:cam.px,py:cam.py,moved:false};
+  pdrag={x:e.clientX,y:e.clientY,px:camT.px,py:camT.py,moved:false};
   cvs.setPointerCapture(e.pointerId);
 });
 cvs.addEventListener("pointermove",e=>{
   if(!pdrag)return;
   const dx=e.clientX-pdrag.x,dy=e.clientY-pdrag.y;
   if(Math.abs(dx)+Math.abs(dy)>5)pdrag.moved=true;
-  cam.px=pdrag.px+dx; cam.py=pdrag.py+dy;
+  camT.px=pdrag.px+dx; camT.py=pdrag.py+dy;
 });
 cvs.addEventListener("pointerup",e=>{
   if(pdrag&&!pdrag.moved)pickDevice(e);
   pdrag=null;
 });
-cvs.addEventListener("dblclick",()=>{cam={z:1,px:0,py:0};hideDev();});
+cvs.addEventListener("dblclick",()=>{camT={z:1,px:0,py:0};hideDev();});
 function pickDevice(e){
   const r=cvs.getBoundingClientRect();
   const mx=(e.clientX-r.left-cam.px)/cam.z, my=(e.clientY-r.top-cam.py)/cam.z;
@@ -1923,7 +2018,7 @@ function makeLine(id){
   const L={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
     kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0},
     log:[],trend:[],lastTrendT:0,prevO:{},prevI:{},prevQ:{},taktAlarm:false,
-    speedF:1,ngRate:8,demandF:1,faults:{},auto:true,apPulse:null,apCool:Math.random()*2};
+    speedF:1,ngRate:8,demandF:1,faults:{},auto:true,apPulse:null,apCool:Math.random()*2,cpu:"XGK-CPUH"};
   L.sst=L.scene.init();
   d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
   L.log.unshift({lv:"info",msg:"라인 투입 — "+d.title,t:"T+0.0s"});
@@ -2018,6 +2113,7 @@ function show(id){
       `<tr><td><span class="dot on-i" style="background:#7c5cff;box-shadow:0 0 8px #7c5cff"></span></td>`+
       `<td><b>${addr}</b></td><td class="mut">${a.name}</td>`+
       `<td colspan="2"><b id="an_${addr}" style="color:#b9a3ff">—</b> <span class="mut">${a.unit} · 아날로그 D(트윈 계측)</span></td></tr>`).join("");
+  buildPlcSel();
   document.getElementById("st").textContent=d.st;
   document.getElementById("explain").textContent=d.explain;
   document.getElementById("sim").innerHTML=tg(d.sim);
