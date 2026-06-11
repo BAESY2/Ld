@@ -23,3 +23,12 @@ class TestBuildDemo:
             SRC_HTML.read_text(encoding="utf-8"), ENGINE_JS.read_text(encoding="utf-8")
         )
         assert OUT_HTML.read_text(encoding="utf-8") == expected
+
+    def test_webgl_assets_published(self) -> None:
+        """WebGL 자산(three·twin3d)이 배포 디렉터리에 동반된다."""
+        from scripts.build_demo import ASSETS
+
+        for src, dst in ASSETS:
+            assert src.is_file()
+            assert dst.is_file()
+            assert dst.read_bytes() == src.read_bytes()

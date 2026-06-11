@@ -23,10 +23,18 @@ def build(html: str, engine: str) -> str:
     return html.replace(TAG, "<script>\n" + engine + "</script>", 1)
 
 
+ASSETS = [
+    (ROOT / "frontend" / "vendor" / "three.min.js", OUT_HTML.parent / "three.min.js"),
+    (ROOT / "frontend" / "twin3d.js", OUT_HTML.parent / "twin3d.js"),
+]
+
+
 def main() -> None:
     out = build(SRC_HTML.read_text(encoding="utf-8"), ENGINE_JS.read_text(encoding="utf-8"))
     OUT_HTML.write_text(out, encoding="utf-8")
-    print(f"built {OUT_HTML} ({len(out):,} bytes)")
+    for src, dst in ASSETS:
+        dst.write_bytes(src.read_bytes())
+    print(f"built {OUT_HTML} ({len(out):,} bytes) + assets {len(ASSETS)}")
 
 
 if __name__ == "__main__":
