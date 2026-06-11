@@ -59,7 +59,7 @@
   - [ ] Three.js(WebGL) 자유 회전 카메라 — 의존성 0 원칙과 충돌, P2 공장 편집기와 함께 전환
   - [~] 아날로그 엔진 확장 — 1/3 완료: boolexpr `Cmp`(수치 비교 <,>,<=,>=,=,<>, 정수 리터럴 정규화) + 시뮬레이터 INT 입력·평가(테스트 9건). 3단계 진행: ① Cmp 파싱+시뮬 INT ② Z3 산술 인코딩(UNSAT 증명) ③ 래더 비교 접점(DNF 리터럴, NNF 연산자 반전 정규화 — `LEVEL < 300` 접점 생성). 남음: 아날로그 수위 레시피 1종(wizard) + 벤더 IL 비교명령 출력
 - **P2 (3~6개월)**:
-  - [ ] **프런트 통합(최우선)**: `claude/nlang-plc-design-8oYP1` 브랜치의 WASM 스튜디오(docs/web.html — Pyodide 실엔진·P&ID·Three.js)와 본 브랜치 디지털트윈(docs/demo — 9라인 시뮬·KPI/OEE·고장주입)을 통합. 1차: 스튜디오 '3D 가동' 탭을 디지털트윈 씬 엔진으로 교체, 2차: 자연어 설계 결과(plant_from_spec)를 트윈 레이아웃으로 자동 매핑
+  - [~] **프런트 통합(최우선)** — 설계 완료(`docs/FRONTEND_INTEGRATION.md`: plant3d.js 1,090줄 프리팹 분석, P-A 엔진 모듈화→P-B 어댑터→P-C WebGL 이식→P-D 자동 합성 4단계): `claude/nlang-plc-design-8oYP1` 브랜치의 WASM 스튜디오(docs/web.html — Pyodide 실엔진·P&ID·Three.js)와 본 브랜치 디지털트윈(docs/demo — 9라인 시뮬·KPI/OEE·고장주입)을 통합. 1차: 스튜디오 '3D 가동' 탭을 디지털트윈 씬 엔진으로 교체, 2차: 자연어 설계 결과(plant_from_spec)를 트윈 레이아웃으로 자동 매핑
   - [x] 아날로그 수위 레시피 — `analog_level`(레시피 33호): INT IOPoint(D 클래스)·임계 파라미터 → 비교식 ST → Z3 검증 → 비교 접점 래더 → INT 시뮬 전 경로(테스트 4건). 벤더 IL 비교명령 완료(XGK `LD</AND<`·MELSEC `K`리터럴·XGI IEC `LT/GE` 괄호식·SCL 괄호 통과 — 테스트 4건) → **아날로그 트랙 전체 완료**
   - [~] **PLC 기종 카탈로그·실설계(사용자 요청)** — 백엔드 완료: `app/catalog.py` 13개 CPU 모델(LS XGK/XGB/XGI·미쓰비시 FX5U/Q/iQ-R·지멘스 S7-1200/1500·오므론 CP1L/CJ2M/NX1P2, 출처 URL 포함) + 적합성 검사(I/O·타이머/카운터·스텝 추정)·최소 기종 제안 + `/api/catalog`·`/api/catalog/fit`(테스트 7건) + 가동 화면 기종 선택 UI(13기종 셀렉트→적합성 실시간 판정·3D 캐비닛 태그 연동). 남음: 제조사별 제품 리스트 DB(LS XGK/XGB/XGI·미쓰비시 FX/Q/iQ-R·지멘스 S7-1200/1500·오므론 CP/CJ/NX — CPU 모델·I/O 점수·메모리·통신), 기종 선택 → 주소체계·용량 제약을 설계에 반영, 데모에서 기종 선택 UI + 기종별 정밀 테스트
   - [ ] 공장 편집기(설비 팔레트→자동 레시피 매핑) + OPC UA 게이트웨이 + 레시피 80종 + 섀도 모드 알파
