@@ -1093,7 +1093,7 @@ function face(ctx,pts,fill,stroke){
 }
 /* 깊이 정렬 큐 — 모든 입체는 여기로 들어가 뒤→앞 순서로 그려진다 */
 let DQ=[],LB=[],SH=[],CHIPS=[];
-const DEF_POS={op:[12.3,5.05],plc:[14.7,4.9],avr:[15.78,4.95],stg:[2.35,5.9]};
+const DEF_POS={op:[10.8,5.45],plc:[12.75,5.35],avr:[14.7,5.42],stg:[1.5,5.7]};
 const EDITKEY={"OP-01":"op","PLC-01":"plc","AVR-01":"avr","STG-01":"stg"};
 let LAYOUT={};
 try{LAYOUT=JSON.parse(localStorage.getItem("hands_layout")||"{}");}catch(e){}
@@ -1103,12 +1103,22 @@ let cam={z:1,px:0,py:0};
 let camT={z:1.14,px:-26,py:-30}; /* 기본 프레이밍: 라인 밴드 중심·약간 확대 */
 const dq=(d,f)=>DQ.push({d,f});
 function flushQ(ctx){DQ.sort((a,b)=>a.d-b.d);for(const o of DQ)o.f(ctx);DQ.length=0;}
-const EDGE="rgba(8,12,16,.35)";
+const EDGE="rgba(8,12,16,.22)"; /* 연한 외곽선 — 만화풍 탈피 */
 function box3(x,y,z,w,d,h,c){
   dq(x+y+(w+d)*0.5+z*0.02,ctx=>{
-    face(ctx,[P(x,y,z+h),P(x+w,y,z+h),P(x+w,y+d,z+h),P(x,y+d,z+h)],shade(c,1.16),EDGE);
-    face(ctx,[P(x,y+d,z),P(x+w,y+d,z),P(x+w,y+d,z+h),P(x,y+d,z+h)],shade(c,0.62),EDGE);
-    face(ctx,[P(x+w,y,z),P(x+w,y+d,z),P(x+w,y+d,z+h),P(x+w,y,z+h)],shade(c,0.88),EDGE);
+    /* 면 그라데이션: 상면 코너광·측면 접지부 어둡게 — 플랫 단색 탈피 */
+    const tA=P(x,y,z+h),tC=P(x+w,y+d,z+h);
+    const gt=ctx.createLinearGradient(tA[0],tA[1],tC[0],tC[1]);
+    gt.addColorStop(0,shade(c,1.3));gt.addColorStop(1,shade(c,1.02));
+    face(ctx,[tA,P(x+w,y,z+h),tC,P(x,y+d,z+h)],gt,EDGE);
+    const fA=P(x,y+d,z),fT=P(x,y+d,z+h);
+    const gf=ctx.createLinearGradient(fA[0],fA[1],fT[0],fT[1]);
+    gf.addColorStop(0,shade(c,0.48));gf.addColorStop(1,shade(c,0.72));
+    face(ctx,[fA,P(x+w,y+d,z),P(x+w,y+d,z+h),fT],gf,EDGE);
+    const sA=P(x+w,y,z),sT=P(x+w,y,z+h);
+    const gs=ctx.createLinearGradient(sA[0],sA[1],sT[0],sT[1]);
+    gs.addColorStop(0,shade(c,0.72));gs.addColorStop(1,shade(c,0.97));
+    face(ctx,[sA,P(x+w,y+d,z),P(x+w,y+d,z+h),sT],gs,EDGE);
   });
 }
 function cyl3(x,y,z,r,h,c){
@@ -1121,7 +1131,10 @@ function cyl3(x,y,z,r,h,c){
     ctx.ellipse(t[0],t[1],rx,ry,0,Math.PI,0,false);
     ctx.lineTo(b[0]+rx,b[1]);
     ctx.ellipse(b[0],b[1],rx,ry,0,0,Math.PI,false);
-    ctx.closePath();ctx.fillStyle=shade(c,0.74);ctx.fill();
+    ctx.closePath();
+    const gc=ctx.createLinearGradient(b[0],b[1],t[0],t[1]);
+    gc.addColorStop(0,shade(c,0.56));gc.addColorStop(1,shade(c,0.88));
+    ctx.fillStyle=gc;ctx.fill();
     ctx.strokeStyle=EDGE;ctx.lineWidth=0.7;ctx.stroke();
     ctx.beginPath();ctx.ellipse(t[0],t[1],rx,ry,0,0,7);
     ctx.fillStyle=shade(c,1.18);ctx.fill();ctx.strokeStyle=EDGE;ctx.stroke();
@@ -1311,7 +1324,11 @@ function rotBox(cx,cy,ang,w,d,h,z0,c,kb){
         s:i%2?0.84:0.64});
     }
     fcs.sort((f1,f2)=>f1.k-f2.k);
-    for(const f of fcs)face(c2,f.q,shade(c,f.s),EDGE);
+    for(const f of fcs){
+      const g=c2.createLinearGradient(f.q[0][0],f.q[0][1],f.q[3][0],f.q[3][1]);
+      g.addColorStop(0,shade(c,f.s*0.78));g.addColorStop(1,shade(c,f.s*1.06));
+      face(c2,f.q,g,EDGE);
+    }
     face(c2,pts.map(p2=>P(p2[0],p2[1],z0+h)),shade(c,1.12),EDGE);
   });
 }
@@ -1611,6 +1628,13 @@ function chrome(ctx,t,val){
   /* 주제 집중: 장식 소품(드럼·파레트·배회 작업자·랙) 제거 — 라인 설비만 무대에.
      작업자는 조작 페데스탈 옆 1명(오퍼레이터)만 유지. */
   worker(LP("op")[0]-0.55,LP("op")[1]+0.55);
+  /* 구역 정리 레이아웃: 제어반 구역(우하)·자재 구역(좌상) 바닥 패드 + 경계 */
+  face(ctx,[P(10.0,5.05,0.004),P(15.9,5.05,0.004),P(15.9,6.45,0.004),P(10.0,6.45,0.004)],"rgba(150,180,215,.06)");
+  for(let zx=10.0;zx<15.9;zx+=0.5)
+    seg(ctx,P(zx,5.05,0.006),P(Math.min(zx+0.28,15.9),5.05,0.006),"rgba(217,165,20,.45)",1.6);
+  txt(ctx,P(13.0,6.3,0.01),"제어반 구역","#56646f",10,"center");
+  face(ctx,[P(0.9,5.25,0.004),P(3.5,5.25,0.004),P(3.5,6.6,0.004),P(0.9,6.6,0.004)],"rgba(215,190,140,.05)");
+  txt(ctx,P(2.2,6.45,0.01),"자재 구역","#56646f",10,"center");
   /* 자재 스테이징(STG-01 — 이동 가능 그룹, 최소화) */
   sh(sgx-0.05,sgy-0.05,1.3,1.1,0.22);
   box3(sgx,sgy,0,1.2,1.0,0.12,"#5a4a30");
