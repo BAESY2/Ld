@@ -1169,17 +1169,33 @@ function fence(x0,y0,x1,y1,gap){
   if(gap==="front"){rail([x0,y1],[x0+(x1-x0)*0.3,y1]);rail([x1-(x1-x0)*0.3,y1],[x1,y1]);}
   else rail([x0,y1],[x1,y1]);
 }
-/* 작업자(키 1.75m — 스케일 기준) */
+/* 작업자(키 1.75m — 스케일 기준): 다리·팔 스윙 + 하이비즈 조끼 + 안전모(챙) */
 function worker(x,y,t){
   const sw=t!==undefined?Math.sin(t*7)*0.09:0;
   sh(x-0.25,y-0.2,0.5,0.4,0.2);
-  box3(x-0.13+sw,y-0.15,0,0.11,0.13,0.78,"#2b3440");
-  box3(x+0.02-sw,y-0.15,0,0.11,0.13,0.78,"#2b3440");
-  box3(x-0.18,y-0.17,0.78,0.36,0.24,0.62,"#33567f");
+  /* 다리(작업복 네이비) */
+  box3(x-0.13+sw,y-0.14,0,0.11,0.12,0.74,"#2b3440");
+  box3(x+0.02-sw,y-0.14,0,0.11,0.12,0.74,"#2b3440");
+  /* 안전화 */
+  box3(x-0.15+sw,y-0.18,0,0.14,0.2,0.07,"#15191f");
+  box3(x+0.0-sw,y-0.18,0,0.14,0.2,0.07,"#15191f");
+  /* 몸통: 작업복 + 하이비즈 조끼(반사띠) */
+  box3(x-0.17,y-0.16,0.74,0.34,0.22,0.56,"#33567f");
+  box3(x-0.18,y-0.17,0.86,0.36,0.24,0.34,"#d8821c");
+  box3(x-0.185,y-0.175,1.0,0.37,0.25,0.05,"#e8e8d0");
+  /* 팔(스윙 반대위상) — 소매 + 장갑 */
+  box3(x-0.255,y-0.1-sw*0.8,0.86,0.09,0.11,0.42,"#33567f");
+  box3(x+0.165,y-0.1+sw*0.8,0.86,0.09,0.11,0.42,"#33567f");
+  box3(x-0.25,y-0.09-sw*0.8,0.78,0.08,0.1,0.09,"#d4a982");
+  box3(x+0.17,y-0.09+sw*0.8,0.78,0.08,0.1,0.09,"#d4a982");
   dq(x+y+1.5,ctx=>{
-    const h=P(x,y,1.56);
-    ctx.beginPath();ctx.arc(h[0],h[1],0.095*1.1*view.s,0,7);ctx.fillStyle="#d4a982";ctx.fill();
-    ctx.beginPath();ctx.arc(h[0],h[1]-0.04*view.s,0.1*1.1*view.s,Math.PI,0);ctx.fillStyle="#e8c413";ctx.fill();
+    const h=P(x,y,1.55);
+    /* 목·얼굴 */
+    ctx.beginPath();ctx.arc(h[0],h[1],0.088*1.1*view.s,0,7);ctx.fillStyle="#d4a982";ctx.fill();
+    /* 안전모: 돔 + 챙 */
+    ctx.beginPath();ctx.arc(h[0],h[1]-0.045*view.s,0.1*1.1*view.s,Math.PI*0.95,Math.PI*0.05,false);
+    ctx.fillStyle="#e8c413";ctx.fill();
+    ctx.fillRect(h[0]-0.12*view.s,h[1]-0.052*view.s,0.21*view.s,0.022*view.s);
   });
 }
 /* 자재 랙(배경 스케일감) */
@@ -1418,17 +1434,7 @@ function chrome(ctx,t,val){
     lamp(c2,P(avx+0.31,avy+0.46,0.82),2.2,"#d9a514",(t*1.3%1)<0.15);
   });
   tag3(avx+0.31,avy+0.23,1.75,"AVR-01","자동전압조정기 380V","#f0c26b");
-  /* AMR-01 */
-  (function(){
-    const w2=shuttleWave(t+4,30,0.08);
-    const ax=8.2+3.2*w2, ay=4.95;
-    sh(ax-0.35,ay-0.3,0.7,0.6,0.2);
-    cyl3(ax,ay,0,0.32,0.26,"#3a4f66");
-    box3(ax-0.26,ay-0.22,0.26,0.52,0.44,0.07,"#2b3743");
-    box3(ax-0.18,ay-0.16,0.33,0.36,0.32,0.22,"#7a5c2e");
-    dq(ax+ay+0.9,c2=>lamp(c2,P(ax+0.22,ay-0.18,0.3),2.2,"#58e0ff",(t*4%1)<0.5));
-    tag3(ax,ay,0.85,"AMR-01","자율이동로봇","#9fd0ff",2);
-  })();
+  /* AMR/AGV는 전용 물류 섹터에만 — 타 라인에 무관 차량 배치 금지(산업별 정합) */
   const tri26=2*Math.abs((t/26)%1-0.5);
   worker(3.6+5.2*(1-tri26),5.78,t);
   worker(13.5,5.7);
@@ -1528,7 +1534,7 @@ conveyor:{
    const clearIn=!st.parts.some(p=>!p.fall&&p.x<3.3);
    if(st.spd>0.3&&st.spawn<=0&&st.parts.length<7&&clearIn){st.parts.push({x:2.45,z:0.75,fall:0});st.spawn=1.7/(cur.speedF||1);}
    for(const p of st.parts){
-     if(!p.fall){p.x+=st.spd*dt;if(p.x>11.65)p.fall=1;}
+     if(!p.fall){p.x+=st.spd*dt;if(p.x>11.97)p.fall=1;}
      else{p.z-=dt*1.8;p.x+=dt*0.25;if(p.z<=0.18){p.fall=2;st.count++;}}
    }
    st.parts=st.parts.filter(p=>p.fall<2);
@@ -1618,7 +1624,11 @@ carwash:{
      x:x+(Math.random()-0.5)*1.6,y:2.1+Math.random()*1.3,
      z:kind==="drop"?2.3:kind==="wind"?0.8+Math.random()*1.0:0.5+Math.random()*1.4,
      k:kind,life:1});};
-   if(o.SOAP)sp(5,"foam"); if(o.RINSE)sp(8,"drop"); if(o.DRY)sp(11,"wind");
+   /* 차체 정합: 차가 아치 아래(±1.4m) 있을 때만 차체 위로 분사 — 허공 분사 금지 */
+   const near=ax=>Math.abs(st.carX-ax)<1.4;
+   if(o.SOAP&&near(5))sp(st.carX,"foam");
+   if(o.RINSE&&near(8))sp(st.carX,"drop");
+   if(o.DRY&&near(11))sp(st.carX,"wind");
    st.parts.forEach(p=>{
      p.life-=dt*(p.k==="drop"?2.6:1.7);
      if(p.k==="foam")p.z+=dt*0.4;
@@ -1756,6 +1766,9 @@ weld:{
      st.out+=dt*1.1;
      if(st.out>12.9){st.out=undefined;st.count++;st.partX=1.6;}
    }
+   /* 벨트 위상: 공물이 실제 이동 중일 때만 진행(부품·벨트 1:1 동기) */
+   st.feeding=(!st.partOn&&!cycle&&st.partX<7.54)||st.out!==undefined;
+   if(st.feeding)st.bph=((st.bph||0)+dt*1.1)%0.55;
    if(o.WELD){st.weaveT+=dt;
      const rc=cur.devCfg["RB-401"]||{};
      const ro=rc.off||[0,0,0];
@@ -1767,13 +1780,13 @@ weld:{
  },
  draw(ctx,st,val,t){
    fence(5.0,1.2,9.7,4.5,"front");
-   beltUnit(1.2,2.05,3.6,(t*0.5)%0.55,true,0.75);
-   beltUnit(9.9,2.05,3.4,(t*0.5)%0.55,true,0.75);
+   beltUnit(1.2,2.05,3.6,st.bph||0,st.feeding,0.75);
+   beltUnit(9.9,2.05,3.4,st.bph||0,st.feeding,0.75);
    sh(7.2,1.9,0.8,0.8,0.26);
    box3(7.25,1.95,0,0.66,0.66,0.78,"#3a4654");
    tag3(7.58,2.0,1.0,"WT-401","용접 지그","#8b98a8",2);
-   beltUnit(5.35,2.05,1.7,(t*0.5)%0.55,true,0.75);
-   beltUnit(8.0,2.05,1.55,(t*0.5)%0.55,true,0.75);
+   beltUnit(5.35,2.05,1.7,st.bph||0,st.feeding,0.75);
+   beltUnit(8.0,2.05,1.55,st.bph||0,st.feeding,0.75);
    const px=st.out!==undefined?st.out:st.partX;
    if(st.out!==undefined||st.partX>1.55){
      const pz=(px>7.2&&px<8.0)?0.79:0.76;
@@ -2250,7 +2263,14 @@ agv:{
  wiresOut:[["HOMING",[[14.72,4.95],[3.0,4.4],[2.6,3.6]]],
            ["MOVING",[[14.72,5.0],[8.0,4.5],[8.0,3.6]]],
            ["IN_POS_LAMP",[[14.72,5.05],[13.5,4.4],[13.5,3.6]]]],
- init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[]}),
+ init:()=>({x:8,carry:false,hx0:8,done:0,stack:0,unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[],nodesOv:{},
+   /* 플릿: 차종별 AMR — ACS 프로그램(상위 코딩)으로 구동 */
+   fleet:[
+    {id:"AMR-902",type:"amr",name:"잠입·롤러탑재 AMR 600kg",lane:4.45,x:5.2,batt:74,carry:false,lift:0,wait:0,pc:0,done:0,
+     prog:[{op:"MOVE",arg:"ST-A"},{op:"LOAD"},{op:"MOVE",arg:"ST-C"},{op:"UNLOAD"},{op:"WAIT",arg:1.5}]},
+    {id:"FLT-903",type:"fork",name:"무인 지게차 AMR 1.5t",lane:1.55,x:11.2,batt:91,carry:false,lift:0,wait:0,pc:0,done:0,
+     prog:[{op:"MOVE",arg:"RACK"},{op:"LIFT"},{op:"MOVE",arg:"OUT"},{op:"DROP"},{op:"WAIT",arg:2}]}
+   ]}),
  sense(st,plc){
    plc.set("ESTOP_OK",!cur.faults.estop);
  },
@@ -2280,6 +2300,33 @@ agv:{
    st.batt=Math.max(0,Math.min(100,st.batt+(atDock?1.2:driving?-0.45:-0.02)*dt));
    if(st.batt<20&&!st.lowWarn){st.lowWarn=true;logEv("warn","ACS: AGV-901 배터리 "+st.batt.toFixed(0)+"% — 미션 차단·충전 복귀");}
    if(st.batt>40)st.lowWarn=false;
+   /* ── 플릿 실행기: ACS가 다운로드한 프로그램(MOVE/LOAD/UNLOAD/WAIT/DOCK)을 차량별 수행 ── */
+   for(const v of st.fleet){
+     if(cur.faults.estop||v.batt<=3)continue;
+     const cmd=v.prog.length?v.prog[v.pc%v.prog.length]:null;
+     if(!cmd)continue;
+     const spd=v.type==="fork"?0.75:1.05;
+     const nx=n=>st.nodesOv[n]!==undefined?st.nodesOv[n]:(NODEXY[n]||[v.x])[0];
+     let mv=false;
+     if(cmd.op==="MOVE"||cmd.op==="DOCK"){
+       const tx2=cmd.op==="DOCK"?nx(v.type==="fork"?"OUT":"CHG-2"):nx(cmd.arg);
+       const d2=tx2-v.x;
+       if(Math.abs(d2)>0.04){v.x+=Math.sign(d2)*Math.min(Math.abs(d2),spd*dt);mv=true;}
+       else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
+       else v.pc++;
+     }else if(cmd.op==="LOAD"){
+       v.lift=Math.min(1,v.lift+dt*1.3);
+       if(v.lift>=1){v.carry=true;v.pc++;}
+     }else if(cmd.op==="UNLOAD"){
+       v.lift=Math.max(0,v.lift-dt*1.3);
+       if(v.lift<=0){if(v.carry){v.carry=false;v.done++;}v.pc++;}
+     }else if(cmd.op==="WAIT"){
+       v.wait+=dt;if(v.wait>=(cmd.arg||1)){v.wait=0;v.pc++;}
+     }else v.pc++;
+     v.batt=Math.max(0,v.batt+(mv?-0.3:-0.02)*dt);
+     if(v.batt<18&&!v.lowW){v.lowW=true;logEv("warn","ACS: "+v.id+" 배터리 "+v.batt.toFixed(0)+"% — 충전 권고");}
+     if(v.batt>40)v.lowW=false;
+   }
  },
  draw(ctx,st,val,t){
    /* 전용 섹터 바닥: 메인 유도선 + 스테이션 마커 */
@@ -2333,6 +2380,48 @@ agv:{
      box3(x-0.5,2.8,lz+0.12,1.0,0.7,0.45,"#7a5c2e");
    }
    tag3(x,3.0,1.1,"AGV-901","중량형 AGV 2t — 미션 수행","#58e0ff");
+   /* ── 차종별 전용 레인 + 노드(티칭 반영) ── */
+   for(let lx=3.6;lx<13.6;lx+=0.55)seg(ctx,P(lx,4.45,0.014),P(lx+0.26,4.45,0.014),"rgba(185,163,255,.35)",2);
+   for(let lx=2.6;lx<13.2;lx+=0.55)seg(ctx,P(lx,1.55,0.014),P(lx+0.26,1.55,0.014),"rgba(240,194,107,.30)",2);
+   const node=(n,c)=>{const ny2=NODEXY[n][1],X2=st.nodesOv[n]!==undefined?st.nodesOv[n]:NODEXY[n][0];
+     seg(ctx,P(X2-0.28,ny2-0.28,0.015),P(X2+0.28,ny2+0.28,0.015),c,1.6);
+     seg(ctx,P(X2-0.28,ny2+0.28,0.015),P(X2+0.28,ny2-0.28,0.015),c,1.6);
+     tag3(X2,ny2+0.12,0.5,n,"",c,2);};
+   node("ST-A","#b9a3ff");node("ST-C","#b9a3ff");node("CHG-2","#3fb950");
+   node("RACK","#f0c26b");node("OUT","#f0c26b");
+   /* ── 플릿 차량(차종별 실물 형태) ── */
+   for(const v of st.fleet){
+     const vx=v.x,vy=v.lane;
+     if(v.type==="amr"){
+       /* 잠입 리프트·롤러탑재형: 저상 본체 + 라이다 돔 + 롤러데크 */
+       sh(vx-0.5,vy-0.38,1.05,0.8,0.22);
+       box3(vx-0.48,vy-0.35,0,0.96,0.7,0.24,"#3a4f66");
+       box3(vx-0.5,vy-0.37,0.1,0.06,0.74,0.08,"#58e0ff");
+       for(let i=0;i<4;i++)box3(vx-0.4+i*0.22,vy-0.3,0.24,0.16,0.6,0.035,"#222a34");
+       cyl3(vx+0.34,vy-0.22,0.24,0.055,0.09,"#1a212b");
+       dq(vx+vy+0.8,c2=>lamp(c2,P(vx+0.34,vy-0.22,0.36),2.2,"#b9a3ff",(t*2.4%1)<0.6));
+       if(v.carry||v.lift>0.05)box3(vx-0.38,vy-0.26,0.275+v.lift*0.06,0.76,0.55,0.4,"#46627a");
+       tag3(vx,vy,0.95,v.id,v.name,"#b9a3ff");
+     }else{
+       /* 무인 지게차형: 본체 + 마스트 + 포크 승강 + 파레트 */
+       sh(vx-0.6,vy-0.42,1.45,0.95,0.24);
+       box3(vx-0.45,vy-0.4,0,1.05,0.8,0.5,"#c98a16");
+       box3(vx+0.3,vy-0.28,0.5,0.34,0.56,0.42,"#8a5e0e");
+       box3(vx-0.62,vy-0.34,0,0.08,0.08,1.55,"#3a4654");
+       box3(vx-0.62,vy+0.24,0,0.08,0.08,1.55,"#3a4654");
+       const fz=0.1+v.lift*0.85;
+       box3(vx-1.12,vy-0.3,fz,0.52,0.09,0.05,"#9aa7b5");
+       box3(vx-1.12,vy+0.2,fz,0.52,0.09,0.05,"#9aa7b5");
+       if(v.carry||v.lift>0.4){
+         box3(vx-1.16,vy-0.36,fz+0.05,0.62,0.86,0.1,"#5a4a30");
+         box3(vx-1.08,vy-0.28,fz+0.15,0.5,0.7,0.42,"#7a5c2e");
+       }
+       cyl3(vx+0.42,vy-0.34,0.92,0.05,0.07,"#1a212b");
+       dq(vx+vy+1.2,c2=>lamp(c2,P(vx+0.42,vy-0.34,1.02),2.2,"#f0c26b",(t*2.7%1)<0.55));
+       tag3(vx,vy,1.7,v.id,v.name,"#f0c26b");
+     }
+   }
+   worker(5.0,5.6,t);worker(12.6,5.5);
    if(cur.faults.estop)txt(ctx,P(8,2.2,1.6),"⛔ E-STOP — 안전회로 개방(전 구동 차단)","#f85149",13,"center",true);
    const ph2=val("HOMING")?"원점(도크) 복귀 중":val("MOVING")?"적재 운송 중 ▶":val("IN_POS_LAMP")?"정위치 도킹·하역":"미션 대기";
    txt(ctx,P(8,1.7,1.2),ph2,"#9fb3c8",12);
@@ -2399,9 +2488,12 @@ SCENES.vision.quality=st=>(st.ok+st.ng)>0?(st.ok-(st.leak||0))/(st.ok+st.ng):1;
 SCENES.pumps.prod=st=>Math.floor(st.supplied); SCENES.pumps.wip=st=>Math.round(st.level*100);
 SCENES.pumps.avail=()=>1;
 SCENES.conveyor.speedCtl=SCENES.counter.speedCtl=SCENES.cascade.speedCtl=true;
-SCENES.counter.overhead="oht"; SCENES.vision.overhead="oht"; SCENES.weld.overhead="oht";
+/* 공장별 상위 인프라 정합 — OHT(웨이퍼 천장반송)는 반도체 라인 전용이라 내장 라인에는 미사용.
+   용접·자재취급(중량물)=호이스트 크레인, 포장·검사·프로세스=유틸리티 배관 */
+SCENES.counter.overhead="piping"; SCENES.vision.overhead="piping"; SCENES.weld.overhead="crane";
+SCENES.conveyor.overhead="piping";
 SCENES.batch.overhead="piping"; SCENES.pumps.overhead="piping"; SCENES.carwash.overhead="piping";
-/* conveyor·shuttle·cascade = 기본 crane */
+/* shuttle·cascade(중량 자재 반송) = 기본 crane */
 SCENES.generic.prod=st=>st.cycles; SCENES.generic.avail=()=>1;
 SCENES.fnb.prod=st=>st.count; SCENES.fnb.wip=st=>st.bottles.length;
 SCENES.fnb.speed=()=>0.8*(cur.speedF||1); SCENES.fnb.avail=()=>1;
@@ -2684,14 +2776,24 @@ function updateDOM(r,dt,t){
      `<tr><td><b>AGV-901</b></td><td style="color:${busy?"#3fb950":"#8b98a8"}">${stt2}</td>`+
      `<td class="mut">${st2.x.toFixed(1)} m</td>`+
      `<td><div class="tbar" style="width:70px;display:inline-block;vertical-align:middle"><i style="width:${st2.batt.toFixed(0)}%;background:${bc}"></i></div> <span style="color:${bc}">${st2.batt.toFixed(0)}%</span></td>`+
-     `<td class="mut">${st2.carry?"파레트 1":"공차"}</td></tr></table>`+
+     `<td class="mut">${st2.carry?"파레트 1":"공차"}</td></tr>`+
+     (st2.fleet||[]).map(v=>{
+       const cm=v.prog[v.pc%v.prog.length]||{};
+       const vst=cur.faults.estop?"E-STOP":cm.op==="MOVE"?"주행":cm.op==="LOAD"?"적재":cm.op==="UNLOAD"?"하역":cm.op==="DOCK"?"충전":"대기";
+       const bc2=v.batt<20?"#f85149":v.batt<40?"#f0c26b":"#3fb950";
+       return `<tr><td><b>${v.id}</b></td><td style="color:${vst==="대기"?"#8b98a8":"#3fb950"}">${vst}</td>`+
+        `<td class="mut">${v.x.toFixed(1)} m</td>`+
+        `<td><div class="tbar" style="width:70px;display:inline-block;vertical-align:middle"><i style="width:${v.batt.toFixed(0)}%;background:${bc2}"></i></div> <span style="color:${bc2}">${v.batt.toFixed(0)}%</span></td>`+
+        `<td class="mut">${v.carry?"적재":"공차"}</td></tr>`;
+     }).join("")+`</table>`+
      `<div class="vrf"><h4>미션 큐</h4></div>`+
      (st2.missions.length?`<table class="io">`+st2.missions.map((ms,i)=>
        `<tr><td><b>${ms.id}</b></td><td class="mut">${ms.src} → ${ms.dst}</td><td style="color:${i===0&&busy?"#3fb950":"#8b98a8"}">${i===0&&busy?"실행 중":"대기"}</td></tr>`).join("")+`</table>`
       :'<div class="hint" style="font-size:12px;color:var(--mut)">대기 미션 없음</div>')+
      `<div style="display:flex;gap:8px;margin-top:10px">`+
      `<button class="xbtn" id="acsgo" ${st2.batt<20?"disabled":""}>미션 발행(ST-H → ST-B)</button>`+
-     `<button class="xbtn" id="acsstop">전 미션 취소</button></div>`+
+     `<button class="xbtn" id="acsstop">전 미션 취소</button>`+
+     `<button class="xbtn" id="acsfleet" style="background:#1c3a4f">⌨ 플릿 매니저(상위 코딩)</button></div>`+
      (st2.batt<20?'<div class="alm warn" style="margin-top:8px"><i></i><span>저전압 — 충전 완료(40%)까지 미션 차단</span></div>':"")+
      `<div class="vrf"><h4>미션 이력</h4></div>`+
      (st2.mlog.length?st2.mlog.map(l2=>`<div class="alm"><i></i><span class="t">${l2.t}</span><span>${l2.id} ${l2.msg}</span></div>`).join(""):'<div class="hint" style="font-size:12px;color:var(--mut)">이력 없음</div>');
@@ -2703,6 +2805,8 @@ function updateDOM(r,dt,t){
     };
     const g2=document.getElementById("acsstop");
     if(g2)g2.onclick=()=>{cur.sst.missions=[];logEv("warn","ACS 전 미션 취소");};
+    const g3=document.getElementById("acsfleet");
+    if(g3)g3.onclick=()=>openFleetTool();
   }
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
@@ -2847,6 +2951,15 @@ document.getElementById("setbtn").onclick=()=>{
   sb.className="xbtn";sb.id="glbtn";sb.textContent="렌더러: 2D";sb.title="WebGL은 베타 — 자유 회전/그림자";
   document.querySelector(".scol").insertBefore(sb,document.getElementById("viewbtn"));
   sb.onclick=()=>setRenderer(!GL3D.on);
+  /* 래더 탭 → 엔지니어링 SW 진입 */
+  const lv=document.getElementById("w-ladder");
+  if(lv){
+    const b=document.createElement("button");
+    b.className="xbtn";b.textContent="🖥 PLC 프로그래밍 툴(온라인 모니터)";
+    b.style.margin="0 0 8px";
+    b.onclick=()=>openPlcTool();
+    lv.insertBefore(b,lv.firstChild);
+  }
 })();
 document.getElementById("viewbtn").onclick=()=>{
   VIEW_MODE=VIEW_MODE==="iso"?"top":"iso";
@@ -2918,7 +3031,11 @@ function renderDev(){
      `<div class="dvr"><span>WD 작동거리</span><b><input id="dv_wd" type="number" value="${c.wd}" style="width:64px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"/> mm</b></div>`+
      `<div class="dvr"><span>조도</span><b><input id="dv_lux" type="range" min="50" max="1200" value="${c.lux}" style="width:90px"/> <span id="dv_luxv">${c.lux}</span> lx</b></div>`+
      `<div class="dvr"><span>FOV / 분해능</span><b id="dv_calc">${op2.fovW.toFixed(0)}×${op2.fovH.toFixed(0)}mm · ${op2.res.toFixed(0)}µm/px</b></div>`+
-     `<div class="dvr"><span>검출 신뢰도</span><b id="dv_conf" style="color:${op2.conf>0.85?"#7ee787":"#f0c26b"}">${(op2.conf*100).toFixed(0)}%</b></div>`;
+     `<div class="dvr"><span>검출 신뢰도</span><b id="dv_conf" style="color:${op2.conf>0.85?"#7ee787":"#f0c26b"}">${(op2.conf*100).toFixed(0)}%</b></div>`+
+     `<button class="xbtn" style="margin-top:9px;width:100%" onclick="openVisionTool()">🔬 비전 셋업 툴 열기(촬상·판정)</button>`;
+  }
+  if(/^PLC/.test(devOpen)){
+    h+=`<button class="xbtn" style="margin-top:9px;width:100%" onclick="openPlcTool()">🖥 PLC 프로그래밍 툴 접속(온라인)</button>`;
   }
   if(devOpen==="RB-401"){
     h+=`<button class="xbtn" style="margin-top:9px;width:100%" onclick="openPendant()">🎛 티칭 펜던트 열기</button>`;
@@ -2952,39 +3069,351 @@ function renderDev(){
     if(v>0){(cur.devCfg["M-101"]=cur.devCfg["M-101"]||{}).acc=v;logEv("op","M-101 가감속 → "+v+"m/s²");}};
 }
 
-/* ── 로봇 티칭 펜던트 ── */
+/* ── 로봇 티칭 펜던트(실물형 핸드헬드: E-STOP·모드 키·데드맨·LCD·JOG 키) ── */
 function openPendant(){
   const rc=cur.devCfg["RB-401"]||(cur.devCfg["RB-401"]={off:[0,0,0],spd:100});
   if(!rc.off)rc.off=[0,0,0];
+  const pd=cur.devCfg._pend||(cur.devCfg._pend={mode:"T1",dead:false,estop:false});
   const el=document.getElementById("pendant");
   el.style.display="block";
-  const fmt=()=>`P3 WELD = (${(7.55+rc.off[0]).toFixed(2)}, ${(2.30+rc.off[1]).toFixed(2)}, ${(1.04+rc.off[2]).toFixed(2)}) m`;
+  const fmt=()=>`P3 WELD  (${(7.55+rc.off[0]).toFixed(2)}, ${(2.30+rc.off[1]).toFixed(2)}, ${(1.04+rc.off[2]).toFixed(2)})`;
+  const KEY="background:#2a3340;border:1px solid #3c4956;border-radius:7px;color:#cdd6e3;font:700 11px ui-monospace,monospace;padding:9px 0;cursor:pointer;box-shadow:0 2px 0 #161d26";
   el.innerHTML=
-   `<div class="alhd"><h4>🎛 RB-401 티칭 펜던트</h4><button class="xbtn" onclick="document.getElementById('pendant').style.display='none'">닫기 ✕</button></div>`+
-   `<div class="fitbox" style="margin-top:10px">포인트 목록<br/>P1 HOME = (6.85, 2.95, 2.00)<br/>P2 APPROACH = (7.20, 2.60, 1.50)<br/><b id="pd_p3" style="color:#7ee787">${fmt()}</b></div>`+
-   `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0">`+
-   [["X−",0,-1],["Y−",1,-1],["Z−",2,-1],["X+",0,1],["Y+",1,1],["Z+",2,1]].map(([lb,ax,dr])=>
-     `<button class="fbtn abtn" data-jog="${ax},${dr}">${lb} JOG</button>`).join("")+`</div>`+
-   `<div class="sld" style="margin:6px 0"><small>속도 오버라이드 <b id="pd_spdv">${rc.spd||100}%</b></small>`+
-   `<input id="pd_spd" type="range" min="10" max="100" value="${rc.spd||100}" style="width:100%"/></div>`+
-   `<div style="display:flex;gap:8px;margin-top:10px">`+
-   `<button class="xbtn" id="pd_save" style="flex:1">P3 저장(티칭 확정)</button>`+
-   `<button class="xbtn" id="pd_reset">원점 복귀</button></div>`+
-   `<div class="hint" style="font-size:11.5px;color:var(--mut);margin-top:10px">JOG ±0.05m — 토치 타깃이 3D에서 즉시 이동합니다. 지그 범위(±0.4m) 밖 티칭 시 용접 품질 저하.</div>`;
+   `<div style="background:linear-gradient(165deg,#39424d,#222932 60%,#1b222b);border:1px solid #46525f;border-radius:18px;padding:12px 14px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 10px 30px rgba(0,0,0,.45)">`+
+   `<div style="display:flex;align-items:center;gap:8px">`+
+   `<div><div style="font:700 12px ui-monospace,monospace;color:#dce4f0">TP-401 TEACH PENDANT</div>`+
+   `<div style="font:10px ui-monospace,monospace;color:#7f8a9a">RB-401 · 6축 용접로봇</div></div>`+
+   `<span style="flex:1"></span>`+
+   `<button id="pd_estop" title="비상정지(누름=차단 / 다시 누름=비틀어 해제)" style="width:46px;height:46px;border-radius:50%;border:4px solid #f8d847;background:radial-gradient(circle at 35% 30%,#ff6b60,#a31515 70%);box-shadow:0 4px 10px rgba(0,0,0,.5);cursor:pointer${pd.estop?";transform:scale(.9)":""}"></button>`+
+   `<button class="xbtn" onclick="document.getElementById('pendant').style.display='none'">✕</button></div>`+
+   `<div style="display:flex;gap:6px;align-items:center;margin:10px 0 8px">`+
+   `<span style="font:10px ui-monospace,monospace;color:#7f8a9a">MODE 키</span>`+
+   ["T1","T2","AUTO"].map(m2=>`<button data-md="${m2}" style="${KEY};padding:5px 10px${pd.mode===m2?";background:#1f6feb;border-color:#3b82f6;color:#fff":""}">${m2}</button>`).join("")+
+   `<span style="flex:1"></span>`+
+   `<button id="pd_dead" style="${KEY};padding:5px 12px${pd.dead?";background:#1f9d4d;border-color:#3fb950;color:#fff":""}">데드맨 ${pd.dead?"●":"○"}</button></div>`+
+   `<div style="background:#0a1410;border:2px solid #11251c;border-radius:6px;padding:9px 11px;font:11px ui-monospace,monospace;color:#79e0a0;line-height:1.65;text-shadow:0 0 6px rgba(110,230,150,.35)">`+
+   `MODE ${pd.mode}  SPD ${rc.spd||100}%  ${pd.estop?"<b style='color:#ff7b72'>E-STOP</b>":pd.dead?"SERVO ON":"SERVO OFF"}<br/>`+
+   `P1 HOME     (6.85, 2.95, 2.00)<br/>P2 APPROACH (7.20, 2.60, 1.50)<br/><b id="pd_p3" style="color:#aef7c8">${fmt()}</b></div>`+
+   `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:10px 0 0">`+
+   [["X−",0,-1],["X+",0,1],["Y−",1,-1],["Y+",1,1],["Z−",2,-1],["Z+",2,1]].map(([lb,ax,dr])=>
+     `<button data-jog="${ax},${dr}" style="${KEY}">${lb}</button>`).join("")+`</div>`+
+   `<div style="display:flex;gap:6px;margin-top:8px;align-items:center">`+
+   `<button id="pd_sm" style="${KEY};width:38px">−</button>`+
+   `<div style="flex:1;text-align:center;font:700 12px ui-monospace,monospace;color:#cdd6e3">V <span id="pd_spdv">${rc.spd||100}</span>%</div>`+
+   `<button id="pd_sp" style="${KEY};width:38px">＋</button></div>`+
+   `<div style="display:flex;gap:6px;margin-top:8px">`+
+   `<button id="pd_save" style="${KEY};flex:1;background:#23493a;border-color:#2f6b4f">P3 저장</button>`+
+   `<button id="pd_reset" style="${KEY};flex:1">원점 복귀</button></div>`+
+   `<div style="font:10.5px ui-monospace,monospace;color:#6f7a8a;margin-top:8px">JOG는 T1/T2 모드 + 데드맨 파지에서만 동작(±0.05m) — 실기 안전 절차와 동일. AUTO는 사이클 운전 전용.</div></div>`;
+  const refresh=()=>openPendant();
+  el.querySelectorAll("[data-md]").forEach(b=>{b.onclick=()=>{pd.mode=b.dataset.md;
+    logEv("op","TP-401 모드 키 → "+pd.mode);refresh();};});
+  document.getElementById("pd_dead").onclick=()=>{pd.dead=!pd.dead;
+    logEv("op","TP-401 데드맨 "+(pd.dead?"파지(서보 ON)":"해제(서보 OFF)"));refresh();};
+  document.getElementById("pd_estop").onclick=()=>{
+    pd.estop=!pd.estop;
+    if(pd.estop){cur.plc.set("WELD_STOP",true);
+      setTimeout(()=>{if(cur)cur.plc.set("WELD_STOP",false);},450);
+      logEv("warn","TP-401 E-STOP 누름 — 사이클 차단");}
+    else logEv("op","TP-401 E-STOP 해제(비틀어 복귀)");
+    refresh();};
   el.querySelectorAll("[data-jog]").forEach(b=>{
-    b.onclick=()=>{const[ax,dr]=b.dataset.jog.split(",").map(Number);
+    b.onclick=()=>{
+      if(pd.estop){logEv("warn","TP-401: E-STOP 중 — JOG 불가");return;}
+      if(pd.mode==="AUTO"){logEv("warn","TP-401: AUTO 모드 — JOG 금지(T1/T2 전환 필요)");return;}
+      if(!pd.dead){logEv("warn","TP-401: 데드맨 미파지 — 서보 OFF(JOG 무시)");return;}
+      const[ax,dr]=b.dataset.jog.split(",").map(Number);
       rc.off[ax]=Math.max(-0.4,Math.min(0.4,rc.off[ax]+dr*0.05));
       document.getElementById("pd_p3").textContent=fmt();};
   });
-  document.getElementById("pd_spd").oninput=e=>{
-    rc.spd=+e.target.value;
-    document.getElementById("pd_spdv").textContent=rc.spd+"%";};
+  const stp=d2=>{rc.spd=Math.max(10,Math.min(100,(rc.spd||100)+d2));
+    document.getElementById("pd_spdv").textContent=rc.spd;};
+  document.getElementById("pd_sm").onclick=()=>stp(-10);
+  document.getElementById("pd_sp").onclick=()=>stp(10);
   document.getElementById("pd_save").onclick=()=>{
-    logEv("op",`RB-401 티칭 저장 — ${fmt()} · 속도 ${rc.spd||100}%`);};
+    logEv("op",`TP-401 티칭 저장 — ${fmt()} · V${rc.spd||100}%`);};
   document.getElementById("pd_reset").onclick=()=>{
     rc.off=[0,0,0];document.getElementById("pd_p3").textContent=fmt();
     logEv("op","RB-401 원점 복귀(티칭 리셋)");};
 }
+/* ============================================================
+   현장 툴 창 — PLC 프로그래밍 툴 · 비전 셋업 툴 · AMR 플릿 매니저
+   (실제 현장에서 손에 쥐는 도구/소프트웨어와 같은 워크플로)
+   ============================================================ */
+const TOOL={iv:null};
+function toolWin(title,w,html){
+  let wrap=document.getElementById("toolwrap");
+  if(!wrap){
+    wrap=document.createElement("div");wrap.id="toolwrap";
+    wrap.style.cssText="position:fixed;inset:0;z-index:95;background:rgba(4,8,14,.6);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:16px";
+    document.body.appendChild(wrap);
+    wrap.addEventListener("click",e=>{if(e.target===wrap)closeTool();});
+  }
+  wrap.innerHTML=
+   `<div style="width:min(${w}px,96vw);max-height:92vh;display:flex;flex-direction:column;background:#0f151d;border:1px solid #2b3743;border-radius:10px;box-shadow:0 24px 80px rgba(0,0,0,.65);overflow:hidden">`+
+   `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#171f29;border-bottom:1px solid #232e3a">`+
+   `<span style="width:9px;height:9px;border-radius:50%;background:#3fb950;box-shadow:0 0 7px #3fb950"></span>`+
+   `<span style="font:700 12.5px ui-monospace,monospace;color:#dce4f0">${title}</span><span style="flex:1"></span>`+
+   `<button class="xbtn" onclick="closeTool()">닫기 ✕</button></div>`+
+   `<div style="overflow:auto">${html}</div></div>`;
+  wrap.style.display="flex";
+}
+function closeTool(){
+  const w=document.getElementById("toolwrap");if(w)w.style.display="none";
+  if(TOOL.iv){clearInterval(TOOL.iv);TOOL.iv=null;}
+}
+/* ── PLC 프로그래밍 툴(엔지니어링 SW: 프로젝트 트리·온라인 래더·디바이스 모니터) ── */
+function openPlcTool(){
+  const m=PLC_CATALOG.find(x=>x.model===cur.cpu)||PLC_CATALOG[1];
+  const menu=["프로젝트","편집","찾기","온라인","모니터","도구","창"]
+    .map(x=>`<span style="padding:3px 9px;color:#8b98a8;font:11.5px sans-serif">${x}</span>`).join("");
+  toolWin(`PLC 프로그래밍 툴 — ${m.v} ${m.model} · 온라인 모니터`,1240,
+   `<div style="background:#141b24;border-bottom:1px solid #232e3a;padding:2px 6px">${menu}</div>`+
+   `<div id="pt_bar" style="display:flex;gap:14px;padding:6px 12px;background:#10171f;border-bottom:1px solid #232e3a;font:11px ui-monospace,monospace;color:#8b98a8"></div>`+
+   `<div style="display:grid;grid-template-columns:215px 1fr 300px;min-height:420px">`+
+   `<div style="border-right:1px solid #232e3a;padding:10px;font:11.5px ui-monospace,monospace;color:#9aa7b5;line-height:1.9">`+
+   `<div style="color:#dce4f0;font-weight:700">📁 ${((document.getElementById("pjname")||{}).value)||"공장 프로젝트"}</div>`+
+   `<div style="padding-left:10px">🖥 ${m.model}<div style="padding-left:12px;color:#6f7a8a">${m.prof}</div></div>`+
+   `<div style="padding-left:10px">📂 스캔 프로그램<div style="padding-left:14px;color:#7ee787">▸ MAIN (LD) ● RUN</div></div>`+
+   `<div style="padding-left:10px">🏷 변수/설명 <span style="color:#6f7a8a">${cur.d.sim.inputs.length+cur.d.sim.outputs.length}점</span></div>`+
+   `<div style="padding-left:10px">⏱ 기본 파라미터<div style="padding-left:14px;color:#6f7a8a">워치독 200ms<br/>래치 D0100~</div></div>`+
+   `<div style="padding-left:10px">🔌 통신: ${m.comm}</div></div>`+
+   `<div style="padding:8px 10px;overflow:auto;max-height:62vh" id="pt_ladder"></div>`+
+   `<div style="border-left:1px solid #232e3a;padding:8px 10px;overflow:auto;max-height:62vh">`+
+   `<div style="font:700 11px ui-monospace,monospace;color:#8b98a8;margin-bottom:6px">디바이스 모니터</div>`+
+   `<table class="io" id="pt_dev"></table></div></div>`+
+   `<div id="pt_status" style="display:flex;gap:16px;padding:5px 12px;background:#171f29;border-top:1px solid #232e3a;font:10.5px ui-monospace,monospace;color:#7f8a9a"></div>`);
+  let lastK="";
+  const upd=()=>{
+    if(!cur)return;
+    const bar=document.getElementById("pt_bar");if(!bar)return;
+    bar.innerHTML=
+     `<span style="color:#3fb950">● 온라인 — RUN</span><span>스캔 #${cur.scanN}</span>`+
+     `<span>로직 ${cur.us<1?"&lt;1":cur.us.toFixed(1)}µs</span><span>기종 ${cur.cpu}</span>`+
+     `<span>이중코일 0 · 검증 PASS</span>`;
+    const en=cur.lastEn||null;
+    const k=JSON.stringify(en||{})+Object.values(cur.plc.timers).map(t2=>Math.round(t2.acc*10)).join();
+    if(k!==lastK){lastK=k;
+      document.getElementById("pt_ladder").innerHTML=ladderLive(cur.d.ladder,en,cur.plc,cur.m.addr,null);}
+    const rows=[];
+    cur.d.sim.inputs.forEach(s=>rows.push([cur.m.addr[s]||s,s,cur.plc.val(s)?"1":"0",cur.plc.val(s)]));
+    cur.d.sim.outputs.forEach(s=>rows.push([cur.m.addr[s]||s,s,eff(s)?"1":"0",eff(s)]));
+    for(const[s,t2]of Object.entries(cur.plc.timers))rows.push([cur.m.addr[s]||s,s,t2.acc.toFixed(1)+"/"+t2.preset+"s",t2.q]);
+    for(const[s,c2]of Object.entries(cur.plc.counters))rows.push([cur.m.addr[s]||s,s,c2.cnt+"/"+c2.preset,c2.q]);
+    for(const[addr,nm,get]of dRegs(cur))rows.push([addr,nm,String(get()),false]);
+    document.getElementById("pt_dev").innerHTML=rows.map(([a,s,v,on])=>
+     `<tr><td><b>${a}</b></td><td class="mut">${s}</td><td style="text-align:right;color:${on?"#7ee787":"#8b98a8"};font-weight:700">${v}</td></tr>`).join("");
+    document.getElementById("pt_status").innerHTML=
+     `<span>접속: ${m.comm.split("·")[0]}</span><span>스테이션 0</span>`+
+     `<span>프로그램 ${estSteps(cur.d.ladder)}스텝${m.sk?" / "+m.cap:""}</span>`+
+     `<span>${new Date().toLocaleTimeString("ko-KR")}</span>`;
+  };
+  upd();
+  if(TOOL.iv)clearInterval(TOOL.iv);
+  TOOL.iv=setInterval(upd,300);
+  logEv("op","PLC 프로그래밍 툴 접속 — 온라인 모니터(RUN)");
+}
+/* ── 비전 셋업 툴(촬상 뷰포트·광학·카메라·판정 도구·통계) ── */
+function openVisionTool(){
+  const c=visionCfg(cur);
+  if(c.exp===undefined){c.exp=8;c.gain=4;c.thr=45;}
+  toolWin("비전 셋업 툴 — VS-701 · 1/1.8″ 1920×1080 에어리어 스캔",980,
+   `<div style="display:grid;grid-template-columns:1fr 300px;min-height:430px">`+
+   `<div style="padding:12px;display:flex;flex-direction:column;gap:8px">`+
+   `<canvas id="vt_cvs" width="600" height="380" style="width:100%;background:#06090d;border:1px solid #232e3a;border-radius:6px"></canvas>`+
+   `<div id="vt_stat" style="display:flex;gap:14px;font:11px ui-monospace,monospace;color:#8b98a8;flex-wrap:wrap"></div></div>`+
+   `<div style="border-left:1px solid #232e3a;padding:12px;font:11.5px ui-monospace,monospace;color:#9aa7b5;display:flex;flex-direction:column;gap:9px">`+
+   `<div style="color:#dce4f0;font-weight:700">광학</div>`+
+   `<label>렌즈 초점거리 <select id="vt_f" style="background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px">${[8,12,16,25,35].map(v=>`<option ${v===c.f?"selected":""}>${v}</option>`).join("")}</select> mm</label>`+
+   `<label>WD 작동거리 <input id="vt_wd" type="number" value="${c.wd}" style="width:70px;background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"/> mm</label>`+
+   `<label>조도 <input id="vt_lux" type="range" min="50" max="1200" value="${c.lux}" style="width:110px;vertical-align:middle"/> <span id="vt_luxv">${c.lux}</span> lx</label>`+
+   `<div style="color:#dce4f0;font-weight:700;margin-top:4px">카메라</div>`+
+   `<label>노출 <input id="vt_exp" type="range" min="1" max="30" value="${c.exp}" style="width:110px;vertical-align:middle"/> <span id="vt_expv">${c.exp}</span> ms</label>`+
+   `<label>게인 <input id="vt_gain" type="range" min="0" max="18" value="${c.gain}" style="width:110px;vertical-align:middle"/> <span id="vt_gainv">${c.gain}</span> dB</label>`+
+   `<div style="color:#dce4f0;font-weight:700;margin-top:4px">판정 도구</div>`+
+   `<label>블롭 임계 <input id="vt_thr" type="range" min="10" max="90" value="${c.thr}" style="width:110px;vertical-align:middle"/> <span id="vt_thrv">${c.thr}</span></label>`+
+   `<div id="vt_opt" style="color:#6f7a8a;line-height:1.7"></div></div></div>`);
+  const cv=document.getElementById("vt_cvs"),cx2=cv.getContext("2d");
+  const draw=()=>{
+    if(!cur)return;
+    const op=visionOptics(cur);
+    const st=cur.sst, so=st.lastShot;
+    const bright=Math.min(1,(c.lux/600)*(c.exp/8)*(1+c.gain/24));
+    const W2=cv.width,H2=cv.height;
+    cx2.fillStyle=`rgb(${18+40*bright|0},${20+44*bright|0},${24+48*bright|0})`;
+    cx2.fillRect(0,0,W2,H2);
+    for(let i=0;i<260*(1+c.gain/6);i++){
+      const a=Math.random()*0.14*(1+c.gain/18);
+      cx2.fillStyle=`rgba(255,255,255,${a.toFixed(2)})`;
+      cx2.fillRect(Math.random()*W2,Math.random()*H2,1.4,1.4);
+    }
+    cx2.textAlign="left";
+    if(cur.faults&&cur.faults.camOff){
+      cx2.fillStyle="#f85149";cx2.font="700 20px ui-monospace,monospace";cx2.textAlign="center";
+      cx2.fillText("NO SIGNAL — 카메라 오프라인",W2/2,H2/2);cx2.textAlign="left";
+    }else if(so&&!so.off){
+      const pw=W2*0.42,ph2=H2*0.5,px=W2/2-pw/2,py=H2/2-ph2/2;
+      cx2.fillStyle=`rgb(${70+90*bright|0},${78+96*bright|0},${88+100*bright|0})`;
+      cx2.fillRect(px,py,pw,ph2);
+      cx2.strokeStyle="rgba(0,0,0,.5)";cx2.lineWidth=2;cx2.strokeRect(px,py,pw,ph2);
+      cx2.fillStyle="rgba(0,0,0,.18)";cx2.fillRect(px+8,py+8,pw-16,ph2-16);
+      if(so.ng){
+        cx2.fillStyle="#3a1d18";
+        cx2.beginPath();cx2.arc(px+so.dx*pw,py+so.dy*ph2,9,0,7);cx2.fill();
+        cx2.strokeStyle="#f85149";cx2.lineWidth=2;
+        cx2.strokeRect(px+so.dx*pw-16,py+so.dy*ph2-16,32,32);
+        cx2.font="10px ui-monospace,monospace";cx2.fillStyle="#f85149";
+        cx2.fillText("BLOB #1 — 면적 "+(40+(so.dx*60|0))+"px² > 임계 "+c.thr,px+so.dx*pw-16,py+so.dy*ph2-22);
+      }
+      cx2.setLineDash([5,4]);cx2.strokeStyle="#3fb950";cx2.lineWidth=1.4;
+      cx2.strokeRect(px-12,py-12,pw+24,ph2+24);
+      cx2.strokeStyle="#58a6ff";cx2.strokeRect(px+10,py+10,70,46);
+      cx2.setLineDash([]);
+      cx2.font="10px ui-monospace,monospace";
+      cx2.fillStyle="#3fb950";cx2.fillText("ROI-1 표면(블롭)",px-12,py-18);
+      cx2.fillStyle="#58a6ff";cx2.fillText("ROI-2 패턴매치 "+(so.ng?87:96)+"%",px+10,py+70);
+      cx2.fillStyle=so.ng?"rgba(122,30,30,.92)":"rgba(22,86,44,.92)";
+      cx2.fillRect(W2-130,12,118,40);
+      cx2.font="700 22px ui-monospace,monospace";cx2.fillStyle="#fff";cx2.textAlign="center";
+      cx2.fillText(so.ng?"FAIL":"PASS",W2-71,40);cx2.textAlign="left";
+    }else{
+      cx2.fillStyle="#5d6c7c";cx2.font="13px ui-monospace,monospace";cx2.textAlign="center";
+      cx2.fillText("트리거 대기 중… (부품 통과 시 촬상)",W2/2,H2/2);cx2.textAlign="left";
+    }
+    cx2.strokeStyle="rgba(88,166,255,.3)";cx2.lineWidth=1;
+    cx2.beginPath();cx2.moveTo(W2/2,0);cx2.lineTo(W2/2,H2);
+    cx2.moveTo(0,H2/2);cx2.lineTo(W2,H2/2);cx2.stroke();
+    cx2.font="10px ui-monospace,monospace";cx2.fillStyle="#7f8a9a";
+    cx2.fillText(`FOV ${op.fovW.toFixed(0)}×${op.fovH.toFixed(0)}mm  ${op.res.toFixed(0)}µm/px  EXP ${c.exp}ms  GAIN ${c.gain}dB`,10,H2-10);
+    const stat=document.getElementById("vt_stat");
+    if(stat)stat.innerHTML=
+     `<span>검사 <b style="color:#dce4f0">${st.insp||0}</b></span>`+
+     `<span>양품 <b style="color:#7ee787">${st.ok||0}</b></span>`+
+     `<span>불량 <b style="color:#ff8f8f">${st.ng||0}</b></span>`+
+     `<span>유출 <b style="color:#f0c26b">${st.leak||0}</b></span>`+
+     `<span>검출 신뢰도 <b style="color:${op.conf>0.85?"#7ee787":"#f0c26b"}">${(op.conf*100).toFixed(0)}%</b></span>`;
+    const e0=document.getElementById("vt_opt");
+    if(e0)e0.textContent=`센서 7.2×5.4mm — 신뢰도는 라인의 NG 유출률에 직접 반영됩니다(시뮬 폐루프).`;
+  };
+  const bind=(id,fn)=>{const e2=document.getElementById(id);if(e2)e2.oninput=e2.onchange=()=>fn(e2);};
+  bind("vt_f",e2=>{c.f=+e2.value;logEv("op","VS-701 렌즈 → f"+c.f+"mm");});
+  bind("vt_wd",e2=>{c.wd=Math.max(50,+e2.value||300);});
+  bind("vt_lux",e2=>{c.lux=+e2.value;document.getElementById("vt_luxv").textContent=c.lux;});
+  bind("vt_exp",e2=>{c.exp=+e2.value;document.getElementById("vt_expv").textContent=c.exp;});
+  bind("vt_gain",e2=>{c.gain=+e2.value;document.getElementById("vt_gainv").textContent=c.gain;});
+  bind("vt_thr",e2=>{c.thr=+e2.value;document.getElementById("vt_thrv").textContent=c.thr;});
+  draw();
+  if(TOOL.iv)clearInterval(TOOL.iv);
+  TOOL.iv=setInterval(draw,200);
+  logEv("op","비전 셋업 툴 접속 — 라이브 촬상 모니터");
+}
+/* ── AMR 플릿 매니저(ACS 상위 코딩: 미션 DSL·노드 티칭·라이브 맵) ── */
+const NODEXY={"ST-H":[2.6,3.0],"ST-B":[13.4,3.0],
+  "ST-A":[4.2,4.45],"ST-C":[9.8,4.45],"CHG-2":[13.2,4.45],
+  "RACK":[3.2,1.55],"OUT":[12.4,1.55]};
+function fmtProg(prog){return prog.map(p2=>p2.op+(p2.arg!==undefined?" "+p2.arg:"")).join("\n");}
+function parseFleetProg(txt,lane){
+  const errs=[],prog=[];
+  txt.split(/\n/).forEach((ln,i)=>{
+    const s=ln.trim();if(!s||s.startsWith("#"))return;
+    const m=s.toUpperCase().split(/\s+/);
+    if(m[0]==="MOVE"){
+      if(!NODEXY[m[1]])errs.push((i+1)+"행: 미지 노드 '"+(m[1]||"")+"'");
+      else if(Math.abs(NODEXY[m[1]][1]-lane)>0.01)errs.push((i+1)+"행: "+m[1]+"는 이 차량 레인 밖(경로 계획 불가)");
+      else prog.push({op:"MOVE",arg:m[1]});
+    }
+    else if(m[0]==="LOAD"||m[0]==="LIFT")prog.push({op:"LOAD"});
+    else if(m[0]==="UNLOAD"||m[0]==="DROP")prog.push({op:"UNLOAD"});
+    else if(m[0]==="WAIT"){const v=+m[1];if(isNaN(v))errs.push((i+1)+"행: WAIT 초 필요");else prog.push({op:"WAIT",arg:v});}
+    else if(m[0]==="DOCK")prog.push({op:"DOCK"});
+    else errs.push((i+1)+"행: 알 수 없는 명령 '"+s+"'");
+  });
+  if(!prog.length)errs.push("프로그램이 비어 있습니다");
+  return {prog,errs};
+}
+function openFleetTool(){
+  const st=cur.sst;
+  if(!st.fleet){logEv("warn","플릿 매니저는 AGV 물류 섹터에서 사용합니다");return;}
+  toolWin("AMR 플릿 매니저 — ACS 상위 코딩 · 노드 티칭",1100,
+   `<div style="display:grid;grid-template-columns:1fr 330px;min-height:430px">`+
+   `<div style="padding:12px"><canvas id="ft_map" width="700" height="300" style="width:100%;background:#0a0f16;border:1px solid #232e3a;border-radius:6px"></canvas>`+
+   `<div id="ft_veh" style="margin-top:8px;font:11px ui-monospace,monospace;color:#8b98a8;line-height:1.9"></div></div>`+
+   `<div style="border-left:1px solid #232e3a;padding:12px;font:11.5px ui-monospace,monospace;color:#9aa7b5;display:flex;flex-direction:column;gap:8px">`+
+   `<label>차량 <select id="ft_sel" style="background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px">`+
+   st.fleet.map((v,i)=>`<option value="${i}">${v.id} — ${v.name}</option>`).join("")+`</select></label>`+
+   `<div style="color:#dce4f0;font-weight:700">미션 프로그램(DSL)</div>`+
+   `<textarea id="ft_prog" rows="8" spellcheck="false" style="background:#0a1410;color:#79e0a0;border:1px solid #2b3743;border-radius:6px;font:12px ui-monospace,monospace;padding:8px;resize:vertical"></textarea>`+
+   `<div style="color:#6f7a8a">명령: MOVE 노드 · LOAD/LIFT · UNLOAD/DROP · WAIT 초 · DOCK</div>`+
+   `<div id="ft_err" style="color:#ff8f8f;white-space:pre-line"></div>`+
+   `<div style="display:flex;gap:6px"><button class="xbtn" id="ft_chk">검증</button>`+
+   `<button class="xbtn" id="ft_send" style="background:#23493a">⇪ 전송(다운로드)</button></div>`+
+   `<div style="color:#dce4f0;font-weight:700;margin-top:4px">노드 티칭(JOG)</div>`+
+   `<label>노드 <select id="ft_node" style="background:#0a0f17;color:#cdd6e3;border:1px solid #2b3743;border-radius:5px"></select></label>`+
+   `<div style="display:flex;gap:6px;align-items:center">`+
+   `<button class="xbtn" id="ft_jm">◀ −0.1m</button><b id="ft_pos" style="color:#cdd6e3">—</b><button class="xbtn" id="ft_jp">＋0.1m ▶</button>`+
+   `<button class="xbtn" id="ft_tsave">노드 저장</button></div></div></div>`);
+  const sel=document.getElementById("ft_sel"),ta=document.getElementById("ft_prog");
+  const nodeSel=document.getElementById("ft_node");
+  const vsel=()=>st.fleet[+sel.value];
+  const nodeX=n=>st.nodesOv[n]!==undefined?st.nodesOv[n]:NODEXY[n][0];
+  const posUpd=()=>{document.getElementById("ft_pos").textContent=nodeSel.value?nodeX(nodeSel.value).toFixed(2)+" m":"—";};
+  const fillNodes=()=>{
+    const v=vsel();
+    nodeSel.innerHTML=Object.keys(NODEXY).filter(n=>Math.abs(NODEXY[n][1]-v.lane)<0.01)
+      .map(n=>`<option>${n}</option>`).join("");
+    posUpd();
+  };
+  sel.onchange=()=>{ta.value=fmtProg(vsel().prog);fillNodes();};
+  ta.value=fmtProg(vsel().prog);fillNodes();
+  nodeSel.onchange=posUpd;
+  const jog=d2=>{const n=nodeSel.value;if(!n)return;
+    st.nodesOv[n]=Math.max(1.5,Math.min(14.5,nodeX(n)+d2));posUpd();};
+  document.getElementById("ft_jm").onclick=()=>jog(-0.1);
+  document.getElementById("ft_jp").onclick=()=>jog(0.1);
+  document.getElementById("ft_tsave").onclick=()=>{
+    logEv("op","ACS 노드 티칭 저장 — "+nodeSel.value+" = "+nodeX(nodeSel.value).toFixed(2)+"m");};
+  const check=()=>{
+    const r2=parseFleetProg(ta.value,vsel().lane);
+    document.getElementById("ft_err").style.color=r2.errs.length?"#ff8f8f":"#7ee787";
+    document.getElementById("ft_err").textContent=r2.errs.length?r2.errs.join("\n"):"✓ 검증 통과 — "+r2.prog.length+"개 명령";
+    return r2.errs.length?null:r2.prog;
+  };
+  document.getElementById("ft_chk").onclick=check;
+  document.getElementById("ft_send").onclick=()=>{
+    const prog=check();if(!prog)return;
+    const v=vsel();v.prog=prog;v.pc=0;v.wait=0;
+    logEv("op","ACS 프로그램 다운로드 — "+v.id+" ("+prog.length+"명령)");};
+  const mp=document.getElementById("ft_map"),mc=mp.getContext("2d");
+  const draw=()=>{
+    if(!cur||!cur.sst.fleet)return;
+    const X=x=>40+(x-1)*(mp.width-80)/14, Y=y=>mp.height-(y-0.8)*(mp.height-60)/4.6;
+    mc.fillStyle="#0a0f16";mc.fillRect(0,0,mp.width,mp.height);
+    const lane=(y,c2)=>{mc.strokeStyle=c2;mc.setLineDash([7,6]);mc.lineWidth=1.6;
+      mc.beginPath();mc.moveTo(X(1.5),Y(y));mc.lineTo(X(14.5),Y(y));mc.stroke();mc.setLineDash([]);};
+    lane(3.0,"rgba(88,224,255,.5)");lane(4.45,"rgba(185,163,255,.5)");lane(1.55,"rgba(240,194,107,.5)");
+    mc.font="10px ui-monospace,monospace";
+    for(const[n,xy]of Object.entries(NODEXY)){
+      const ox=st.nodesOv[n]!==undefined?st.nodesOv[n]:xy[0];
+      mc.strokeStyle="#3c4956";mc.strokeRect(X(ox)-7,Y(xy[1])-7,14,14);
+      mc.fillStyle="#8b98a8";mc.fillText(n,X(ox)-12,Y(xy[1])-12);
+    }
+    const dot=(x,y,c2,id)=>{mc.fillStyle=c2;mc.beginPath();mc.arc(X(x),Y(y),6,0,7);mc.fill();
+      mc.fillStyle="#dce4f0";mc.fillText(id,X(x)+9,Y(y)+4);};
+    dot(st.x,3.0,"#58e0ff","AGV-901");
+    st.fleet.forEach(v=>dot(v.x,v.lane,v.type==="fork"?"#f0c26b":"#b9a3ff",v.id));
+    const vh=document.getElementById("ft_veh");
+    if(vh)vh.innerHTML=
+     [`AGV-901 — ${st.batt.toFixed(0)}% · ${st.carry?"적재":"공차"} · PLC 래더 구동(메인 레인)`,
+      ...st.fleet.map(v=>{const cm=v.prog[v.pc%v.prog.length]||{};
+        return `${v.id} — ${v.batt.toFixed(0)}% · ${cm.op||"IDLE"}${cm.arg?" "+cm.arg:""} · 완료 ${v.done}`;})]
+     .map(s=>`<span style="margin-right:16px">${s}</span>`).join("");
+  };
+  draw();
+  if(TOOL.iv)clearInterval(TOOL.iv);
+  TOOL.iv=setInterval(draw,200);
+  logEv("op","AMR 플릿 매니저 접속 — ACS 상위 코딩 콘솔");
+}
+
 function devSym(){
   if(!devOpen)return null;
   const ent=Object.entries(cur.m.tags||{}).find(([,i2])=>i2.tag===devOpen);
@@ -3013,7 +3442,7 @@ function simLine(L,dt,t){
   if(L.scene.sense)L.scene.sense(L.sst,L.plc);
   for(const f of (L.m.faults||[]))
     if(f.type==="stuck_on"&&L.faults[f.id])L.plc.set(f.sym,true);
-  const r=L.plc.scan(dt);L.scanN++;
+  const r=L.plc.scan(dt);L.scanN++;L.lastEn=r.en;
   L.us=L.us?L.us*0.9+r.us*0.1:r.us;
   const o={};L.d.sim.outputs.forEach(s2=>{o[s2]=effL(L,s2);
     const stt=L.stats[s2];if(stt){if(o[s2]){stt.rt+=dt;if(!stt.prev)stt.starts++;}stt.prev=o[s2];}});
