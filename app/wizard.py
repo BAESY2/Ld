@@ -287,6 +287,58 @@ def _tablet_count_bottle(a: Answers) -> StateMachineSpec:
     )
 
 
+def _fnb_fill_cutoff(a: Answers) -> StateMachineSpec:
+    present = _val(a, "present", "BOTTLE_PRESENT")
+    weight = _val(a, "weight", "NET_WEIGHT")
+    valve = _val(a, "valve", "FILL_VALVE")
+    target = _pint(a, "target", 500, lo=1)
+    return StateMachineSpec(
+        title=f"정량 충전 차단({target}g 도달 시 밸브 차단)",
+        io_points=[
+            _io(present, _IN, "용기 재석 센서"),
+            IOPoint(symbol=weight, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="순중량(g) 로드셀"),
+            _io(valve, _OUT, "충전 밸브"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="FILLING", on_entry=[f"{valve} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "FILLING", f"{present} AND {weight} < {target}"),
+            _tr("FILLING", "IDLE", f"{weight} >= {target} OR NOT {present}"),
+        ],
+    )
+
+
+def _battery_formation(a: Answers) -> StateMachineSpec:
+    start = _val(a, "start", "CHG_START")
+    volt = _val(a, "volt", "CELL_V")
+    temp = _val(a, "temp", "CELL_TEMP")
+    charger = _val(a, "charger", "CHARGER")
+    cv = _pint(a, "cv", 4200, lo=1)
+    ot = _pint(a, "ot", 45, lo=1)
+    return StateMachineSpec(
+        title=f"화성 충전 컷오프(CV {cv}mV·과열 {ot}℃ 차단)",
+        io_points=[
+            _io(start, _IN, "충전 시작"),
+            IOPoint(symbol=volt, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="셀 전압(mV)"),
+            IOPoint(symbol=temp, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="셀 온도(℃)"),
+            _io(charger, _OUT, "충전기 출력"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="CHARGING", on_entry=[f"{charger} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "CHARGING", f"{start} AND {volt} < {cv} AND {temp} <= {ot}"),
+            _tr("CHARGING", "IDLE", f"{volt} >= {cv} OR {temp} > {ot}"),
+        ],
+    )
+
+
 def _count_eject(a: Answers) -> StateMachineSpec:
     sensor = _val(a, "sensor", "PART_SENSOR")
     reset = _val(a, "reset", "RESET_PB")
@@ -1152,6 +1204,25 @@ RECIPES: dict[str, Recipe] = {
              _f("index", "보틀 인덱서", "INDEXER"), _f("count", "병당 정수", "30", "int")),
             _tablet_count_bottle,
             safety_note="인덱서 구동부 접근 가드를 하드와이어 인터록으로 구성하세요.",
+        ),
+        Recipe(
+            "fnb_fill_cutoff", "정량 충전 차단", "로드셀 중량 도달 시 충전 차단.", "식음료",
+            (_f("present", "용기 재석 센서", "BOTTLE_PRESENT"),
+             _f("weight", "순중량(아날로그 g)", "NET_WEIGHT"),
+             _f("target", "목표 중량 g", "500", "int"), _f("valve", "충전 밸브", "FILL_VALVE")),
+            _fnb_fill_cutoff,
+            safety_note="과충전(넘침) 대비 물리 오버플로우 트레이와 "
+            "로드셀 고장(0g 고착) 시 타임아웃 차단을 별도로 두세요.",
+        ),
+        Recipe(
+            "battery_formation", "화성 충전 컷오프", "CV 도달/과열 시 충전 차단.", "이차전지",
+            (_f("start", "충전 시작", "CHG_START"), _f("volt", "셀 전압(아날로그 mV)", "CELL_V"),
+             _f("temp", "셀 온도(아날로그 ℃)", "CELL_TEMP"),
+             _f("cv", "컷오프 전압 mV", "4200", "int"), _f("ot", "과열 임계 ℃", "45", "int"),
+             _f("charger", "충전기 출력", "CHARGER")),
+            _battery_formation,
+            safety_note="열폭주 대비 과열 차단은 하드와이어(서모스탯/퓨즈) 이중화가 "
+            "필수입니다. 본 로직은 보조 차단입니다.",
         ),
         Recipe(
             "count_eject", "부품 카운터", "N개 세면 배출(카운터).", "카운터",
