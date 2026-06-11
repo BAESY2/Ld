@@ -439,7 +439,8 @@ duty_standby:{unit:"㎥",w:1000,tt:3},
  battery_formation:{unit:"트레이",w:96,tt:42},
  paint_booth:{unit:"패널",w:14,tt:40},
  stretch_wrap:{unit:"파레트",w:680,tt:22},
- palletizer:{unit:"파레트",w:540,tt:38}
+ palletizer:{unit:"파레트",w:540,tt:38},
+ cluster_tool:{unit:"웨이퍼",w:0.125,tt:18}
 };
 
 /* ============================================================
@@ -2622,6 +2623,168 @@ palletz:{
    stackLight(10.0,3.0,false,false,val("LAYER_PUSH"));
  }},
 
+/* ---- 반도체 클러스터 툴(매엽식): EFEM·로드락·진공 로봇·PM 4기 ---- */
+cluster:{
+ label:"클러스터 툴 — EFEM → 로드락 펌프다운 → 진공 로봇 → PM 공정(RF) → 벤트 · SEMI S2",
+ overhead:"piping",
+ wiresOut:[["TM_PICK",[[14.72,5.0],[10.5,4.7],[9.4,3.2]]],
+           ["PM_PROCESS",[[14.72,5.05],[11.2,4.8],[10.3,1.8]]]],
+ init:()=>({wafer:"LL",armA:2.53,ext:0,pm:0,count:0,llP:760,glow:0,efT:0,efArm:0}),
+ sense(st,plc){plc.set("WAFER_PRESENT",st.wafer==="LL");},
+ tick(st,o,dt){
+   const HUB=[8.6,2.55];
+   const ANG_LL=2.53, ANG_PM=[3.75,4.71,5.76,0.26];
+   const T=cur.plc.timers;
+   const pr=k=>T[k]?Math.min(1,T[k].acc/T[k].preset):0;
+   let tgtA=st.armA, tgtE=0;
+   /* 로드락 압력(Torr, 로그 보간) */
+   if(o.LL_PUMP)st.llP=Math.max(0.001,760*Math.pow(10,-6*pr("T0")));
+   if(o.LL_VENT)st.llP=Math.min(760,0.001*Math.pow(10,6*pr("T4")));
+   if(o.TM_PICK){
+     const p=pr("T1");
+     tgtA=ANG_LL;
+     tgtE=p<0.45?0:p<0.75?(p-0.45)/0.3:1-(p-0.75)/0.25;
+     if(p>=0.72&&st.wafer==="LL")st.wafer="ARM";
+   }else if(o.PM_PROCESS){
+     const p=pr("T2");
+     tgtA=ANG_PM[st.pm];
+     tgtE=p<0.15?0:p<0.3?(p-0.15)/0.15:p<0.45?1-(p-0.3)/0.15:0;
+     if(p>=0.28&&st.wafer==="ARM")st.wafer="PM";
+     st.glow=p>0.45?Math.min(1,st.glow+dt*3):st.glow;
+   }else if(o.TM_RETURN){
+     const p=pr("T3");
+     st.glow=Math.max(0,st.glow-dt*3);
+     if(p<0.3){tgtA=ANG_PM[st.pm];tgtE=p<0.22?p/0.22:1;
+       if(p>=0.2&&st.wafer==="PM")st.wafer="ARM";}
+     else if(p<0.62){tgtA=ANG_LL;tgtE=Math.max(0,1-(p-0.3)/0.12);}
+     else{tgtA=ANG_LL;tgtE=p<0.88?(p-0.62)/0.26:1-(p-0.88)/0.12;
+       if(p>=0.85&&st.wafer==="ARM")st.wafer="LL";}
+   }else st.glow=Math.max(0,st.glow-dt*2);
+   /* 벤트 완료 → 웨이퍼 반출·차기 PM 선택 → EFEM 재장전 */
+   if(st.wasVent&&!o.LL_VENT&&st.wafer==="LL"&&st.llP>700){
+     st.wafer="OUT";st.count++;st.pm=(st.pm+1)%4;st.efT=0;
+   }
+   st.wasVent=o.LL_VENT;
+   if(st.wafer==="OUT"){
+     st.efT+=dt;
+     st.efArm=st.efT<1.0?st.efT:st.efT<2.0?2.0-st.efT:0;
+     if(st.efT>=2.0){st.wafer="LL";st.efArm=0;}
+   }
+   /* 암 회전 스무딩 + 신축 추종 */
+   let da=tgtA-st.armA;
+   while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+   st.armA+=da*Math.min(1,dt*3.2);
+   st.ext+=(tgtE-st.ext)*Math.min(1,dt*6);
+ },
+ draw(ctx,st,val,t){
+   const HUB=[8.6,2.55];
+   const ANG_LL=2.53, ANG_PM=[3.75,4.71,5.76,0.26];
+   /* 클린룸 패드 + 베이 */
+   face(ctx,[P(1.4,0.5,0.006),P(15.6,0.5,0.006),P(15.6,5.6,0.006),P(1.4,5.6,0.006)],"rgba(212,230,250,.08)");
+   /* EFEM(대기측) + 로드포트 FOUP 2기 */
+   sh(3.3,4.2,4.0,0.95,0.28);
+   box3(3.4,4.25,0,3.8,0.85,1.7,"#46535f");
+   box3(3.5,4.3,1.7,3.6,0.75,0.1,"#525f6c");
+   tag3(5.3,4.6,2.1,"EF-70","EFEM(대기 로봇)","#8ec9ff",2);
+   for(const lx of[4.2,5.6]){
+     box3(lx-0.3,5.15,0,0.6,0.5,0.85,"#39434f");
+     box3(lx-0.26,5.18,0.85,0.52,0.44,0.42,"#cdd5de");
+   }
+   tag3(4.9,5.4,1.6,"LP-1·2","로드포트 FOUP","#9fb3c8",2);
+   /* EFEM 로봇 재장전 암(웨이퍼 반출 직후) */
+   if(st.efArm>0.02)dq(5.3+4.6+1.8,c2=>{
+     const a=P(5.3,4.6,1.1),b2=P(6.96+(5.3-6.96)*(1-st.efArm),3.7+(4.6-3.7)*(1-st.efArm),1.1);
+     c2.lineCap="round";c2.strokeStyle="#7d8a98";c2.lineWidth=0.1*view.s;
+     c2.beginPath();c2.moveTo(a[0],a[1]);c2.lineTo(b2[0],b2[1]);c2.stroke();
+   });
+   /* 로드락(LL-A) — 압력 게이지 */
+   const llx=HUB[0]+Math.cos(ANG_LL)*2.0, lly=HUB[1]+Math.sin(ANG_LL)*1.55;
+   sh(llx-0.55,lly-0.45,1.1,0.9,0.3);
+   box3(llx-0.55,lly-0.45,0,1.1,0.9,0.85,"#3c4854");
+   box3(llx-0.45,lly-0.38,0.85,0.9,0.76,0.12,"#525f6c");
+   dq(llx+lly+1.6,c2=>{
+     const q=P(llx,lly,1.25);
+     const pv=st.llP>=1?st.llP.toFixed(0)+" Torr":st.llP.toExponential(0)+" Torr";
+     c2.save();c2.shadowColor="#8ec9ff";c2.shadowBlur=6;
+     txt(c2,q,pv,val("LL_PUMP")||val("LL_VENT")?"#8ec9ff":"#7f8a9a",10,"center",true);
+     c2.restore();
+   });
+   tag3(llx,lly,1.55,"LL-A","로드락(진공 전환)",val("LL_PUMP")||val("LL_VENT")?"#8ec9ff":"#9fb3c8");
+   /* 트랜스퍼 챔버(6각) */
+   dq(HUB[0]+HUB[1]+0.9,c2=>{
+     const pts=[];
+     for(let k=0;k<6;k++)pts.push(P(HUB[0]+Math.cos(k*Math.PI/3+0.26)*1.3,HUB[1]+Math.sin(k*Math.PI/3+0.26)*1.05,0.85));
+     face(c2,pts,"rgb(64,76,90)",EDGE);
+     const pb=[];
+     for(let k=0;k<6;k++)pb.push(P(HUB[0]+Math.cos(k*Math.PI/3+0.26)*1.3,HUB[1]+Math.sin(k*Math.PI/3+0.26)*1.05,0));
+     for(let k=0;k<6;k++){
+       const a=pb[k],b2=pb[(k+1)%6],a2=pts[k],b3=pts[(k+1)%6];
+       if((a[1]+b2[1])/2>(P(HUB[0],HUB[1],0)[1]))face(c2,[a,b2,b3,a2],"rgb(46,56,68)",EDGE);
+     }
+   });
+   tag3(HUB[0],HUB[1],1.35,"TM-70","진공 트랜스퍼 챔버",val("TM_PICK")||val("TM_RETURN")?"#7ee787":"#9fb3c8");
+   /* 프로세스 챔버 4기 + RF 매처 + 글로우 */
+   ANG_PM.forEach((a,i)=>{
+     const px=HUB[0]+Math.cos(a)*2.1, py=HUB[1]+Math.sin(a)*1.7;
+     sh(px-0.5,py-0.42,1.0,0.85,0.3);
+     cyl3(px,py,0,0.52,0.8,"#46535f");
+     cyl3(px,py,0.8,0.4,0.16,"#525f6c");
+     box3(px+0.45,py-0.2,0,0.36,0.4,0.55,"#39434f");
+     const on=i===st.pm&&st.glow>0.1;
+     dq(px+py+1.6,c2=>lamp(c2,P(px,py,1.05),3,on?"#b9a3ff":"#27313c",on));
+     if(on)dq(px+py+1.7,c2=>{
+       const q=P(px,py,1.3);
+       txt(c2,q,"RF "+(13.56)+"MHz · "+(2.4+0.3*Math.sin(t*7)).toFixed(1)+"kW","#b9a3ff",9,"center",true);
+     });
+     tag3(px,py,1.55,"PM-"+(i+1),i===st.pm?"공정 챔버(활성)":"공정 챔버",on?"#b9a3ff":"#6f7a8a",i===st.pm?1:2);
+   });
+   /* 진공 로봇 암(허브→신축) + 웨이퍼 */
+   dq(HUB[0]+HUB[1]+1.9,c2=>{
+     const L2=0.5+st.ext*1.5;
+     const ex=HUB[0]+Math.cos(st.armA)*L2, ey=HUB[1]+Math.sin(st.armA)*L2*0.82;
+     const S=P(HUB[0],HUB[1],0.95), E=P(ex,ey,0.95);
+     c2.lineCap="round";
+     c2.strokeStyle="#2f3a46";c2.lineWidth=0.16*view.s+2;
+     c2.beginPath();c2.moveTo(S[0],S[1]);c2.lineTo(E[0],E[1]);c2.stroke();
+     c2.strokeStyle="#7d8a98";c2.lineWidth=0.16*view.s;
+     c2.beginPath();c2.moveTo(S[0],S[1]);c2.lineTo(E[0],E[1]);c2.stroke();
+     c2.beginPath();c2.arc(S[0],S[1],0.2*view.s,0,7);c2.fillStyle="#39434f";c2.fill();
+     /* 엔드이펙터 + 웨이퍼 */
+     c2.beginPath();c2.arc(E[0],E[1],0.1*view.s,0,7);c2.fillStyle="#566472";c2.fill();
+     if(st.wafer==="ARM"){
+       c2.beginPath();c2.ellipse(E[0],E[1],0.16*view.s,0.08*view.s,0,0,7);
+       c2.fillStyle="#d9c8a0";c2.fill();c2.strokeStyle="#8a7d5c";c2.lineWidth=1;c2.stroke();
+     }
+   });
+   /* 웨이퍼(로드락/PM 내 표시) */
+   if(st.wafer==="LL")dq(llx+lly+1.3,c2=>{
+     const q=P(llx,lly,0.97);
+     c2.beginPath();c2.ellipse(q[0],q[1],0.15*view.s,0.075*view.s,0,0,7);
+     c2.fillStyle="#d9c8a0";c2.fill();
+   });
+   /* 펌프 스키드 3기 + 진공 배관 */
+   for(let i=0;i<3;i++){
+     const sx2=11.8+i*1.3;
+     sh(sx2-0.4,0.6,0.85,0.75,0.26);
+     box3(sx2-0.4,0.62,0,0.8,0.7,0.75,"#3a4654");
+     cyl3(sx2,0.97,0.75,0.18,0.22,"#566472");
+     tag3(sx2,0.97,1.25,"VP-7"+String.fromCharCode(65+i),"드라이펌프",val("LL_PUMP")&&i===0?"#8ec9ff":"#5d6c7c",2);
+   }
+   dq(11+2+1,c2=>{
+     const a=P(10.6,1.3,0.5),b2=P(11.4,0.97,0.5);
+     seg(c2,a,b2,"#566472",3);
+     if(val("LL_PUMP")){c2.save();c2.strokeStyle="#8ec9ff";c2.setLineDash([4,6]);
+       c2.lineDashOffset=-(t*30)%10;c2.lineWidth=1.6;
+       c2.beginPath();c2.moveTo(a[0],a[1]);c2.lineTo(b2[0],b2[1]);c2.stroke();c2.restore();}
+   });
+   /* 가스 캐비닛 */
+   box3(14.6,1.1,0,0.9,0.6,1.6,"#3f5a51");
+   tag3(15.0,1.4,1.85,"GC-70","공정가스 캐비닛","#7ee787",2);
+   stackLight(12.2,4.6,false,val("LL_VENT"),val("PM_PROCESS")||val("TM_PICK")||val("TM_RETURN"));
+   ledBoard(2.4,1.0,"처리 웨이퍼",String(st.count).padStart(4,"0"));
+   ledBoard(13.6,4.9,"활성 PM",String(st.pm+1)+" / 4");
+ }},
+
 /* ---- 반도체 팹 베이: OHT 천장반송(FOUP) ---- */
 fab:{
  label:"반도체 팹 베이 — OHT 천장반송(FOUP) · LP-01 픽업 → LP-02 하역",
@@ -2773,6 +2936,8 @@ SCENES.cascade.prod=st=>st.count;  SCENES.cascade.wip=st=>st.parts.length;  SCEN
 SCENES.bodyline.prod=st=>st.count; SCENES.bodyline.wip=st=>st.bodies.length;
 SCENES.bodyline.avail=()=>1;
 SCENES.fab.prod=st=>st.count; SCENES.fab.wip=st=>st.carry?1:0; SCENES.fab.avail=()=>1;
+SCENES.cluster.prod=st=>st.count; SCENES.cluster.wip=st=>st.wafer!=="OUT"?1:0;
+SCENES.cluster.avail=()=>1;
 SCENES.paint.prod=st=>st.count; SCENES.paint.wip=st=>st.phase!=="in"?1:0; SCENES.paint.avail=()=>1;
 SCENES.wrap.prod=st=>st.count; SCENES.wrap.wip=st=>st.out?0:1; SCENES.wrap.avail=()=>1;
 SCENES.palletz.prod=st=>st.count; SCENES.palletz.wip=st=>st.boxes.length; SCENES.palletz.avail=()=>1;
@@ -2859,7 +3024,8 @@ const OV={motor_start_stop:"포장 컨베이어",fwd_rev:"이송 대차",car_was
   count_eject:"검수 카운트",conveyor_divert:"비전 분기",weld_cell:"용접 셀",
   batch_fill_mix_drain:"배치 플랜트",duty_standby:"급수 펌프장",fnb_fill_cutoff:"정량 충전 라인",cascade_conveyor:"다단 반송",motion_home_move:"AGV 물류 섹터",
   transfer_line:"차체 트랜스퍼 라인",oht_transport:"반도체 OHT 베이",battery_formation:"배터리 화성 라인",
-  paint_booth:"도장부스",stretch_wrap:"랩핑 셀",palletizer:"파레타이저"};
+  paint_booth:"도장부스",stretch_wrap:"랩핑 셀",palletizer:"파레타이저",
+  cluster_tool:"반도체 클러스터 툴"};
 
 /* ---- 자동 시연 오토파일럿: 라인별 가상 조작 시퀀스 ---- */
 const AUTO={
@@ -2915,6 +3081,10 @@ const AUTO={
  },
  palletizer(L){
    if(L.plc.val("LAYER_PUSH")&&L.sst.push>0.92)return["LAYER_DONE",0.4,2];
+ },
+ cluster_tool(L){
+   const busy=["LL_PUMP","TM_PICK","PM_PROCESS","TM_RETURN","LL_VENT"].some(x=>L.plc.val(x));
+   if(!busy&&L.sst.wafer==="LL")return["CT_START",0.3,2];
  }
 };
 function autopilot(L,dt){
@@ -4022,7 +4192,8 @@ function makeLine(id){
       batch_fill_mix_drain:"CJ2M-CPU31",duty_standby:"CPU 1214C",
       cascade_conveyor:"XGK-CPUH",transfer_line:"CPU 1515-2 PN",
       oht_transport:"NX1P2-1140DT",battery_formation:"Q03UDECPU",
-      paint_booth:"CPU 1212C",stretch_wrap:"XBC-DR32H",palletizer:"FX5U-32MR/ES"})[id]||"XGK-CPUH",
+      paint_booth:"CPU 1212C",stretch_wrap:"XBC-DR32H",palletizer:"FX5U-32MR/ES",
+      cluster_tool:"R04CPU"})[id]||"XGK-CPUH",
     devCfg:{}};
   L.sst=L.scene.init();
   d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
@@ -4211,6 +4382,32 @@ registerBuiltin("palletizer",{scene:"palletz",
   verify:["CTU 8카운트 도달 시에만 푸셔 작동(과밀 방지)",
           "적재 완료 신호로 카운터 리셋·복귀(래치 도달성)","이중 코일 0건",
           "OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+registerBuiltin("cluster_tool",{scene:"cluster",
+  buttons:[{sym:"CT_START",label:"사이클 시작",c:"#1f9d4d"},{sym:"CT_STOP",label:"정지",c:"#c93c3c"}],
+  autoInputs:{WAFER_PRESENT:"웨이퍼 재석 · 자동"},
+  tags:{LL_PUMP:{tag:"VP-7A",name:"로드락 드라이펌프",rated:6.2},
+        TM_PICK:{tag:"TM-70",name:"진공 트랜스퍼 로봇",rated:2.8},
+        PM_PROCESS:{tag:"PM-7x",name:"프로세스 챔버 RF 제너레이터",rated:24},
+        TM_RETURN:{tag:"TM-70R",name:"복귀 반송(진공 로봇)",rated:2.8},
+        LL_VENT:{tag:"VV-7A",name:"벤트 밸브(N2)",rated:0.4}},
+  faults:[{id:"tripRF",label:"PM RF 제너레이터 트립",sym:"PM_PROCESS",type:"trip"}],
+  analog:{D0020:{name:"로드락 압력",unit:"Torr",get:st=>st.llP>=1?Math.round(st.llP):+st.llP.toFixed(3)}},
+  verify:["웨이퍼 인터록 — 재석 없이 사이클 진입 불가(빈 챔버 공정 차단)",
+          "단계 배타 — 펌프/픽/공정/복귀/벤트 one-hot(게이트밸브 충돌 방지)",
+          "CT_STOP 지배성 — 어느 단계든 즉시 차단","TON 5단 도달성 · 이중 코일 0건",
+          "OpenPLC 런타임 차분검증 bit-for-bit 일치"]});
+/* 대형 공정 우선 정렬 — 랜딩 라인 = 클러스터 툴 */
+const BIG_FIRST=["cluster_tool","transfer_line","oht_transport","battery_formation",
+  "motion_home_move","paint_booth","palletizer","stretch_wrap"];
+ids.sort((a,b)=>{
+  const ia=BIG_FIRST.indexOf(a),ib=BIG_FIRST.indexOf(b);
+  return (ia<0?99:ia)-(ib<0?99:ib);
+});
+/* 기본 프로젝트 = 대형 공정 6 라인만 — 소형 데모 라인은 카탈로그(라인 추가)·공장
+   템플릿으로 언제든 투입(45종). '작은 공정 잡동사니' 제거 요청 반영 */
+const FLAGSHIP=new Set(["cluster_tool","transfer_line","oht_transport",
+  "battery_formation","motion_home_move","paint_booth"]);
+for(let i=ids.length-1;i>=0;i--)if(!FLAGSHIP.has(ids[i]))ids.splice(i,1);
 USER_LINES=USER_LINES.filter(u=>registerUserLine(u));
 USER_LINES.forEach(u=>ids.push(u.uid));
 ids.forEach(id=>{LINES[id]=makeLine(id);});
@@ -4219,9 +4416,12 @@ show(ids[0]);
 /* ── 납품 패키지: 현장 검토용 문서(인쇄/PDF) + 대상 기종 니모닉(.il) 다운로드 ── */
 function ilFor(L){
   const DA=window.DEMO_ALL||{};
-  if(DA[L.id]&&DA[L.id].il_xgk)return DA[L.id].il_xgk;
   const u=USER_LINES.find(x=>x.uid===L.id);
-  return (u&&DA[u.recipe]&&DA[u.recipe].il_xgk)||null;
+  const src=DA[L.id]||(u&&DA[u.recipe]);
+  if(!src)return null;
+  /* 선택한 PLC 기종의 제조사 니모닉으로 — LS/미쓰비시/지멘스/오므론 */
+  const vend=(PLC_CATALOG.find(x=>x.model===L.cpu)||{}).v||"LS";
+  return (src.il&&src.il[vend])||src.il_xgk||null;
 }
 function openDeliveryDoc(){
   const m=PLC_CATALOG.find(x=>x.model===cur.cpu)||PLC_CATALOG[1];
