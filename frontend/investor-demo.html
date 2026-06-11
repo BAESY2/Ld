@@ -153,6 +153,24 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 .sld{display:flex;flex-direction:column;gap:5px;align-self:center;padding:0 4px}
 .sld small{color:var(--mut);font-size:11px}.sld b{color:#8ec9ff}
 .sld input[type=range]{width:148px;accent-color:#58a6ff;cursor:pointer}
+.ov{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;margin:0 0 16px}
+.ovc{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:9px 11px;cursor:pointer;transition:.15s}
+.ovc:hover{border-color:var(--acc);transform:translateY(-2px)}
+.ovc.act{border-color:#58a6ff;box-shadow:0 0 0 1px rgba(88,166,255,.4)}
+.ovt{font-size:12.5px;font-weight:700;display:flex;gap:7px;align-items:center;white-space:nowrap}
+.ovs{display:flex;gap:9px;font:10.5px ui-monospace,monospace;color:var(--mut);margin-top:5px;white-space:nowrap}
+.ovs b{color:#7ee787}.ovs b.w{color:#f0c26b}
+.ovw{font:10.5px ui-monospace,monospace;color:#f85149;margin-top:3px}
+.dot.trip{background:#f85149;box-shadow:0 0 8px #f85149}
+.abtn{border-color:#2e6b44!important;background:rgba(63,185,80,.1)!important;color:#9fe0b0!important}
+.abtn.on{background:#1f9d4d!important;color:#fff!important;border-color:#3fb950!important;box-shadow:0 0 12px rgba(63,185,80,.4)!important}
+.xbtn{font:11px inherit;background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--mut);border-radius:7px;padding:4px 9px;cursor:pointer}
+.xbtn:hover{color:var(--fg);border-color:var(--acc)}
+.alhd{display:flex;justify-content:space-between;align-items:center}
+.alhd h4{margin:0}
+details.engd{margin-top:14px}
+details.engd summary{cursor:pointer;color:var(--mut);font-size:13px;padding:10px 14px;background:var(--panel);border:1px solid var(--bd);border-radius:10px;user-select:none}
+details.engd summary:hover{color:var(--fg);border-color:var(--acc)}
 .fbtn{font:11px/1 inherit;border:1px solid #6e3a3a;background:rgba(150,40,40,.12);color:#e8a0a0;
  border-radius:8px;padding:6px 9px;cursor:pointer;transition:.15s}
 .fbtn.on{background:#a83232;color:#fff;border-color:#d14b4b;box-shadow:0 0 12px rgba(248,81,73,.45)}
@@ -276,7 +294,9 @@ table.io td.mut{color:var(--mut)}
   <h2>지금 바로 체험 — 말로 만든 설계가 진짜로 움직인다</h2>
   <p class="sub">아래 3D 라인은 그림이 아닙니다. <b>엔진이 합성·검증한 래더 그대로</b>를 브라우저 가상 PLC가 매 스캔 실행하고,
    그 출력이 설비를 움직입니다. <b>버튼을 직접 눌러보세요</b> — 신호가 배선을 타고 PLC를 거쳐 설비로 흐르는 게 보입니다.</p>
-  <div class="tabs" id="tabs"></div>
+  <p class="sub" style="margin-bottom:10px"><b>9개 라인이 지금 전부 백그라운드에서 동시 가동 중</b>입니다(가상 PLC 9대 병렬 스캔 + 자동 시연).
+   카드를 누르면 해당 라인 현장으로 들어갑니다 — 상태·생산·OEE·경보는 전 라인 실시간.</p>
+  <div class="ov" id="overview"></div>
   <div class="live">
    <div class="box">
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
@@ -291,17 +311,22 @@ table.io td.mut{color:var(--mut)}
     <table class="io" id="iotable"></table>
     <div class="vrf"><h4>운전 데이터 — 실시간</h4></div>
     <table class="io" id="opstable"></table>
-    <div class="vrf"><h4>알람 · 이벤트 이력</h4></div>
+    <div class="vrf alhd"><h4>알람 · 이벤트 이력</h4><span><button id="csvbtn" class="xbtn">CSV ↓</button> <button id="rptbtn" class="xbtn">리포트 ↓</button></span></div>
     <div class="alms" id="alarms"></div>
     <div class="vrf" id="verify"></div>
    </div>
   </div>
   <div class="demo">
    <div class="box"><h3>③ 래더 다이어그램 — 통전 경로 실시간 표시</h3><div id="ladder"></div></div>
-   <div class="box"><h3>④ 생성된 IEC 61131-3 ST 코드</h3><pre id="st"></pre></div>
-   <div class="box"><h3>⑤ 평문 설명 · 누구나 이해</h3><pre id="explain"></pre></div>
-   <div class="box"><h3>⑥ 사전 검증 타임라인 (파랑=입력, 초록=출력, 시간→)</h3><div id="sim"></div></div>
+   <div class="box"><h3>④ 평문 설명 · 누구나 이해</h3><pre id="explain"></pre></div>
   </div>
+  <details class="engd">
+   <summary>엔지니어 상세 — 생성된 IEC 61131-3 ST 코드 · 사전 검증 타임라인</summary>
+   <div class="demo" style="margin-top:12px">
+    <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
+    <div class="box"><h3>사전 검증 타임라인 (파랑=입력, 초록=출력, 시간→)</h3><div id="sim"></div></div>
+   </div>
+  </details>
   <div class="safety" id="safety" style="margin-top:16px"></div>
  </section>
 
@@ -352,7 +377,6 @@ table.io td.mut{color:var(--mut)}
 
 <script>
 const DEMO = {"motor_start_stop": {"title": "모터 기동/정지(자기유지)","st": "MOTOR := ((START AND NOT STOP) OR MOTOR) AND NOT ((STOP));","ladder": {"title": "모터 기동/정지(자기유지)","rungs": [{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "START","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "MOTOR","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "MOTOR","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 모터 기동/정지(자기유지)\n입력(사람·센서 신호): START(기동 버튼), STOP(정지 버튼)\n출력(움직이는 것): MOTOR(모터)\n\n## 동작 설명 (한 줄씩)\n- 렁 1: (START가 켜져 있음, STOP가 꺼져 있음) 또는 (MOTOR가 켜져 있음, STOP가 꺼져 있음) 면 MOTOR가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["START","STOP"],"outputs": ["MOTOR"],"samples": [{"t": 0,"i": {"START": true,"STOP": false},"o": {"MOTOR": true}},{"t": 150,"i": {"START": false,"STOP": false},"o": {"MOTOR": true}},{"t": 300,"i": {"START": false,"STOP": false},"o": {"MOTOR": true}},{"t": 450,"i": {"START": false,"STOP": false},"o": {"MOTOR": true}},{"t": 600,"i": {"START": false,"STOP": false},"o": {"MOTOR": true}},{"t": 750,"i": {"START": false,"STOP": false},"o": {"MOTOR": true}},{"t": 900,"i": {"START": false,"STOP": true},"o": {"MOTOR": false}},{"t": 1050,"i": {"START": false,"STOP": false},"o": {"MOTOR": false}},{"t": 1200,"i": {"START": false,"STOP": false},"o": {"MOTOR": false}},{"t": 1350,"i": {"START": false,"STOP": false},"o": {"MOTOR": false}},{"t": 1500,"i": {"START": false,"STOP": false},"o": {"MOTOR": false}}]}},"fwd_rev": {"title": "정역 운전(인터락)","st": "MOTOR_FWD := ((FWD_PB AND NOT REV_PB AND NOT STOP) OR MOTOR_FWD) AND NOT ((STOP OR REV_PB)) AND NOT MOTOR_REV;\nMOTOR_REV := ((REV_PB AND NOT FWD_PB AND NOT STOP) OR MOTOR_REV) AND NOT ((STOP OR FWD_PB)) AND NOT MOTOR_FWD;","ladder": {"title": "정역 운전(인터락)","rungs": [{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "FWD_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "MOTOR_REV","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "REV_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "MOTOR_FWD","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "MOTOR_REV","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "REV_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "MOTOR_FWD","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "FWD_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "MOTOR_FWD","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "REV_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "FWD_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "MOTOR_FWD","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "MOTOR_REV","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "MOTOR_REV","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 정역 운전(인터락)\n입력(사람·센서 신호): FWD_PB(정방향 버튼), REV_PB(역방향 버튼), STOP(정지)\n출력(움직이는 것): MOTOR_FWD(정방향 모터), MOTOR_REV(역방향 모터)\n로직 잠금(소프트웨어): MOTOR_FWD 와 MOTOR_REV 는 동시에 켜지지 않습니다 (정/역 동시 구동 금지). ※ 안전이 필요하면 기계식/하드와이어 인터록도 함께 두세요.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: (FWD_PB가 켜져 있음, MOTOR_REV가 꺼져 있음, REV_PB가 꺼져 있음, STOP가 꺼져 있음) 또는 (MOTOR_FWD가 켜져 있음, MOTOR_REV가 꺼져 있음, REV_PB가 꺼져 있음, STOP가 꺼져 있음) 면 MOTOR_FWD가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 2: (FWD_PB가 꺼져 있음, MOTOR_FWD가 꺼져 있음, REV_PB가 켜져 있음, STOP가 꺼져 있음) 또는 (FWD_PB가 꺼져 있음, MOTOR_FWD가 꺼져 있음, MOTOR_REV가 켜져 있음, STOP가 꺼져 있음) 면 MOTOR_REV가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["FWD_PB","REV_PB","STOP"],"outputs": ["MOTOR_FWD","MOTOR_REV"],"samples": [{"t": 0,"i": {"FWD_PB": true,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 150,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 300,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 450,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 600,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 750,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": true,"MOTOR_REV": false}},{"t": 900,"i": {"FWD_PB": false,"REV_PB": true,"STOP": false},"o": {"MOTOR_FWD": false,"MOTOR_REV": true}},{"t": 1050,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": false,"MOTOR_REV": true}},{"t": 1200,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": false,"MOTOR_REV": true}},{"t": 1350,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": false,"MOTOR_REV": true}},{"t": 1500,"i": {"FWD_PB": false,"REV_PB": false,"STOP": false},"o": {"MOTOR_FWD": false,"MOTOR_REV": true}}]}},"car_wash": {"title": "세차 순차 제어","st": "// 타이머 T0 (TON, 1000ms)\nT0(IN := SOAP, PT := T#1s);\n// 타이머 T1 (TON, 1000ms)\nT1(IN := RINSE, PT := T#1s);\n// 타이머 T2 (TON, 1000ms)\nT2(IN := DRY, PT := T#1s);\n\nSOAP := ((START AND NOT STOP AND NOT SOAP AND NOT RINSE AND NOT DRY) OR SOAP) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nRINSE := ((T0.Q AND NOT STOP) OR RINSE) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRY := ((T1.Q AND NOT STOP) OR DRY) AND NOT ((STOP) OR (T2.Q));","ladder": {"title": "세차 순차 제어","rungs": [{"comment": "타이머 T0 (TON, 1000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "SOAP","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T0","address": "","description": "T#1s"}]},{"comment": "타이머 T1 (TON, 1000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "RINSE","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T1","address": "","description": "T#1s"}]},{"comment": "타이머 T2 (TON, 1000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "DRY","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T2","address": "","description": "T#1s"}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "DRY","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "RINSE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SOAP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "START","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "SOAP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "SOAP","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "RINSE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "RINSE","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "DRY","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "DRY","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 세차 순차 제어\n입력(사람·센서 신호): START(기동), STOP(정지)\n출력(움직이는 것): SOAP(1단계), RINSE(2단계), DRY(3단계)\n타이머 T0: 조건이 유지되면 1초 뒤 신호를 냅니다.\n타이머 T1: 조건이 유지되면 1초 뒤 신호를 냅니다.\n타이머 T2: 조건이 유지되면 1초 뒤 신호를 냅니다.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: SOAP가 켜져 있음 동안 타이머 T0(T#1s)가 동작합니다.\n- 렁 2: RINSE가 켜져 있음 동안 타이머 T1(T#1s)가 동작합니다.\n- 렁 3: DRY가 켜져 있음 동안 타이머 T2(T#1s)가 동작합니다.\n- 렁 4: (DRY가 꺼져 있음, RINSE가 꺼져 있음, SOAP가 꺼져 있음, START가 켜져 있음, STOP가 꺼져 있음, T0.Q가 꺼져 있음) 또는 (SOAP가 켜져 있음, STOP가 꺼져 있음, T0.Q가 꺼져 있음) 면 SOAP가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 5: (STOP가 꺼져 있음, T0.Q가 켜져 있음, T1.Q가 꺼져 있음) 또는 (RINSE가 켜져 있음, STOP가 꺼져 있음, T1.Q가 꺼져 있음) 면 RINSE가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 6: (STOP가 꺼져 있음, T1.Q가 켜져 있음, T2.Q가 꺼져 있음) 또는 (DRY가 켜져 있음, STOP가 꺼져 있음, T2.Q가 꺼져 있음) 면 DRY가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["START","STOP"],"outputs": ["SOAP","RINSE","DRY"],"samples": [{"t": 0,"i": {"START": true,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 150,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 300,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 450,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 600,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 750,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 900,"i": {"START": false,"STOP": false},"o": {"SOAP": true,"RINSE": false,"DRY": false}},{"t": 1050,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1200,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1350,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1500,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1650,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1800,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 1950,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": true,"DRY": false}},{"t": 2100,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 2250,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 2400,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 2550,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 2700,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 2850,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 3000,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": true}},{"t": 3150,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": false}},{"t": 3300,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": false}},{"t": 3450,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": false}},{"t": 3600,"i": {"START": false,"STOP": false},"o": {"SOAP": false,"RINSE": false,"DRY": false}}]}},"count_eject": {"title": "부품 카운터(10개 배출)","st": "// 카운터 C1 (CTU, PV=10)\nC1(CU := PART_SENSOR, R := RESET_PB, PV := 10);\n\nEJECT := ((C1.Q AND NOT RESET_PB) OR EJECT) AND NOT ((RESET_PB));","ladder": {"title": "부품 카운터(10개 배출)","rungs": [{"comment": "카운터 C1 (CTU, PV=10)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "PART_SENSOR","address": "","description": ""}]}],"outputs": [{"element_type": "COUNTER","symbol": "C1","address": "","description": "10"}]},{"comment": "C1 리셋","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "RESET_PB","address": "","description": ""}]}],"outputs": [{"element_type": "COIL_RESET","symbol": "C1","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "C1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "RESET_PB","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "EJECT","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "RESET_PB","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "EJECT","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 부품 카운터(10개 배출)\n입력(사람·센서 신호): PART_SENSOR(부품 감지), RESET_PB(리셋)\n출력(움직이는 것): EJECT(배출)\n카운터 C1: 신호를 10번 세면 완료됩니다.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: PART_SENSOR가 켜져 있음 마다 카운터 C1가 1씩 셉니다.\n- 렁 2: RESET_PB가 켜져 있음 면 C1가 켜집니다.\n- 렁 3: (C1.Q가 켜져 있음, RESET_PB가 꺼져 있음) 또는 (EJECT가 켜져 있음, RESET_PB가 꺼져 있음) 면 EJECT가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["PART_SENSOR","RESET_PB"],"outputs": ["EJECT"],"samples": [{"t": 0,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 200,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 400,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 1000,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 1200,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 1400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 1600,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 1800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 2000,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 2200,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 2400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 2600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 2800,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 3000,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 3200,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 3400,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 3600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 3800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 4000,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 4200,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 4400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 4600,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 4800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 5000,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 5200,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": false}},{"t": 5400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 5600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 5800,"i": {"PART_SENSOR": true,"RESET_PB": false},"o": {"EJECT": true}},{"t": 6000,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": true}},{"t": 6200,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": true}},{"t": 6400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": true}},{"t": 6600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": true}},{"t": 6800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": true}},{"t": 7000,"i": {"PART_SENSOR": false,"RESET_PB": true},"o": {"EJECT": false}},{"t": 7200,"i": {"PART_SENSOR": false,"RESET_PB": true},"o": {"EJECT": false}},{"t": 7400,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 7600,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 7800,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}},{"t": 8000,"i": {"PART_SENSOR": false,"RESET_PB": false},"o": {"EJECT": false}}]}},"conveyor_divert": {"title": "컨베이어 분기(A/B 게이트 인터락)","st": "GATE_A := ((SEL_A AND NOT SEL_B AND NOT DIV_STOP) OR GATE_A) AND NOT ((DIV_STOP OR SEL_B)) AND NOT GATE_B;\nGATE_B := ((SEL_B AND NOT SEL_A AND NOT DIV_STOP) OR GATE_B) AND NOT ((DIV_STOP OR SEL_A)) AND NOT GATE_A;","ladder": {"title": "컨베이어 분기(A/B 게이트 인터락)","rungs": [{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "DIV_STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "GATE_B","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "SEL_A","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SEL_B","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "DIV_STOP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "GATE_A","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "GATE_B","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SEL_B","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "GATE_A","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "DIV_STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "GATE_A","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SEL_A","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "SEL_B","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "DIV_STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "GATE_A","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "GATE_B","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SEL_A","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "GATE_B","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 컨베이어 분기(A/B 게이트 인터락)\n입력(사람·센서 신호): SEL_A(A 라인 선택), SEL_B(B 라인 선택), DIV_STOP(정지)\n출력(움직이는 것): GATE_A(A 분기 게이트), GATE_B(B 분기 게이트)\n로직 잠금(소프트웨어): GATE_A 와 GATE_B 는 동시에 켜지지 않습니다 (A/B 분기 게이트 동시 작동 금지). ※ 안전이 필요하면 기계식/하드와이어 인터록도 함께 두세요.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: (DIV_STOP가 꺼져 있음, GATE_B가 꺼져 있음, SEL_A가 켜져 있음, SEL_B가 꺼져 있음) 또는 (DIV_STOP가 꺼져 있음, GATE_A가 켜져 있음, GATE_B가 꺼져 있음, SEL_B가 꺼져 있음) 면 GATE_A가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 2: (DIV_STOP가 꺼져 있음, GATE_A가 꺼져 있음, SEL_A가 꺼져 있음, SEL_B가 켜져 있음) 또는 (DIV_STOP가 꺼져 있음, GATE_A가 꺼져 있음, GATE_B가 켜져 있음, SEL_A가 꺼져 있음) 면 GATE_B가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["DIV_STOP","SEL_A","SEL_B"],"outputs": ["GATE_A","GATE_B"],"samples": [{"t": 0,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 200,"i": {"DIV_STOP": false,"SEL_A": true,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 400,"i": {"DIV_STOP": false,"SEL_A": true,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 1000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 1200,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 1400,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 1600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 1800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": true,"GATE_B": false}},{"t": 2000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": true},"o": {"GATE_A": false,"GATE_B": true}},{"t": 2200,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": true},"o": {"GATE_A": false,"GATE_B": true}},{"t": 2400,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 2600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 2800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 3000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 3200,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 3400,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 3600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 3800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 4000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": true}},{"t": 4200,"i": {"DIV_STOP": true,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 4400,"i": {"DIV_STOP": true,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 4600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 4800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 5000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 5200,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 5400,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 5600,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 5800,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}},{"t": 6000,"i": {"DIV_STOP": false,"SEL_A": false,"SEL_B": false},"o": {"GATE_A": false,"GATE_B": false}}]}},"weld_cell": {"title": "용접 셀 사이클(클램프→용접→해제)","st": "// 타이머 T0 (TON, 3000ms)\nT0(IN := CLAMP, PT := T#3s);\n// 타이머 T1 (TON, 5000ms)\nT1(IN := WELD, PT := T#5s);\n// 타이머 T2 (TON, 3000ms)\nT2(IN := UNCLAMP, PT := T#3s);\n\nCLAMP := ((WELD_START AND NOT WELD_STOP AND NOT CLAMP AND NOT WELD AND NOT UNCLAMP) OR CLAMP) AND NOT ((WELD_STOP) OR (T0.Q AND NOT WELD_STOP));\nWELD := ((T0.Q AND NOT WELD_STOP) OR WELD) AND NOT ((WELD_STOP) OR (T1.Q AND NOT WELD_STOP));\nUNCLAMP := ((T1.Q AND NOT WELD_STOP) OR UNCLAMP) AND NOT ((WELD_STOP) OR (T2.Q));","ladder": {"title": "용접 셀 사이클(클램프→용접→해제)","rungs": [{"comment": "타이머 T0 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "CLAMP","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T0","address": "","description": "T#3s"}]},{"comment": "타이머 T1 (TON, 5000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "WELD","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T1","address": "","description": "T#5s"}]},{"comment": "타이머 T2 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "UNCLAMP","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T2","address": "","description": "T#3s"}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "CLAMP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "UNCLAMP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "WELD_START","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "CLAMP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "CLAMP","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "WELD","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "WELD","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "UNCLAMP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "WELD_STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "UNCLAMP","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 용접 셀 사이클(클램프→용접→해제)\n입력(사람·센서 신호): WELD_START(기동), WELD_STOP(정지)\n출력(움직이는 것): CLAMP(1단계), WELD(2단계), UNCLAMP(3단계)\n타이머 T0: 조건이 유지되면 3초 뒤 신호를 냅니다.\n타이머 T1: 조건이 유지되면 5초 뒤 신호를 냅니다.\n타이머 T2: 조건이 유지되면 3초 뒤 신호를 냅니다.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: CLAMP가 켜져 있음 동안 타이머 T0(T#3s)가 동작합니다.\n- 렁 2: WELD가 켜져 있음 동안 타이머 T1(T#5s)가 동작합니다.\n- 렁 3: UNCLAMP가 켜져 있음 동안 타이머 T2(T#3s)가 동작합니다.\n- 렁 4: (CLAMP가 꺼져 있음, T0.Q가 꺼져 있음, UNCLAMP가 꺼져 있음, WELD가 꺼져 있음, WELD_START가 켜져 있음, WELD_STOP가 꺼져 있음) 또는 (CLAMP가 켜져 있음, T0.Q가 꺼져 있음, WELD_STOP가 꺼져 있음) 면 CLAMP가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 5: (T0.Q가 켜져 있음, T1.Q가 꺼져 있음, WELD_STOP가 꺼져 있음) 또는 (T1.Q가 꺼져 있음, WELD가 켜져 있음, WELD_STOP가 꺼져 있음) 면 WELD가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 6: (T1.Q가 켜져 있음, T2.Q가 꺼져 있음, WELD_STOP가 꺼져 있음) 또는 (T2.Q가 꺼져 있음, UNCLAMP가 켜져 있음, WELD_STOP가 꺼져 있음) 면 UNCLAMP가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["WELD_START","WELD_STOP"],"outputs": ["CLAMP","WELD","UNCLAMP"],"samples": [{"t": 0,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": false}},{"t": 400,"i": {"WELD_START": true,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 1200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 1600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 2000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 2400,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 2800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 3200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 3600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": true,"WELD": false,"UNCLAMP": false}},{"t": 4000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 4400,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 4800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 5200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 5600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 6000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 6400,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 6800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 7200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 7600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 8000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 8400,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 8800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 9200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": true,"UNCLAMP": false}},{"t": 9600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 10000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 10400,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 10800,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 11200,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 11600,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}},{"t": 12000,"i": {"WELD_START": false,"WELD_STOP": false},"o": {"CLAMP": false,"WELD": false,"UNCLAMP": true}}]}},"batch_fill_mix_drain": {"title": "배치 충전/교반/배출","st": "// 타이머 T0 (TON, 8000ms)\nT0(IN := FILL_VALVE, PT := T#8s);\n// 타이머 T1 (TON, 10000ms)\nT1(IN := MIXER, PT := T#10s);\n// 타이머 T2 (TON, 6000ms)\nT2(IN := DRAIN_VALVE, PT := T#6s);\n\nFILL_VALVE := ((START AND NOT STOP AND NOT FILL_VALVE AND NOT MIXER AND NOT DRAIN_VALVE) OR FILL_VALVE) AND NOT ((STOP) OR (T0.Q AND NOT STOP));\nMIXER := ((T0.Q AND NOT STOP) OR MIXER) AND NOT ((STOP) OR (T1.Q AND NOT STOP));\nDRAIN_VALVE := ((T1.Q AND NOT STOP) OR DRAIN_VALVE) AND NOT ((STOP) OR (T2.Q));","ladder": {"title": "배치 충전/교반/배출","rungs": [{"comment": "타이머 T0 (TON, 8000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "FILL_VALVE","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T0","address": "","description": "T#8s"}]},{"comment": "타이머 T1 (TON, 10000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "MIXER","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T1","address": "","description": "T#10s"}]},{"comment": "타이머 T2 (TON, 6000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "DRAIN_VALVE","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T2","address": "","description": "T#6s"}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "DRAIN_VALVE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "FILL_VALVE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "MIXER","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "START","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "FILL_VALVE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T0.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "FILL_VALVE","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "MIXER","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T1.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "MIXER","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "DRAIN_VALVE","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "DRAIN_VALVE","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 배치 충전/교반/배출\n입력(사람·센서 신호): START(기동), STOP(정지)\n출력(움직이는 것): FILL_VALVE(1단계), MIXER(2단계), DRAIN_VALVE(3단계)\n타이머 T0: 조건이 유지되면 8초 뒤 신호를 냅니다.\n타이머 T1: 조건이 유지되면 10초 뒤 신호를 냅니다.\n타이머 T2: 조건이 유지되면 6초 뒤 신호를 냅니다.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: FILL_VALVE가 켜져 있음 동안 타이머 T0(T#8s)가 동작합니다.\n- 렁 2: MIXER가 켜져 있음 동안 타이머 T1(T#10s)가 동작합니다.\n- 렁 3: DRAIN_VALVE가 켜져 있음 동안 타이머 T2(T#6s)가 동작합니다.\n- 렁 4: (DRAIN_VALVE가 꺼져 있음, FILL_VALVE가 꺼져 있음, MIXER가 꺼져 있음, START가 켜져 있음, STOP가 꺼져 있음, T0.Q가 꺼져 있음) 또는 (FILL_VALVE가 켜져 있음, STOP가 꺼져 있음, T0.Q가 꺼져 있음) 면 FILL_VALVE가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 5: (STOP가 꺼져 있음, T0.Q가 켜져 있음, T1.Q가 꺼져 있음) 또는 (MIXER가 켜져 있음, STOP가 꺼져 있음, T1.Q가 꺼져 있음) 면 MIXER가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 6: (STOP가 꺼져 있음, T1.Q가 켜져 있음, T2.Q가 꺼져 있음) 또는 (DRAIN_VALVE가 켜져 있음, STOP가 꺼져 있음, T2.Q가 꺼져 있음) 면 DRAIN_VALVE가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["START","STOP"],"outputs": ["FILL_VALVE","MIXER","DRAIN_VALVE"],"samples": [{"t": 0,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 1000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 2000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 3000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 4000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 5000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 6000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 7000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 8000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 9000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 10000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 11000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 12000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 13000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 14000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 15000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 16000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 17000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 18000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 19000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 20000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 21000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 22000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 23000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 24000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 25000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}},{"t": 26000,"i": {"START": false,"STOP": false},"o": {"FILL_VALVE": false,"MIXER": false,"DRAIN_VALVE": false}}]}},"duty_standby": {"title": "펌프 리드/래그(듀티-스탠바이)","st": "PUMP_LEAD := ((DEMAND AND NOT SYS_STOP) OR (NOT HIGH_DEMAND) OR PUMP_LEAD) AND NOT ((SYS_STOP) OR (HIGH_DEMAND AND NOT SYS_STOP));\nPUMP_LAG := ((HIGH_DEMAND AND NOT SYS_STOP) OR PUMP_LAG) AND NOT ((NOT HIGH_DEMAND));","ladder": {"title": "펌프 리드/래그(듀티-스탠바이)","rungs": [{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "DEMAND","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "HIGH_DEMAND","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SYS_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "HIGH_DEMAND","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SYS_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "HIGH_DEMAND","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "PUMP_LEAD","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SYS_STOP","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "PUMP_LEAD","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "HIGH_DEMAND","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "SYS_STOP","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "HIGH_DEMAND","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "PUMP_LAG","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "PUMP_LAG","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 펌프 리드/래그(듀티-스탠바이)\n입력(사람·센서 신호): DEMAND(수요), HIGH_DEMAND(고수요), SYS_STOP(정지)\n출력(움직이는 것): PUMP_LEAD(리드 펌프), PUMP_LAG(래그 펌프)\n\n## 동작 설명 (한 줄씩)\n- 렁 1: (DEMAND가 켜져 있음, HIGH_DEMAND가 꺼져 있음, SYS_STOP가 꺼져 있음) 또는 (HIGH_DEMAND가 꺼져 있음, SYS_STOP가 꺼져 있음) 또는 (HIGH_DEMAND가 꺼져 있음, PUMP_LEAD가 켜져 있음, SYS_STOP가 꺼져 있음) 면 PUMP_LEAD가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 2: (HIGH_DEMAND가 켜져 있음, SYS_STOP가 꺼져 있음) 또는 (HIGH_DEMAND가 켜져 있음, PUMP_LAG가 켜져 있음) 면 PUMP_LAG가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["DEMAND","HIGH_DEMAND","SYS_STOP"],"outputs": ["PUMP_LEAD","PUMP_LAG"],"samples": [{"t": 0,"i": {"DEMAND": false,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 200,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 400,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 600,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 800,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 1000,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 1200,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 1400,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 1600,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 1800,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 2000,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 2200,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 2400,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 2600,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 2800,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 3000,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 3200,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 3400,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 3600,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 3800,"i": {"DEMAND": true,"HIGH_DEMAND": true,"SYS_STOP": false},"o": {"PUMP_LEAD": false,"PUMP_LAG": true}},{"t": 4000,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 4200,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 4400,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 4600,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 4800,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 5000,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": true},"o": {"PUMP_LEAD": false,"PUMP_LAG": false}},{"t": 5200,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": true},"o": {"PUMP_LEAD": false,"PUMP_LAG": false}},{"t": 5400,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 5600,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 5800,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}},{"t": 6000,"i": {"DEMAND": true,"HIGH_DEMAND": false,"SYS_STOP": false},"o": {"PUMP_LEAD": true,"PUMP_LAG": false}}]}},"cascade_conveyor": {"title": "다단 컨베이어 순차 기동·정지(하류기동/상류정지)","st": "// 타이머 T0 (TON, 3000ms)\nT0(IN := CONV_DOWN, PT := T#3s);\n// 타이머 T1 (TON, 3000ms)\nT1(IN := CONV_MID, PT := T#3s);\n// 타이머 T2 (TON, 3000ms)\nT2(IN := STOP_PB AND CONV_UP, PT := T#3s);\n// 타이머 T3 (TON, 3000ms)\nT3(IN := STOP_PB AND CONV_MID, PT := T#3s);\n\nCONV_DOWN := ((START_PB AND NOT STOP_PB) OR (T0.Q AND NOT STOP_PB) OR (T1.Q AND NOT STOP_PB) OR (STOP_PB) OR (STOP_PB) OR (T2.Q) OR CONV_DOWN) AND NOT ((STOP_PB) OR (T3.Q));\nCONV_MID := ((T0.Q AND NOT STOP_PB) OR (T1.Q AND NOT STOP_PB) OR (STOP_PB) OR CONV_MID) AND NOT ((STOP_PB) OR (T2.Q));\nCONV_UP := ((T1.Q AND NOT STOP_PB) OR CONV_UP) AND NOT ((STOP_PB));","ladder": {"title": "다단 컨베이어 순차 기동·정지(하류기동/상류정지)","rungs": [{"comment": "타이머 T0 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_DOWN","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T0","address": "","description": "T#3s"}]},{"comment": "타이머 T1 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_MID","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T1","address": "","description": "T#3s"}]},{"comment": "타이머 T2 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_UP","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "STOP_PB","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T2","address": "","description": "T#3s"}]},{"comment": "타이머 T3 (TON, 3000ms)","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_MID","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "STOP_PB","address": "","description": ""}]}],"outputs": [{"element_type": "TIMER","symbol": "T3","address": "","description": "T#3s"}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NO","symbol": "START_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T3.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T3.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T3.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T2.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T3.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_DOWN","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T3.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "CONV_DOWN","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T0.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_MID","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "T2.Q","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "CONV_MID","address": "","description": ""}]},{"comment": "","input_branches": [{"elements": [{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""},{"element_type": "CONTACT_NO","symbol": "T1.Q","address": "","description": ""}]},{"elements": [{"element_type": "CONTACT_NO","symbol": "CONV_UP","address": "","description": ""},{"element_type": "CONTACT_NC","symbol": "STOP_PB","address": "","description": ""}]}],"outputs": [{"element_type": "COIL","symbol": "CONV_UP","address": "","description": ""}]}]},"explain": "## 이 장치는 무엇을 하나요\n■ 다단 컨베이어 순차 기동·정지(하류기동/상류정지)\n입력(사람·센서 신호): START_PB(기동), STOP_PB(정지)\n출력(움직이는 것): CONV_DOWN(하류 컨베이어), CONV_MID(중간 컨베이어), CONV_UP(상류 컨베이어)\n타이머 T0: 조건이 유지되면 3초 뒤 신호를 냅니다.\n타이머 T1: 조건이 유지되면 3초 뒤 신호를 냅니다.\n타이머 T2: 조건이 유지되면 3초 뒤 신호를 냅니다.\n타이머 T3: 조건이 유지되면 3초 뒤 신호를 냅니다.\n\n## 동작 설명 (한 줄씩)\n- 렁 1: CONV_DOWN가 켜져 있음 동안 타이머 T0(T#3s)가 동작합니다.\n- 렁 2: CONV_MID가 켜져 있음 동안 타이머 T1(T#3s)가 동작합니다.\n- 렁 3: CONV_UP가 켜져 있음, STOP_PB가 켜져 있음 동안 타이머 T2(T#3s)가 동작합니다.\n- 렁 4: CONV_MID가 켜져 있음, STOP_PB가 켜져 있음 동안 타이머 T3(T#3s)가 동작합니다.\n- 렁 5: (START_PB가 켜져 있음, STOP_PB가 꺼져 있음, T3.Q가 꺼져 있음) 또는 (STOP_PB가 꺼져 있음, T0.Q가 켜져 있음, T3.Q가 꺼져 있음) 또는 (STOP_PB가 꺼져 있음, T1.Q가 켜져 있음, T3.Q가 꺼져 있음) 또는 (STOP_PB가 꺼져 있음, T2.Q가 켜져 있음, T3.Q가 꺼져 있음) 또는 (CONV_DOWN가 켜져 있음, STOP_PB가 꺼져 있음, T3.Q가 꺼져 있음) 면 CONV_DOWN가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 6: (STOP_PB가 꺼져 있음, T0.Q가 켜져 있음, T2.Q가 꺼져 있음) 또는 (STOP_PB가 꺼져 있음, T1.Q가 켜져 있음, T2.Q가 꺼져 있음) 또는 (CONV_MID가 켜져 있음, STOP_PB가 꺼져 있음, T2.Q가 꺼져 있음) 면 CONV_MID가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n- 렁 7: (STOP_PB가 꺼져 있음, T1.Q가 켜져 있음) 또는 (CONV_UP가 켜져 있음, STOP_PB가 꺼져 있음) 면 CONV_UP가 켜집니다. (자기유지: 한 번 켜지면 정지 조건 전까지 유지)\n\n## 안전·검증\n- ✅ 로직 검사 통과 — 이중 코일·인터록 로직·도달성에 문제가 없습니다.\n- ℹ️ 이는 로직 검사이며 기능 안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어로 구현하세요.","passed": true,"sim": {"inputs": ["START_PB","STOP_PB"],"outputs": ["CONV_DOWN","CONV_MID","CONV_UP"],"samples": [{"t": 0,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 500,"i": {"START_PB": true,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 1000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 1500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 2000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 2500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 3000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 3500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": false,"CONV_UP": false}},{"t": 4000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 4500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 5000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 5500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 6000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 6500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 7000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": false}},{"t": 7500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 8000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 8500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 9000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 9500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 10000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 10500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": true,"CONV_MID": true,"CONV_UP": true}},{"t": 11000,"i": {"START_PB": false,"STOP_PB": true},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 11500,"i": {"START_PB": false,"STOP_PB": true},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 12000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 12500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 13000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 13500,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}},{"t": 14000,"i": {"START_PB": false,"STOP_PB": false},"o": {"CONV_DOWN": false,"CONV_MID": false,"CONV_UP": false}}]}}};
-const tabs = document.getElementById("tabs");
 const ids = Object.keys(DEMO);
 
 function tg(sim){
@@ -1556,10 +1580,61 @@ function drawTrend(){
    메인 루프 — 센서 → 스캔 → 물리 → 렌더 → DOM(쓰로틀)
    ============================================================ */
 let cur=null,rafId=0,lastT=0,domT=0;
-function eff(sym){
-  for(const f of (cur.m.faults||[]))
-    if(f.type==="trip"&&f.sym===sym&&cur.faults[f.id])return false;
-  return cur.plc.val(sym);
+function effL(L,sym){
+  for(const f of (L.m.faults||[]))
+    if(f.type==="trip"&&f.sym===sym&&L.faults[f.id])return false;
+  return L.plc.val(sym);
+}
+function eff(sym){return effL(cur,sym);}
+const LINES={};
+const OV={motor_start_stop:"포장 컨베이어",fwd_rev:"이송 대차",car_wash:"세차 터널",
+  count_eject:"검수 카운트",conveyor_divert:"비전 분기",weld_cell:"용접 셀",
+  batch_fill_mix_drain:"배치 플랜트",duty_standby:"급수 펌프장",cascade_conveyor:"다단 반송"};
+
+/* ---- 자동 시연 오토파일럿: 라인별 가상 조작 시퀀스 ---- */
+const AUTO={
+ motor_start_stop(L){if(!L.plc.val("MOTOR"))return["START",0.3,2];},
+ fwd_rev(L){const st=L.sst;
+   if(st.anim>0)return null;
+   const f=L.plc.val("MOTOR_FWD"),r=L.plc.val("MOTOR_REV");
+   if(f||r){
+     if(st.carry&&st.pos>=12.4)return["STOP",0.3,1.5];
+     if(!st.carry&&st.pos<=2.1)return["STOP",0.3,1.5];
+     return null;}
+   if(st.carry)return["FWD_PB",0.3,1.5];
+   if(st.pos>2.15)return["REV_PB",0.3,1.5];
+   return null;},
+ car_wash(L){const on=["SOAP","RINSE","DRY"].some(x=>L.plc.val(x));
+   if(!on&&L.sst.carX<=-1.3&&!L.sst.exiting)return["START",0.4,3];},
+ count_eject(L){const c=L.plc.counters.C1;
+   if(c&&c.q)return["RESET_PB",0.4,4];},
+ conveyor_divert(L){if(!L.plc.val("GATE_A")&&!L.plc.val("GATE_B")&&L.sst.sel===0)return["SEL_A",0.3,2];},
+ weld_cell(L){const busy=["CLAMP","WELD","UNCLAMP"].some(x=>L.plc.val(x));
+   if(!busy&&L.sst.partOn)return["WELD_START",0.3,2];},
+ batch_fill_mix_drain(L){const busy=["FILL_VALVE","MIXER","DRAIN_VALVE"].some(x=>L.plc.val(x));
+   if(!busy&&!L.sst.exit)return["START",0.3,2];},
+ duty_standby(){return null;},
+ cascade_conveyor(L){if(L.sst.spd.every(v=>v<0.02)&&!L.plc.val("CONV_DOWN"))return["START_PB",0.4,6];}
+};
+function autopilot(L,dt){
+  if(!L.auto)return;
+  if(L.apPulse){L.apPulse.t-=dt;
+    if(L.apPulse.t<=0){L.plc.set(L.apPulse.sym,false);L.apPulse=null;}
+    return;}
+  L.apCool=(L.apCool||0)-dt;
+  if(L.apCool>0)return;
+  const a=AUTO[L.id]&&AUTO[L.id](L);
+  if(a){L.plc.set(a[0],true);L.apPulse={sym:a[0],t:a[1]};L.apCool=a[2]||1.5;}
+}
+function lineOEE(L){
+  const K=L.kpi,cfg=KPI[L.id]||{};
+  const elapsed=Math.max(0.001,(performance.now()-K.t0)/1000);
+  const mainSym=Object.keys(L.m.tags||{})[0];
+  const A=L.scene.avail?L.scene.avail(L.sst)
+    :(mainSym&&L.stats[mainSym]?Math.min(1,L.stats[mainSym].rt/elapsed):0);
+  const Pf=K.taktAvg&&cfg.tt?Math.min(1,cfg.tt/K.taktAvg):null;
+  const Q=L.scene.quality?L.scene.quality(L.sst):1;
+  return Pf===null?null:A*Pf*Q*100;
 }
 function drawScene(t){
   if(cvs.clientWidth!==view.W||cvs.clientHeight!==view.H)resize();
@@ -1630,13 +1705,6 @@ function updateDOM(r,dt,t){
   const K=cur.kpi, cfg=KPI[cur.id]||{unit:"개",w:null};
   const prodN=cur.scene.prod?cur.scene.prod(cur.sst):0;
   const nowMs=performance.now();
-  if(prodN>K.lastN){
-    if(K.lastDoneT!==null){
-      const tk=(nowMs-K.lastDoneT)/1000/(prodN-K.lastN);
-      K.takt=tk; K.taktAvg=K.taktAvg===null?tk:K.taktAvg*0.7+tk*0.3;
-    }
-    K.lastDoneT=nowMs; K.lastN=prodN;
-  }
   const elapsed=Math.max(0.001,(nowMs-K.t0)/1000);
   const mainSym=Object.keys(cur.m.tags||{})[0];
   const util=cur.scene.avail?cur.scene.avail(cur.sst)*100
@@ -1685,47 +1753,84 @@ function updateDOM(r,dt,t){
     document.getElementById("ladder").innerHTML=ladderLive(d.ladder,r.en,cur.plc,cur.m.addr);
   }
 }
+function simLine(L,dt,t){
+  const prev=cur; cur=L;
+  autopilot(L,dt);
+  if(L.scene.sense)L.scene.sense(L.sst,L.plc);
+  for(const f of (L.m.faults||[]))
+    if(f.type==="stuck_on"&&L.faults[f.id])L.plc.set(f.sym,true);
+  const r=L.plc.scan(dt);L.scanN++;
+  L.us=L.us?L.us*0.9+r.us*0.1:r.us;
+  const o={};L.d.sim.outputs.forEach(s2=>{o[s2]=effL(L,s2);
+    const stt=L.stats[s2];if(stt){if(o[s2]){stt.rt+=dt;if(!stt.prev)stt.starts++;}stt.prev=o[s2];}});
+  for(const sym of L.d.sim.outputs){
+    const on=o[sym];
+    if(on!==!!L.prevO[sym]){
+      const tg=L.m.tags[sym]?L.m.tags[sym].tag+" "+L.m.tags[sym].name:sym;
+      logEv(on?"info":"op",tg+(on?" 기동":" 정지"));
+      L.prevO[sym]=on;
+    }
+  }
+  for(const b of L.m.buttons){
+    const on=L.plc.val(b.sym);
+    if(on&&!L.prevI[b.sym]){
+      const auto=(L.m.autoInputs&&L.m.autoInputs[b.sym])||(L.apPulse&&L.apPulse.sym===b.sym)||L.auto;
+      logEv(b.c==="#c93c3c"?"warn":"op",(auto?"자동 시연: ":"조작: ")+b.label+" ("+b.sym+" ON)");
+    }
+    L.prevI[b.sym]=on;
+  }
+  for(const[sym,tm]of Object.entries(L.plc.timers)){
+    if(tm.q&&!L.prevQ[sym])logEv("info",sym+" 타이머 완료("+tm.preset+"s) — 단계 전환");
+    L.prevQ[sym]=tm.q;
+  }
+  for(const[sym,cn]of Object.entries(L.plc.counters)){
+    if(cn.q&&!L.prevQ[sym])logEv("warn",sym+" 카운트 "+cn.preset+" 도달 — 배출 작동");
+    L.prevQ[sym]=cn.q;
+  }
+  let kw=0;
+  for(const[sym,info]of Object.entries(L.m.tags||{}))
+    if(effL(L,sym))kw+=1.732*380*info.rated*0.85/1000;
+  L.kpi.kw=kw; L.kpi.kwh+=kw*dt/3600;
+  const prodN=L.scene.prod?L.scene.prod(L.sst):0;
+  const K=L.kpi, nowMs=performance.now();
+  if(prodN>K.lastN){
+    if(K.lastDoneT!==null){
+      const tk=(nowMs-K.lastDoneT)/1000/(prodN-K.lastN);
+      K.takt=tk; K.taktAvg=K.taktAvg===null?tk:K.taktAvg*0.7+tk*0.3;
+    }
+    K.lastDoneT=nowMs; K.lastN=prodN;
+  }
+  L.scene.tick(L.sst,o,dt);
+  cur=prev;
+  return r;
+}
 function loop(now){
   rafId=requestAnimationFrame(loop);
   const dt=Math.min((now-lastT)/1000,0.05);lastT=now;
-  if(cur.scene.sense)cur.scene.sense(cur.sst,cur.plc);
-  for(const f of (cur.m.faults||[]))
-    if(f.type==="stuck_on"&&cur.faults[f.id])cur.plc.set(f.sym,true);
-  const r=cur.plc.scan(dt);cur.scanN++;
-  cur.us=cur.us?cur.us*0.9+r.us*0.1:r.us;
-  const o={};cur.d.sim.outputs.forEach(s=>{o[s]=eff(s);
-    const stt=cur.stats[s];if(stt){if(o[s]){stt.rt+=dt;if(!stt.prev)stt.starts++;}stt.prev=o[s];}});
-  for(const sym of cur.d.sim.outputs){
-    const on=o[sym];/* 유효 출력(트립 반영) */
-    if(on!==!!cur.prevO[sym]){
-      const tg=cur.m.tags[sym]?cur.m.tags[sym].tag+" "+cur.m.tags[sym].name:sym;
-      logEv(on?"info":"op",tg+(on?" 기동":" 정지"));
-      cur.prevO[sym]=on;
-    }
+  let rActive=null;
+  for(const id of ids){
+    const r=simLine(LINES[id],dt,now/1000);
+    if(LINES[id]===cur)rActive=r;
   }
-  for(const b of cur.m.buttons){
-    const on=cur.plc.val(b.sym);
-    if(on&&!cur.prevI[b.sym]){
-      const auto=cur.m.autoInputs&&cur.m.autoInputs[b.sym];
-      logEv(b.c==="#c93c3c"?"warn":"op",(auto?"자동 입력: ":"조작: ")+b.label+" ("+b.sym+" ON)");
-    }
-    cur.prevI[b.sym]=on;
-  }
-  for(const[sym,tm]of Object.entries(cur.plc.timers)){
-    if(tm.q&&!cur.prevQ[sym])logEv("info",sym+" 타이머 완료("+tm.preset+"s) — 단계 전환");
-    cur.prevQ[sym]=tm.q;
-  }
-  for(const[sym,cn]of Object.entries(cur.plc.counters)){
-    if(cn.q&&!cur.prevQ[sym])logEv("warn",sym+" 카운트 "+cn.preset+" 도달 — 배출 작동");
-    cur.prevQ[sym]=cn.q;
-  }
-  let kw=0;
-  for(const[sym,info]of Object.entries(cur.m.tags||{}))
-    if(eff(sym))kw+=1.732*380*info.rated*0.85/1000;
-  cur.kpi.kw=kw; cur.kpi.kwh+=kw*dt/3600;
-  cur.scene.tick(cur.sst,o,dt);
   drawScene(now/1000);
-  if(now-domT>90){domT=now;updateDOM(r,dt,now/1000);}
+  if(now-domT>90){domT=now;updateDOM(rActive,dt,now/1000);updateOverview();}
+}
+function updateOverview(){
+  const el=document.getElementById("overview");if(!el)return;
+  el.innerHTML=ids.map(id=>{
+    const L=LINES[id];
+    const run=L.d.sim.outputs.some(s2=>effL(L,s2));
+    const trip=(L.m.faults||[]).some(f=>f.type==="trip"&&L.faults[f.id]);
+    const prodN=L.scene.prod?L.scene.prod(L.sst):0;
+    const oee=lineOEE(L);
+    const warns=L.log.filter(e=>e.lv==="warn").length;
+    return `<div class="ovc${id===cur.id?" act":""}" data-id="${id}">`+
+      `<div class="ovt"><span class="dot ${trip?"trip":run?"on-o":""}"></span>${OV[id]||id}</div>`+
+      `<div class="ovs"><span>생산 <b>${prodN}</b></span><span>OEE <b>${oee===null?"—":Math.round(oee)+"%"}</b></span><span>경보 <b class="${warns?"w":""}">${warns}</b></span></div>`+
+      (trip?'<div class="ovw">⚠ 설비 트립</div>':"")+`</div>`;
+  }).join("");
+  el.querySelectorAll(".ovc").forEach(c=>c.onclick=()=>{
+    if(c.dataset.id!==cur.id)show(c.dataset.id);});
 }
 
 /* ---- 레시피 표시 ---- */
@@ -1738,21 +1843,30 @@ function fbRow(s,m,kind){
    `<td class="mut">${m.addr[s]||""}</td><td colspan="2"><div class="tbar"><i id="bar_${s}"></i></div>`+
    `<span class="mut" id="bt_${s}" style="font-size:11px"></span></td></tr>`;
 }
-function show(id){
+function makeLine(id){
   const d=DEMO[id],m=META[id];
-  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.id===id));
-  cur={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
+  const L={id,d,m,plc:makePLC(d.ladder),scene:SCENES[m.scene],scanN:0,us:0,lastKey:"",stats:{},
     kpi:{t0:performance.now(),lastN:0,lastDoneT:null,takt:null,taktAvg:null,kw:0,kwh:0},
-    log:[],trend:[],lastTrendT:0,prevO:{},prevI:{},prevQ:{},taktAlarm:false,speedF:1,ngRate:8,demandF:1,faults:{}};
-  cur.sst=cur.scene.init();
-  d.sim.outputs.forEach(s=>cur.stats[s]={rt:0,starts:0,prev:false});
-  logEv("info","라인 투입 — "+d.title);
+    log:[],trend:[],lastTrendT:0,prevO:{},prevI:{},prevQ:{},taktAlarm:false,
+    speedF:1,ngRate:8,demandF:1,faults:{},auto:true,apPulse:null,apCool:Math.random()*2};
+  L.sst=L.scene.init();
+  d.sim.outputs.forEach(s2=>L.stats[s2]={rt:0,starts:0,prev:false});
+  L.log.unshift({lv:"info",msg:"라인 투입 — "+d.title,t:"T+0.0s"});
+  return L;
+}
+function show(id){
+  cur=LINES[id];
+  const d=cur.d,m=cur.m;
   const ctrl=document.getElementById("ctrl");ctrl.innerHTML="";
   m.buttons.forEach(b=>{
     const w=document.createElement("div");w.className="pbw";
     const btn=document.createElement("button");btn.className="pb";btn.textContent=b.label;
     btn.style.background=`radial-gradient(circle at 35% 28%, ${shade(b.c,1.25)}, ${shade(b.c,0.55)})`;
-    const dn=e=>{e.preventDefault();btn.classList.add("down");cur.plc.set(b.sym,true);};
+    const dn=e=>{e.preventDefault();btn.classList.add("down");
+      if(cur.auto){cur.auto=false;
+        const ab2=document.getElementById("autob");if(ab2)ab2.classList.remove("on");
+        logEv("op","수동 조작 감지 — 자동 시연 해제");}
+      cur.plc.set(b.sym,true);};
     const up=()=>{btn.classList.remove("down");cur.plc.set(b.sym,false);};
     btn.addEventListener("pointerdown",dn);
     btn.addEventListener("pointerup",up);
@@ -1762,9 +1876,16 @@ function show(id){
     const lab=document.createElement("small");lab.textContent=`${b.sym} · ${m.addr[b.sym]}`;
     w.append(btn,lab);ctrl.appendChild(w);
   });
+  const ab=document.createElement("button");
+  ab.id="autob";ab.className="fbtn abtn"+(cur.auto?" on":"");ab.textContent="▶ 자동 시연";
+  ab.onclick=()=>{cur.auto=!cur.auto;ab.classList.toggle("on",cur.auto);
+    logEv("op","자동 시연 "+(cur.auto?"ON":"OFF"));};
+  const aw=document.createElement("div");aw.className="sld";aw.appendChild(ab);
+  ctrl.appendChild(aw);
   if(cur.scene.speedCtl){
     const w=document.createElement("div");w.className="sld";
-    w.innerHTML='<small>생산속도 <b id="spdv">100%</b></small><input id="spdr" type="range" min="50" max="150" value="100"/>';
+    const v0=Math.round(cur.speedF*100);
+    w.innerHTML=`<small>생산속도 <b id="spdv">${v0}%</b></small><input id="spdr" type="range" min="50" max="150" value="${v0}"/>`;
     ctrl.appendChild(w);
     w.querySelector("#spdr").addEventListener("input",e=>{
       cur.speedF=+e.target.value/100;
@@ -1774,7 +1895,7 @@ function show(id){
   }
   if(cur.scene.ngCtl){
     const w=document.createElement("div");w.className="sld";
-    w.innerHTML='<small>불량 주입률 <b id="ngv">8%</b></small><input id="ngr" type="range" min="0" max="25" value="8"/>';
+    w.innerHTML=`<small>불량 주입률 <b id="ngv">${cur.ngRate}%</b></small><input id="ngr" type="range" min="0" max="25" value="${cur.ngRate}"/>`;
     ctrl.appendChild(w);
     w.querySelector("#ngr").addEventListener("input",e=>{
       cur.ngRate=+e.target.value;
@@ -1784,7 +1905,8 @@ function show(id){
   }
   if(cur.scene.demandCtl){
     const w=document.createElement("div");w.className="sld";
-    w.innerHTML='<small>수요 부하 <b id="dmv">100%</b></small><input id="dmr" type="range" min="20" max="170" value="100"/>';
+    const v0=Math.round(cur.demandF*100);
+    w.innerHTML=`<small>수요 부하 <b id="dmv">${v0}%</b></small><input id="dmr" type="range" min="20" max="170" value="${v0}"/>`;
     ctrl.appendChild(w);
     w.querySelector("#dmr").addEventListener("input",e=>{
       cur.demandF=+e.target.value/100;
@@ -1797,7 +1919,8 @@ function show(id){
     const lb=document.createElement("small");lb.textContent="고장 주입 — 디지털트윈 내고장 테스트";w.appendChild(lb);
     const row=document.createElement("div");row.style.cssText="display:flex;gap:6px;flex-wrap:wrap";
     cur.m.faults.forEach(f=>{
-      const fb=document.createElement("button");fb.className="fbtn";fb.textContent=f.label;
+      const fb=document.createElement("button");
+      fb.className="fbtn"+(cur.faults[f.id]?" on":"");fb.textContent=f.label;
       fb.onclick=()=>{cur.faults[f.id]=!cur.faults[f.id];fb.classList.toggle("on",!!cur.faults[f.id]);
         logEv("warn",f.label+(cur.faults[f.id]?" — 고장 발생(주입)":" — 복구 완료"));};
       row.appendChild(fb);
@@ -1806,14 +1929,14 @@ function show(id){
   }
   const hint=document.createElement("div");hint.className="hint";
   hint.textContent=m.autoInputs
-    ?"센서 입력은 라인 위 부품이 실제로 만들어냅니다 — 버튼은 누르는 동안만 ON."
-    :"실제 푸시버튼처럼 누르는 동안만 ON — 손을 떼도 도는 건 래더의 자기유지 회로입니다.";
+    ?"센서 입력은 라인 위 부품/수위가 실제로 만들어냅니다. 버튼을 누르면 자동 시연이 꺼지고 수동 모드가 됩니다."
+    :"자동 시연이 라인을 운전 중입니다. 버튼을 누르면 즉시 수동 모드 — 자기유지는 래더가 합니다.";
   ctrl.appendChild(hint);
   document.getElementById("iotable").innerHTML=
-    d.sim.inputs.map(s=>ioRow(s,(m.autoInputs&&m.autoInputs[s])||"입력 P",m)).join("")+
-    d.sim.outputs.map(s=>ioRow(s,"출력 P",m)).join("")+
-    Object.keys(cur.plc.timers).map(s=>fbRow(s,m)).join("")+
-    Object.keys(cur.plc.counters).map(s=>fbRow(s,m)).join("");
+    d.sim.inputs.map(s2=>ioRow(s2,(m.autoInputs&&m.autoInputs[s2])||"입력 P",m)).join("")+
+    d.sim.outputs.map(s2=>ioRow(s2,"출력 P",m)).join("")+
+    Object.keys(cur.plc.timers).map(s2=>fbRow(s2,m)).join("")+
+    Object.keys(cur.plc.counters).map(s2=>fbRow(s2,m)).join("");
   document.getElementById("st").textContent=d.st;
   document.getElementById("explain").textContent=d.explain;
   document.getElementById("sim").innerHTML=tg(d.sim);
@@ -1821,11 +1944,51 @@ function show(id){
     `<h4>이 설계의 검증 결과 — 엔진이 출하 전 자동 수행</h4><ul>${m.verify.map(v=>`<li>${v}</li>`).join("")}</ul>`;
   document.getElementById("safety").textContent=
     "⚠️ 안전 경계: 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061). 3D 설비는 디지털트윈 시각화입니다.";
+  cur.lastKey="";
   document.getElementById("ladder").innerHTML=ladderLive(d.ladder,null,cur.plc,m.addr);
+  updateOverview();
   if(!rafId){resize();lastT=performance.now();rafId=requestAnimationFrame(loop);}
 }
-ids.forEach(id=>{const b=document.createElement("button");b.dataset.id=id;b.textContent=DEMO[id].title;b.onclick=()=>show(id);tabs.appendChild(b);});
+ids.forEach(id=>{LINES[id]=makeLine(id);});
 show(ids[0]);
+
+/* ---- 알람 CSV·운전 리포트 내보내기 ---- */
+function dl(name,text,mime){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type:mime||"text/plain"}));
+  a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);
+}
+document.getElementById("csvbtn").onclick=()=>{
+  const rows=[["time","level","message"],...cur.log.slice().reverse().map(e=>[e.t,e.lv,e.msg])];
+  dl(cur.id+"_alarms.csv","\uFEFF"+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(",")).join("\n"),"text/csv");
+  logEv("op","알람 이력 CSV 내보내기");
+};
+document.getElementById("rptbtn").onclick=()=>{
+  const L=cur,K=L.kpi,cfg=KPI[L.id]||{};
+  const oee=lineOEE(L);
+  const out=[
+   "# 운전 리포트 — "+L.d.title,
+   "생성: "+new Date().toLocaleString("ko-KR"),
+   "",
+   "## KPI",
+   "- 생산수량: "+(L.scene.prod?L.scene.prod(L.sst):0)+" "+cfg.unit,
+   "- 택타임: "+(K.taktAvg?K.taktAvg.toFixed(2)+" s (목표 "+cfg.tt+" s)":"미측정"),
+   "- OEE: "+(oee===null?"미측정":oee.toFixed(0)+"%"),
+   "- 누적 전력량: "+(K.kwh*1000).toFixed(1)+" Wh",
+   "",
+   "## 기기 운전 데이터",
+   ...Object.entries(L.m.tags||{}).map(([sym,i2])=>
+     "- "+i2.tag+" "+i2.name+": 가동 "+L.stats[sym].rt.toFixed(0)+"s · 기동 "+L.stats[sym].starts+"회"),
+   "",
+   "## 알람·이벤트 ("+L.log.length+"건)",
+   ...L.log.slice().reverse().map(e=>"- ["+e.t+"]["+e.lv+"] "+e.msg),
+   "",
+   "## 검증 결과(엔진 자동)",
+   ...L.m.verify.map(v=>"- "+v)
+  ];
+  dl(L.id+"_report.md",out.join("\n"),"text/markdown");
+  logEv("op","운전 리포트 내보내기");
+};
 
 /* ---- 평문 입력 → 키워드 매칭(엔진 nlmatch 정신 데모) ---- */
 const KW={motor_start_stop:["모터","기동","버튼","돌","멈"],
