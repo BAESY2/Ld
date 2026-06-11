@@ -10,6 +10,7 @@ WebSocket(`/api/cosim`)을 통해 입력을 즉시 반영하고 스캔 단위로
     {"type": "set",  "inputs": {"START": true}}
     {"type": "step", "scans": 10}
     {"type": "state"}
+    {"type": "trace"}                      # 누적 스캔 트레이스(기록/리플레이용)
   서버 → 클라
     {"type": "ready", "inputs": [...], "outputs": [...], "step_ms": 10}
     {"type": "state", "t_ms": 120, "inputs": {...}, "outputs": {...},
@@ -30,6 +31,7 @@ from app.simulator import _eval, _Program
 MIN_STEP_MS = 1
 MAX_STEP_MS = 1000
 MAX_SCANS_PER_STEP = 1000
+MAX_TRACE_SCANS = 60_000  # 10ms 스텝 기준 10분 — 초과 시 앞부분을 버린다
 
 
 class CosimError(ValueError):
@@ -60,6 +62,8 @@ class CosimSession:
         self.outputs: list[str] = list(self._prog.driven)
         self._table: dict[str, bool] = {s: False for s in self._prog.driven}
         self._cur_inputs: dict[str, bool] = {s: False for s in self.inputs}
+        self.trace: list[dict[str, Any]] = []
+        self.trace_truncated = False
 
     def set_inputs(self, values: dict[str, Any]) -> None:
         """입력 심볼 값을 갱신한다. 미지 심볼/비불리언은 거부."""
@@ -87,6 +91,14 @@ class CosimSession:
             for lhs, node in self._prog.assigns:
                 self._table[lhs] = _eval(node, self._table)
             self.t_ms += self.step_ms
+            self.trace.append({
+                "t_ms": self.t_ms,
+                "i": {sym: self._table.get(sym, False) for sym in self.inputs},
+                "o": {sym: self._table.get(sym, False) for sym in self.outputs},
+            })
+            if len(self.trace) > MAX_TRACE_SCANS:
+                del self.trace[: len(self.trace) - MAX_TRACE_SCANS]
+                self.trace_truncated = True
 
     def state(self) -> dict[str, Any]:
         """현재 스냅샷(JSON 직렬화 가능)."""
@@ -136,6 +148,12 @@ def handle_message(
             return session, session.state()
         if mtype == "state":
             return session, session.state()
+        if mtype == "trace":
+            return session, {
+                "type": "trace",
+                "samples": session.trace,
+                "truncated": session.trace_truncated,
+            }
         raise CosimError(f"알 수 없는 메시지 type: {mtype!r}")
     except CosimError as exc:
         return session, {"type": "error", "error": str(exc)}

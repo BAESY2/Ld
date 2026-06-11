@@ -122,3 +122,39 @@ class TestCosimWebSocket:
             assert ws.receive_json()["type"] == "error"
             ws.send_json({"type": "init", "st_code": ""})
             assert ws.receive_json()["type"] == "error"
+
+
+class TestTrace:
+    def test_trace_records_every_scan(self) -> None:
+        ses = CosimSession(MOTOR_ST, step_ms=10)
+        ses.set_inputs({"START": True})
+        ses.step(scans=3)
+        ses.set_inputs({"START": False})
+        ses.step(scans=2)
+        assert len(ses.trace) == 5
+        assert ses.trace[0]["t_ms"] == 10
+        assert ses.trace[0]["o"]["MOTOR"] is True
+        assert ses.trace[-1]["i"]["START"] is False
+        assert ses.trace[-1]["o"]["MOTOR"] is True  # 자기유지 기록
+
+    def test_trace_cap_drops_oldest(self) -> None:
+        import app.cosim as cosim_mod
+
+        orig = cosim_mod.MAX_TRACE_SCANS
+        cosim_mod.MAX_TRACE_SCANS = 4
+        try:
+            ses = CosimSession(MOTOR_ST, step_ms=10)
+            ses.step(scans=10)
+            assert len(ses.trace) == 4
+            assert ses.trace_truncated is True
+            assert ses.trace[0]["t_ms"] == 70  # 앞부분 탈락
+        finally:
+            cosim_mod.MAX_TRACE_SCANS = orig
+
+    def test_trace_message(self) -> None:
+        ses, _ = handle_message(None, {"type": "init", "st_code": MOTOR_ST})
+        ses, _ = handle_message(ses, {"type": "step", "scans": 2})
+        _, reply = handle_message(ses, {"type": "trace"})
+        assert reply["type"] == "trace"
+        assert len(reply["samples"]) == 2
+        assert reply["truncated"] is False

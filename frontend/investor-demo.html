@@ -318,6 +318,7 @@ table.io td.mut{color:var(--mut)}
    </div>
    <div class="box">
     <h3>② 가상 PLC 상태 · LS XGK 주소 자동 할당 · 실시간 I/O</h3>
+    <div id="cosimbar" style="margin-bottom:8px"></div>
     <div class="scanline" id="scaninfo"></div>
     <table class="io" id="iotable"></table>
     <div class="vrf"><h4>운전 데이터 — 실시간</h4></div>
@@ -1700,7 +1701,8 @@ function updateDOM(r,dt,t){
   document.getElementById("scaninfo").innerHTML=
     `<span>스캔 <b>#${cur.scanN}</b></span><span>주기 <b>${(dt*1000).toFixed(1)}ms</b></span>`+
     `<span>로직 평가 <b>${cur.us<1?"&lt;1":cur.us.toFixed(1)}µs</b></span>`+
-    `<span>상태 <b>RUN</b></span><span>이중코일 <b>0</b></span>`;
+    `<span>상태 <b>RUN</b></span><span>이중코일 <b>0</b></span>`+
+    (COSIM.on&&COSIM.ready?`<span style="color:#7ee787">⚡ 서버 코사임 t=${(COSIM.t_ms/1000).toFixed(2)}s · 10ms 정밀</span>`:"");
   const rows=[];
   let idx=0;
   for(const[sym,info]of Object.entries(cur.m.tags||{})){
@@ -1774,6 +1776,7 @@ function updateDOM(r,dt,t){
 }
 /* ---- 카메라(줌·팬) + 기기 클릭 상세 ---- */
 let pdrag=null,devOpen=null;
+const COSIM={ws:null,on:false,ready:false,acc:0,lastSent:{},t_ms:0,pend:0,line:null};
 cvs.addEventListener("wheel",e=>{
   e.preventDefault();
   const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
@@ -1881,6 +1884,7 @@ function simLine(L,dt,t){
     }
     K.lastDoneT=nowMs; K.lastN=prodN;
   }
+  if(COSIM.on&&COSIM.line===L.id)cosimPump(L,dt);
   L.scene.tick(L.sst,o,dt);
   cur=prev;
   return r;
@@ -1936,6 +1940,7 @@ function makeLine(id){
   return L;
 }
 function show(id){
+  if(COSIM.on&&COSIM.line!==id)cosimStop("라인 전환");
   cur=LINES[id];
   hideDev();
   const d=cur.d,m=cur.m;
@@ -2071,6 +2076,68 @@ document.getElementById("rptbtn").onclick=()=>{
   dl(L.id+"_report.md",out.join("\n"),"text/markdown");
   logEv("op","운전 리포트 내보내기");
 };
+
+/* ---- 서버 코사임(정밀 모드) — API 서버에서 서빙될 때만 노출 ---- */
+(function(){
+  if(!/^https?:$/.test(location.protocol))return;
+  const bar=document.getElementById("cosimbar");if(!bar)return;
+  const b=document.createElement("button");b.className="fbtn abtn";b.id="cosimbtn";
+  b.textContent="서버 코사임 ON/OFF — 10ms 정밀 스캔(브라우저 PLC 대체)";
+  b.onclick=()=>{COSIM.on?cosimStop("수동 OFF"):cosimStart();};
+  bar.appendChild(b);
+})();
+function cosimStart(){
+  let ws;
+  try{
+    ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/api/cosim");
+  }catch(e){logEv("warn","코사임 연결 실패");return;}
+  COSIM.ws=ws;COSIM.on=true;COSIM.ready=false;COSIM.acc=0;
+  COSIM.lastSent={};COSIM.line=cur.id;COSIM.pend=0;
+  document.getElementById("cosimbtn").classList.add("on");
+  ws.onopen=()=>ws.send(JSON.stringify({type:"init",st_code:cur.d.st,step_ms:10}));
+  ws.onmessage=ev=>{
+    const m=JSON.parse(ev.data);
+    if(m.type==="ready"){COSIM.ready=true;
+      logEv("info","서버 코사임 연결 — 10ms 스캔(OpenPLC 차분검증 코어)");}
+    else if(m.type==="state"){COSIM.pend=Math.max(0,COSIM.pend-1);applyCosim(m);}
+    else if(m.type==="error")logEv("warn","코사임 오류: "+m.error);
+  };
+  ws.onclose=()=>{if(COSIM.on)cosimStop("연결 종료");};
+}
+function cosimStop(why){
+  COSIM.on=false;COSIM.ready=false;
+  try{if(COSIM.ws)COSIM.ws.close();}catch(e){}
+  COSIM.ws=null;
+  const b=document.getElementById("cosimbtn");if(b)b.classList.remove("on");
+  logEv("op","서버 코사임 해제("+why+") — 브라우저 PLC 폴백");
+}
+function applyCosim(m){
+  if(!COSIM.on||COSIM.line!==cur.id)return;
+  COSIM.t_ms=m.t_ms;
+  const L=LINES[COSIM.line];
+  for(const[sym,v]of Object.entries(m.outputs||{}))L.plc.vars[sym]=v;
+  for(const[n,t2]of Object.entries(m.timers||{})){
+    const lt=L.plc.timers[n];if(lt){lt.acc=t2.acc_ms/1000;lt.q=t2.q;}
+  }
+  for(const[n,c]of Object.entries(m.counters||{})){
+    const lc=L.plc.counters[n];if(lc){lc.cnt=c.cnt;lc.q=c.q;}
+  }
+}
+function cosimPump(L,dt){
+  if(!COSIM.on||!COSIM.ready||COSIM.line!==L.id||!COSIM.ws||COSIM.ws.readyState!==1)return;
+  const set={};
+  for(const s2 of L.d.sim.inputs){
+    const v=!!L.plc.vars[s2];
+    if(COSIM.lastSent[s2]!==v){set[s2]=v;COSIM.lastSent[s2]=v;}
+  }
+  if(Object.keys(set).length){COSIM.ws.send(JSON.stringify({type:"set",inputs:set}));COSIM.pend++;}
+  COSIM.acc+=dt*1000;
+  if(COSIM.acc>=100&&COSIM.pend<4){
+    const scans=Math.min(500,Math.round(COSIM.acc/10));
+    COSIM.acc-=scans*10;
+    COSIM.ws.send(JSON.stringify({type:"step",scans}));COSIM.pend++;
+  }
+}
 
 /* ---- 평문 입력 → 키워드 매칭(엔진 nlmatch 정신 데모) ---- */
 const KW={motor_start_stop:["모터","기동","버튼","돌","멈"],
