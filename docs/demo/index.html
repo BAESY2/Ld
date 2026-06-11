@@ -469,6 +469,8 @@ const META={
         T0:"충전 단계(8s)",T1:"교반 단계(10s)",T2:"배출 단계(6s)"},
   buttons:[{sym:"START",label:"배치 시작",c:"#1f9d4d"},{sym:"STOP",label:"정지",c:"#c93c3c"}],
   tags:{FILL_VALVE:{tag:"V-501",name:"충전 솔레노이드",rated:0.6},MIXER:{tag:"AG-501",name:"교반 모터",rated:11.0},DRAIN_VALVE:{tag:"V-502",name:"배출 솔레노이드",rated:0.6}},
+  analog:{D0000:{name:"배치 탱크 레벨",unit:"%",get:(st,L)=>Math.round(st.level*100)},
+          D0001:{name:"제품 드럼 충전",unit:"%",get:(st,L)=>Math.round(st.drum*100)}},
   verify:["충전→교반→배출 순서만 도달 가능(상태 전이 검사)","TON 8s/10s/6s — IEC 표준, 프리셋 보존",
           "이중 코일 0건 · STOP 시 전 밸브 차단","OpenPLC 런타임 차분검증 bit-for-bit 일치"]},
  duty_standby:{
@@ -479,6 +481,8 @@ const META={
   autoInputs:{DEMAND:"수위 센서 · 자동",HIGH_DEMAND:"수위 센서 · 자동"},
   tags:{PUMP_LEAD:{tag:"P-801A",name:"리드 펌프 15kW",rated:28},PUMP_LAG:{tag:"P-801B",name:"래그 펌프 15kW",rated:28}},
   faults:[{id:"tripLead",label:"P-801A 트립",sym:"PUMP_LEAD",type:"trip"}],
+  analog:{D0000:{name:"탱크 수위",unit:"%",get:(st,L)=>Math.round(st.level*100)},
+          D0001:{name:"공급 유량",unit:"㎥/h",get:(st,L)=>(effL(L,"PUMP_LEAD")?30:0)+(effL(L,"PUMP_LAG")?30:0)}},
   verify:["리드/래그 전환 도달성 — 수요 단계별 상태 검사 통과",
           "SYS_STOP 지배성 — 양 펌프 즉시 차단",
           "이중 코일 0건 · 래치 회로 검증",
@@ -1762,6 +1766,10 @@ function updateDOM(r,dt,t){
     if(cur.trend.length>120)cur.trend.shift();
     drawTrend();
   }
+  for(const[addr,a]of Object.entries(cur.m.analog||{})){
+    const el2=document.getElementById("an_"+addr);
+    if(el2)el2.textContent=String(a.get(cur.sst,cur));
+  }
   if(devOpen)renderDev();
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
@@ -1900,9 +1908,10 @@ function loop(now){
   drawScene(now/1000);
   if(now-domT>90){domT=now;updateDOM(rActive,dt,now/1000);updateOverview();}
 }
+let _ovHtml="";
 function updateOverview(){
   const el=document.getElementById("overview");if(!el)return;
-  el.innerHTML=ids.map(id=>{
+  const html=ids.map(id=>{
     const L=LINES[id];
     const run=L.d.sim.outputs.some(s2=>effL(L,s2));
     const trip=(L.m.faults||[]).some(f=>f.type==="trip"&&L.faults[f.id]);
@@ -1914,9 +1923,12 @@ function updateOverview(){
       `<div class="ovs"><span>생산 <b>${prodN}</b></span><span>OEE <b>${oee===null?"—":Math.round(oee)+"%"}</b></span><span>경보 <b class="${warns?"w":""}">${warns}</b></span></div>`+
       (trip?'<div class="ovw">⚠ 설비 트립</div>':"")+`</div>`;
   }).join("");
-  el.querySelectorAll(".ovc").forEach(c=>c.onclick=()=>{
-    if(c.dataset.id!==cur.id)show(c.dataset.id);});
+  if(html!==_ovHtml){_ovHtml=html;el.innerHTML=html;}
 }
+document.getElementById("overview").addEventListener("click",e=>{
+  const c=e.target.closest(".ovc");
+  if(c&&c.dataset.id!==cur.id)show(c.dataset.id);
+});
 
 /* ---- 레시피 표시 ---- */
 function ioRow(s,kind,m){
@@ -2023,7 +2035,11 @@ function show(id){
     d.sim.inputs.map(s2=>ioRow(s2,(m.autoInputs&&m.autoInputs[s2])||"입력 P",m)).join("")+
     d.sim.outputs.map(s2=>ioRow(s2,"출력 P",m)).join("")+
     Object.keys(cur.plc.timers).map(s2=>fbRow(s2,m)).join("")+
-    Object.keys(cur.plc.counters).map(s2=>fbRow(s2,m)).join("");
+    Object.keys(cur.plc.counters).map(s2=>fbRow(s2,m)).join("")+
+    Object.entries(m.analog||{}).map(([addr,a])=>
+      `<tr><td><span class="dot on-i" style="background:#7c5cff;box-shadow:0 0 8px #7c5cff"></span></td>`+
+      `<td><b>${addr}</b></td><td class="mut">${a.name}</td>`+
+      `<td colspan="2"><b id="an_${addr}" style="color:#b9a3ff">—</b> <span class="mut">${a.unit} · 아날로그 D(트윈 계측)</span></td></tr>`).join("");
   document.getElementById("st").textContent=d.st;
   document.getElementById("explain").textContent=d.explain;
   document.getElementById("sim").innerHTML=tg(d.sim);
@@ -2097,15 +2113,36 @@ function cosimStart(){
   ws.onopen=()=>ws.send(JSON.stringify({type:"init",st_code:cur.d.st,step_ms:10}));
   ws.onmessage=ev=>{
     const m=JSON.parse(ev.data);
-    if(m.type==="ready"){COSIM.ready=true;
-      logEv("info","서버 코사임 연결 — 10ms 스캔(OpenPLC 차분검증 코어)");}
+    if(m.type==="ready"){COSIM.ready=true;COSIM.io={inputs:m.inputs,outputs:m.outputs};
+      logEv("info","서버 코사임 연결 — 10ms 스캔(OpenPLC 차분검증 코어)");
+      let tb=document.getElementById("trcbtn");
+      if(!tb){tb=document.createElement("button");tb.id="trcbtn";tb.className="fbtn abtn";
+        tb.textContent="트레이스 리플레이 ↻";tb.style.marginLeft="6px";
+        tb.onclick=()=>{if(COSIM.ws&&COSIM.ws.readyState===1)COSIM.ws.send(JSON.stringify({type:"trace"}));};
+        document.getElementById("cosimbar").appendChild(tb);}}
+    else if(m.type==="trace")replayTrace(m);
     else if(m.type==="state"){COSIM.pend=Math.max(0,COSIM.pend-1);applyCosim(m);}
     else if(m.type==="error")logEv("warn","코사임 오류: "+m.error);
   };
   ws.onclose=()=>{if(COSIM.on)cosimStop("연결 종료");};
 }
+function replayTrace(m){
+  const n=m.samples.length;
+  if(!n){logEv("op","트레이스 비어 있음 — 먼저 라인을 가동하세요");return;}
+  const stride=Math.max(1,Math.ceil(n/120));
+  const sim={inputs:COSIM.io.inputs,outputs:COSIM.io.outputs,
+    samples:m.samples.filter((_,i)=>i%stride===0).map(sm=>({t:sm.t_ms,i:sm.i,o:sm.o}))};
+  const det=document.querySelector("details.engd");if(det)det.open=true;
+  document.getElementById("sim").innerHTML=
+    `<div class="scanline" style="margin-bottom:6px"><span>서버 트레이스 <b>${n}스캔 × 10ms</b>${m.truncated?" (앞부분 절단)":""}</span>`+
+    `<span><button class="xbtn" id="trcdl">JSON ↓</button></span></div>`+tg(sim);
+  document.getElementById("trcdl").onclick=()=>dl(cur.id+"_trace.json",JSON.stringify(m.samples),"application/json");
+  document.getElementById("sim").scrollIntoView({behavior:"smooth",block:"center"});
+  logEv("info","트레이스 리플레이 — "+n+"스캔 회수(축약 표시 1/"+stride+")");
+}
 function cosimStop(why){
   COSIM.on=false;COSIM.ready=false;
+  const tb=document.getElementById("trcbtn");if(tb)tb.remove();
   try{if(COSIM.ws)COSIM.ws.close();}catch(e){}
   COSIM.ws=null;
   const b=document.getElementById("cosimbtn");if(b)b.classList.remove("on");
