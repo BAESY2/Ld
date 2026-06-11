@@ -14,13 +14,19 @@ SRC_HTML = ROOT / "frontend" / "investor-demo.html"
 ENGINE_JS = ROOT / "frontend" / "twin-engine.js"
 OUT_HTML = ROOT / "docs" / "demo" / "index.html"
 TAG = '<script src="twin-engine.js"></script>'
+TAG_DATA = '<script src="demo-data.js"></script>'
+DATA_JS = ROOT / "frontend" / "demo-data.js"
 
 
 def build(html: str, engine: str) -> str:
     """src 태그를 엔진 본문 인라인으로 치환한 단일 파일 HTML 을 돌려준다."""
     if TAG not in html:
         raise ValueError(f"인라인 마커가 없습니다: {TAG}")
-    return html.replace(TAG, "<script>\n" + engine + "</script>", 1)
+    out = html.replace(TAG, "<script>\n" + engine + "</script>", 1)
+    if TAG_DATA in out:
+        out = out.replace(
+            TAG_DATA, "<script>\n" + DATA_JS.read_text(encoding="utf-8") + "</script>", 1)
+    return out
 
 
 ASSETS = [

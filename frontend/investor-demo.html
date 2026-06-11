@@ -174,6 +174,22 @@ footer{padding:50px 0;color:var(--mut);font-size:13px;text-align:center;border-t
 .sld{display:flex;flex-direction:column;gap:5px;align-self:center;padding:0 4px}
 .sld small{color:var(--mut);font-size:11px}.sld b{color:#8ec9ff}
 .sld input[type=range]{width:148px;accent-color:#58a6ff;cursor:pointer}
+.projbar{display:flex;gap:10px;align-items:center;margin:0 0 12px;flex-wrap:wrap;
+ background:var(--panel);border:1px solid var(--bd);border-radius:11px;padding:9px 13px}
+.pjlab{color:var(--mut);font-size:12px}
+#pjname{background:#0a0f17;border:1px solid var(--bd);color:var(--fg);
+ font:600 13.5px inherit;padding:7px 11px;border-radius:8px;min-width:200px}
+#pjname:focus{border-color:var(--acc);outline:none}
+#addwrap{display:none;position:fixed;inset:0;background:rgba(4,7,11,.55);z-index:60;backdrop-filter:blur(2px)}
+#addpanel{position:absolute;left:50%;top:14%;transform:translateX(-50%);width:min(480px,92vw);
+ background:#0d141d;border:1px solid var(--bd);border-radius:14px;padding:18px;
+ box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#addpanel select{width:100%;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);
+ font:12.5px ui-monospace,monospace;padding:7px 9px;border-radius:8px}
+.ovc .ovdel{position:absolute;right:6px;top:6px;color:#8b98a8;font-size:11px;cursor:pointer;display:none}
+.ovc:hover .ovdel{display:block}
+.ovc .ovdel:hover{color:#f85149}
+.ovc{position:relative}
 .ov{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;margin:0 0 16px}
 .ovc{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:9px 11px;cursor:pointer;transition:.15s}
 .ovc:hover{border-color:var(--acc);transform:translateY(-2px)}
@@ -330,7 +346,24 @@ table.io td.mut{color:var(--mut)}
    그 출력이 설비를 움직입니다. <b>버튼을 직접 눌러보세요</b> — 신호가 배선을 타고 PLC를 거쳐 설비로 흐르는 게 보입니다.</p>
   <p class="sub" style="margin-bottom:10px"><b>9개 라인이 지금 전부 백그라운드에서 동시 가동 중</b>입니다(가상 PLC 9대 병렬 스캔 + 자동 시연).
    카드를 누르면 해당 라인 현장으로 들어갑니다 — 상태·생산·OEE·경보는 전 라인 실시간.</p>
+  <div class="projbar">
+   <span class="pjlab">프로젝트</span>
+   <input id="pjname" maxlength="40" spellcheck="false"/>
+   <button class="xbtn" id="addlinebtn">＋ 라인 추가</button>
+   <button class="xbtn" id="pjexport">프로젝트 내보내기 ↓</button>
+   <span class="pjlab" id="pjcount"></span>
+  </div>
   <div class="ov" id="overview"></div>
+  <div id="addwrap"><div id="addpanel">
+   <div class="alhd"><h4>＋ 라인 추가 — 검증된 레시피 카탈로그</h4>
+    <button class="xbtn" id="addclose">닫기 ✕</button></div>
+   <div class="plcsel" style="margin-top:12px"><small style="color:var(--mut)">레시피</small>
+    <select id="addrecipe" style="flex:1"></select></div>
+   <div class="fitbox" id="addinfo"></div>
+   <div class="plcsel"><small style="color:var(--mut)">라인 이름</small>
+    <input id="addname" maxlength="24" style="flex:1;background:#0a0f17;border:1px solid var(--bd);color:var(--fg);font:13px ui-monospace,monospace;padding:7px 9px;border-radius:8px"/></div>
+   <button class="xbtn" id="addgo" style="width:100%;margin-top:10px;padding:10px">라인 생성 — 즉시 가동</button>
+  </div></div>
   <div class="live">
    <div class="box">
     <h3>① 3D 라이브 디지털트윈 — 버튼 → 배선 → PLC → 설비</h3>
@@ -422,5 +455,6 @@ table.io td.mut{color:var(--mut)}
  ※ 본 시스템의 검증은 논리 보조이며 기능안전 인증이 아닙니다(E-stop·가드는 하드와이어, ISO 13849/IEC 62061).
 </footer>
 
+<script src="demo-data.js"></script>
 <script src="twin-engine.js"></script>
 </body></html>
