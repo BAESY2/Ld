@@ -35,6 +35,8 @@ asset is a fast, general **verify + repair + honest-refusal** loop that proves s
 | Pump duty alternation | **#1 ⊥ #2** proven, alternates each start |
 | Sequencer | step outputs **one-hot** proven (≤1 active) |
 | Emergency stop | every output gated `AND NOT ESTOP`; all outputs 0 while pressed (by construction + sim) |
+| Conveyor cascade | **containment □(upstream→downstream) proven** (new property class; jam prevention) |
+| Two-hand start | 0.5 s concurrency window, non-simultaneous lockout (5 simulated safety behaviors) |
 | Interlock / hysteresis / counter | mutual-exclusion proven / chatter-free band / preset trip |
 
 ## Evidence (reproducible)
@@ -42,7 +44,7 @@ asset is a fast, general **verify + repair + honest-refusal** loop that proves s
 - Adversarial bench **110 cases** (PID/servo/comms traps): confident set all verify, double-coil 0; out-of-scope **100% refused**; **silent failure 0**.
 - Verifier soundness: **false-proof 0 · miss 0**.
 - Cross-backend equivalence PySim ↔ XGK IL ↔ OpenPLC twin: **100%** trace match.
-- Auto-repair of faulted programs: **100%**. Regression suite: **1,283 passed**.
+- Auto-repair of faulted programs: **100%**. Regression suite: **1,320 tests, all green**.
 - Vendor error-code knowledge base: **101 entries** (LS · Mitsubishi · Siemens · Omron) with cited sources.
 
 **Headline: "Zero silent failure — refuse what you don't know, prove what you build."**

@@ -91,7 +91,7 @@ LadderProgram ──► app/transpiler.py 래더 JSON ──► app/export(PLCop
 | 교차 백엔드 동치 | PySim↔XGK IL **20/20** · PySim↔OpenPLC 트윈 **20/20** (트레이스 100% 일치) | 독립 구현 상호검증 |
 | 자동 수리 | 고장 12건 → 재검증 통과 **12/12 (100%)** · 잔존실패 0 | 국소 결함 한정 |
 | 검증기 건전성(n=80) | 쌍·그룹 모두 **false-proof 0 · miss 0** · 탐지 150/150 | soundness_study 는 기본 1000 |
-| 회귀 테스트 | **1,283 passed · 8 skipped** | 골든·이중코일0·인터락0 |
+| 회귀 테스트 | **1,320 수집 · 전체 그린(EXIT 0)** | 골든·이중코일0·인터락0 |
 
 **헤드라인: "침묵 실패 0 — 모르는 건 거절, 만든 건 형식증명."**
 
@@ -164,5 +164,5 @@ MOTOR_Y := MOTOR AND NOT T1.Q AND NOT MOTOR_D;        ' Y접촉기
 ---
 
 *부록: 측정 재현 — `python scripts/capability_report.py` · 표준회로 검증 —
-`pytest tests/test_compile_frame.py -k "star_delta or fwd_rev or alternat"` ·
+`pytest tests/test_compile_frame.py -k "star_delta or fwd_rev or alternat or cascade or two_hand or estop"` ·
 에러코드 자료 — `docs/ERRORCODES.md`(4사 101건).*
