@@ -1235,32 +1235,38 @@ function wirePath(ctx,pts,on,t,color){
 }
 /* 공장 바닥 — 콘크리트 타일 + 통로 라인 */
 function floorGrid(ctx){
+  /* ── 라이트 테마 디오라마(상용 시뮬레이터 룩): 밝은 홀 + 진한 설비 ── */
   if(VIEW_MODE!=="top"){
-  face(ctx,[P(0,0,0),P(WX,0,0),P(WX,0,3.9),P(0,0,3.9)],"#1b232d");
-  for(let x=0.8;x<WX-1;x+=2.2)
-    face(ctx,[P(x,0,2.35),P(x+1.5,0,2.35),P(x+1.5,0,3.35),P(x,0,3.35)],"rgba(140,180,220,.07)");
-  seg(ctx,P(0,0,2.2),P(WX,0,2.2),"rgba(0,0,0,.35)",1);
-  face(ctx,[P(13.1,0,1.45),P(16.3,0,1.45),P(16.3,0,2.05),P(13.1,0,2.05)],"#16241a");
-  txt(ctx,P(14.7,0,1.7),"무재해 247日","#7ee787",12,"center",true);
+  const wA=P(0,0,3.9),wB=P(WX,0,0);
+  const wg=ctx.createLinearGradient(wA[0],wA[1],wA[0],wB[1]);
+  wg.addColorStop(0,"#eef2f6");wg.addColorStop(1,"#d8dfe6");
+  face(ctx,[P(0,0,0),P(WX,0,0),P(WX,0,3.9),P(0,0,3.9)],wg);
+  for(let x=0.8;x<WX-1;x+=2.2){
+    face(ctx,[P(x,0,2.35),P(x+1.5,0,2.35),P(x+1.5,0,3.35),P(x,0,3.35)],"#bcd6ee");
+    seg(ctx,P(x,0,2.35),P(x,0,3.35),"rgba(40,60,80,.35)",1.2);
+    seg(ctx,P(x+0.75,0,2.35),P(x+0.75,0,3.35),"rgba(40,60,80,.3)",1);
   }
-  /* 에폭시 바닥: 그라데이션 + 광택 스트릭 + 신축줄눈 */
+  seg(ctx,P(0,0,2.2),P(WX,0,2.2),"rgba(40,55,70,.3)",1);
+  face(ctx,[P(13.1,0,1.45),P(16.3,0,1.45),P(16.3,0,2.05),P(13.1,0,2.05)],"#1d5c35");
+  txt(ctx,P(14.7,0,1.7),"무재해 247日","#d6f5dd",12,"center",true);
+  }
+  /* 밝은 에폭시 바닥: 그라데이션 + 광택 스트릭 + 신축줄눈 */
   const fA=P(0,0,0),fB=P(WX,WY,0);
   const fg2=ctx.createLinearGradient(fA[0],fA[1],fB[0],fB[1]);
-  fg2.addColorStop(0,"#2c343f");fg2.addColorStop(0.55,"#28303b");fg2.addColorStop(1,"#232b35");
+  fg2.addColorStop(0,"#cfd7df");fg2.addColorStop(0.55,"#c4cdd6");fg2.addColorStop(1,"#b6c0ca");
   face(ctx,[P(0,0,0),P(WX,0,0),P(WX,WY,0),P(0,WY,0)],fg2);
-  /* 작업 밴드 광 — 라인이 놓이는 중앙 밴드를 무대처럼 밝게 */
-  face(ctx,[P(0,1.5,0),P(WX,1.5,0),P(WX,4.6,0),P(0,4.6,0)],"rgba(195,218,245,.055)");
+  /* 작업 밴드 — 라인 구역을 살짝 밝게 */
+  face(ctx,[P(0,1.5,0),P(WX,1.5,0),P(WX,4.6,0),P(0,4.6,0)],"rgba(255,255,255,.28)");
   const sA=P(1.5,WY,0),sB=P(8,0,0);
   const sl=ctx.createLinearGradient(sA[0],sA[1],sB[0],sB[1]);
-  sl.addColorStop(0,"rgba(160,200,255,0)");sl.addColorStop(0.5,"rgba(160,200,255,.055)");
-  sl.addColorStop(1,"rgba(160,200,255,0)");
+  sl.addColorStop(0,"rgba(255,255,255,0)");sl.addColorStop(0.5,"rgba(255,255,255,.3)");
+  sl.addColorStop(1,"rgba(255,255,255,0)");
   face(ctx,[P(0,0,0),P(WX,0,0),P(WX,WY,0),P(0,WY,0)],sl);
-  for(let x=0;x<=WX;x+=2)seg(ctx,P(x,0,0),P(x,WY,0),x%4?"rgba(0,0,0,.18)":"rgba(0,0,0,.34)",x%4?1:1.4);
-  for(let y=0;y<=WY;y+=2)seg(ctx,P(0,y,0),P(WX,y,0),y%4?"rgba(0,0,0,.18)":"rgba(0,0,0,.34)",y%4?1:1.4);
-  seg(ctx,P(0.4,4.75,0.01),P(WX-0.4,4.75,0.01),"rgba(217,165,20,.5)",2);
-  seg(ctx,P(0.4,6.7,0.01),P(WX-0.4,6.7,0.01),"rgba(217,165,20,.5)",2);
-  for(let x=1;x<WX-1;x+=1.2)seg(ctx,P(x,5.72,0.01),P(x+0.6,5.72,0.01),"rgba(217,165,20,.28)",1.5);
-
+  for(let x=0;x<=WX;x+=2)seg(ctx,P(x,0,0),P(x,WY,0),x%4?"rgba(30,45,60,.1)":"rgba(30,45,60,.2)",x%4?1:1.4);
+  for(let y=0;y<=WY;y+=2)seg(ctx,P(0,y,0),P(WX,y,0),y%4?"rgba(30,45,60,.1)":"rgba(30,45,60,.2)",y%4?1:1.4);
+  seg(ctx,P(0.4,4.75,0.01),P(WX-0.4,4.75,0.01),"rgba(196,140,8,.75)",2.2);
+  seg(ctx,P(0.4,6.7,0.01),P(WX-0.4,6.7,0.01),"rgba(196,140,8,.75)",2.2);
+  for(let x=1;x<WX-1;x+=1.2)seg(ctx,P(x,5.72,0.01),P(x+0.6,5.72,0.01),"rgba(196,140,8,.45)",1.6);
 }
 /* 안전펜스 — 높이 1.4m (ISO 13857) */
 function fence(x0,y0,x1,y1,gap){
@@ -3575,7 +3581,10 @@ function drawScene(t){
   if(cvs.clientWidth<40)return; /* WebGL 전환 갭: 숨겨진 캔버스(폭0)에 음수 스케일 드로잉 금지 */
   if(cvs.clientWidth!==view.W||cvs.clientHeight!==view.H)resize();
   const ctx=g2;
-  ctx.clearRect(0,0,view.W,view.H);
+  /* 라이트 디오라마 배경(스카이→홀 톤) */
+  const bg=ctx.createLinearGradient(0,0,0,view.H);
+  bg.addColorStop(0,"#f1f4f8");bg.addColorStop(0.5,"#e4e9ee");bg.addColorStop(1,"#cdd5dd");
+  ctx.fillStyle=bg;ctx.fillRect(0,0,view.W,view.H);
   CHIPS.length=0;
   cam.z+=(camT.z-cam.z)*0.22; cam.px+=(camT.px-cam.px)*0.22; cam.py+=(camT.py-cam.py)*0.22;
   ctx.save();
@@ -3598,7 +3607,7 @@ function drawScene(t){
   flushQ(ctx);
   drawLabels(ctx);
   ctx.restore();
-  txt(ctx,[14,20],cur.scene.label,"#aebdcd",12.5,"left",true);
+  txt(ctx,[14,20],cur.scene.label,"#26323e",12.5,"left",true);
   txt(ctx,[14,37],"드래그=이동 · 휠=줌 · 더블클릭=초기화 · 기기 라벨 클릭=상세 — 1유닛=1m 실측","#5d6c7c",11,"left");
   const K=cur.kpi,cfg=KPI[cur.id]||{unit:"개"};
   const hud=[
@@ -3609,7 +3618,7 @@ function drawScene(t){
   let hy=22;
   for(const[k,v]of hud){
     txt(ctx,[view.W-118,hy],k,"#5d6c7c",10,"left");
-    txt(ctx,[view.W-14,hy],v,"#9fe0b0",11.5,"right",true);
+    txt(ctx,[view.W-14,hy],v,"#0f6e3d",11.5,"right",true);
     hy+=16;
   }
 }
