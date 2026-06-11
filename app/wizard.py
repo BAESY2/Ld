@@ -13,7 +13,9 @@ from dataclasses import dataclass
 
 from app.models import (
     CounterSpec,
+    DataType,
     DerivedOutput,
+    DeviceClass,
     Interlock,
     IODirection,
     IOPoint,
@@ -208,6 +210,29 @@ def _hi_lo_level(a: Answers) -> StateMachineSpec:
         transitions=[
             _tr("DRY", "FILL", f"{lo} AND NOT {hi}"),
             _tr("FILL", "DRY", f"{hi}"),
+        ],
+    )
+
+
+def _analog_level(a: Answers) -> StateMachineSpec:
+    level = _val(a, "level", "LEVEL")
+    pump = _val(a, "pump", "PUMP")
+    lo = _pint(a, "lo", 300)
+    hi = _pint(a, "hi", 700, lo + 1)
+    return StateMachineSpec(
+        title=f"아날로그 수위 제어({lo} 미만 급수·{hi} 이상 정지)",
+        io_points=[
+            IOPoint(symbol=level, direction=_IN, data_type=DataType.INT,
+                    device_class=DeviceClass.D, description="수위 아날로그 입력"),
+            _io(pump, _OUT, "급수 펌프"),
+        ],
+        states=[
+            SfcState(name="IDLE", is_initial=True),
+            SfcState(name="FILL", on_entry=[f"{pump} := TRUE;"]),
+        ],
+        transitions=[
+            _tr("IDLE", "FILL", f"{level} < {lo}"),
+            _tr("FILL", "IDLE", f"{level} >= {hi}"),
         ],
     )
 
@@ -1053,6 +1078,14 @@ RECIPES: dict[str, Recipe] = {
              _f("pump", "펌프", "PUMP")),
             _hi_lo_level,
             safety_note="오버플로우/공운전이 위험하면 하드와이어 고/저 레벨 트립을 별도로 두세요.",
+        ),
+        Recipe(
+            "analog_level", "아날로그 수위 제어", "아날로그 수위값 임계 비교로 펌프 제어.", "공정",
+            (_f("level", "수위 입력(아날로그)", "LEVEL"), _f("lo", "급수 시작 임계", "300", "int"),
+             _f("hi", "급수 정지 임계", "700", "int"), _f("pump", "펌프", "PUMP")),
+            _analog_level,
+            safety_note="아날로그 센서 고장(단선=0) 시 거동을 검토하고 "
+            "하드와이어 고/저 레벨 트립을 별도로 두세요.",
         ),
         Recipe(
             "count_eject", "부품 카운터", "N개 세면 배출(카운터).", "카운터",
