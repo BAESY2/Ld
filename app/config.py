@@ -64,6 +64,9 @@ class Settings:
     max_request_chars: int = field(default_factory=lambda: _env_int("MAX_REQUEST_CHARS", 4_000))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
 
+    # 파일 생성(codegen) 출력 루트
+    gen_out_dir: str = field(default_factory=lambda: _env("GEN_OUT_DIR", "out"))
+
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 

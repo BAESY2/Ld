@@ -23,6 +23,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from app.compile_gate import compile_check  # noqa: E402
 from app.memory_map import detect_double_coils  # noqa: E402
 from app.models import ElementType, IODirection, StateMachineSpec  # noqa: E402
 from app.transpiler import transpile_st  # noqa: E402
@@ -46,6 +47,8 @@ class CaseResult:
         rung_count: int,
         io_coverage: float,
         passed: bool,
+        compile_ok: bool = True,
+        compile_skipped: bool = True,
     ) -> None:
         self.name = name
         self.double_coil_count = double_coil_count
@@ -54,6 +57,8 @@ class CaseResult:
         self.rung_count = rung_count
         self.io_coverage = io_coverage
         self.passed = passed
+        self.compile_ok = compile_ok
+        self.compile_skipped = compile_skipped
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -64,6 +69,8 @@ class CaseResult:
             "rung_count": self.rung_count,
             "io_coverage": self.io_coverage,
             "passed": self.passed,
+            "compile_ok": self.compile_ok,
+            "compile_skipped": self.compile_skipped,
         }
 
 
@@ -82,7 +89,7 @@ def load_cases(golden_dir: str | Path) -> list[GoldenCase]:
     return cases
 
 
-def evaluate_case(case: GoldenCase) -> CaseResult:
+def evaluate_case(case: GoldenCase, *, run_compile: bool = False) -> CaseResult:
     """단일 케이스를 결정론적으로 채점하고 CaseResult 를 반환한다.
 
     채점 항목:
@@ -130,12 +137,19 @@ def evaluate_case(case: GoldenCase) -> CaseResult:
     else:
         io_coverage = 1.0
 
-    # 5) 하드 게이트 판정
+    # 5) (선택) matiec 컴파일 게이트
+    compile_ok, compile_skipped = True, True
+    if run_compile:
+        res = compile_check(golden_st)
+        compile_ok, compile_skipped = res.ok, res.skipped
+
+    # 6) 하드 게이트 판정 (컴파일은 기본 비게이팅; skip 이면 영향 없음)
     min_rungs: int = expect.get("min_rungs", 1)
     passed = (
         double_coil_count == 0
         and interlock_error_count == 0
         and rung_count >= min_rungs
+        and (compile_skipped or compile_ok)
     )
 
     return CaseResult(
@@ -146,15 +160,19 @@ def evaluate_case(case: GoldenCase) -> CaseResult:
         rung_count=rung_count,
         io_coverage=io_coverage,
         passed=passed,
+        compile_ok=compile_ok,
+        compile_skipped=compile_skipped,
     )
 
 
 def evaluate_all(
     golden_dir: str | Path,
+    *,
+    run_compile: bool = False,
 ) -> tuple[list[CaseResult], dict[str, Any]]:
     """골든 디렉터리의 모든 케이스를 채점하고 (결과 목록, 집계) 를 반환한다."""
     cases = load_cases(golden_dir)
-    results = [evaluate_case(c) for c in cases]
+    results = [evaluate_case(c, run_compile=run_compile) for c in cases]
 
     total = len(results)
     passed_count = sum(1 for r in results if r.passed)
@@ -194,9 +212,14 @@ def main() -> None:
         action="store_true",
         help="머신 가독 JSON 결과를 stdout 에 출력한다.",
     )
+    parser.add_argument(
+        "--compile",
+        action="store_true",
+        help="matiec(iec2c) 컴파일 게이트를 추가 실행한다(미설치 시 skip).",
+    )
     args = parser.parse_args()
 
-    results, summary = evaluate_all(args.golden_dir)
+    results, summary = evaluate_all(args.golden_dir, run_compile=args.compile)
 
     if args.json:
         output = {

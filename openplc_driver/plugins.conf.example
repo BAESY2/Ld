@@ -1,0 +1,47 @@
+# OpenPLC v4 plugins.conf — example entries for the LS FEnet / MELSEC drivers.
+#
+# Copy the relevant line(s) into your fork's runtime plugins.conf and adjust
+# paths. Format (one plugin per line, comma-separated):
+#
+#   name,path,enabled,type,plugin_related_config_path[,venv_path]
+#
+# Fields:
+#   name        unique plugin id
+#   path        path to the built .so (native) or .py (python)
+#   enabled     1 = load, 0 = skip
+#   type        0 = Python plugin, 1 = native C/C++ plugin (.so)
+#   config      per-plugin config file (host/port/device-map JSON, see below)
+#   venv_path   optional, Python plugins only
+#
+# These two drivers are NATIVE (type 1). venv_path is omitted.
+
+ls_fenet,./core/src/drivers/plugins/native/fenet_hal.so,1,1,./config/ls_fenet.conf
+mitsubishi_melsec,./core/src/drivers/plugins/native/melsec_hal.so,1,1,./config/mitsubishi_melsec.conf
+
+# ---------------------------------------------------------------------------
+# Example per-plugin config (config/ls_fenet.conf — read in init() once you
+# replace the hard-coded default in load_device_map()/configure()). Format is
+# up to you; a small JSON is suggested:
+#
+#   {
+#     "host": "192.168.0.50",
+#     "port": 2004,
+#     "device_map": {
+#       "inputs":  [ {"device": "%MX0",   "byte": 0, "bit": 0},
+#                    {"device": "%MX1",   "byte": 0, "bit": 1} ],
+#       "outputs": [ {"device": "%MX16",  "byte": 0, "bit": 0},
+#                    {"device": "%MW100", "word_idx": 0, "kind": "word"} ]
+#     }
+#   }
+#
+# Example config/mitsubishi_melsec.conf:
+#
+#   {
+#     "host": "192.168.0.39",
+#     "port": 5007,
+#     "device_map": {
+#       "inputs":  [ {"device": "M0", "byte": 0, "bit": 0} ],
+#       "outputs": [ {"device": "M1000", "byte": 0, "bit": 0},
+#                    {"device": "D100",  "word_idx": 0, "kind": "word"} ]
+#     }
+#   }

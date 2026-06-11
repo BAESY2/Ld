@@ -137,6 +137,42 @@ class TestCorpusPath:
         assert isinstance(result, str) and len(result) > 0
 
 
+class TestVendorCorpus:
+    """USE_RAG=true 일 때 벤더별 명령어 항목(K1)이 검색되어야 한다."""
+
+    def test_mitsubishi_octal_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_use_rag(monkeypatch, True)
+        monkeypatch.setattr(rag_module, "_corpus_cache", None)
+        result = get_instruction_context("미쓰비시 8진 X Y 입출력")
+        assert "MITSUBISHI" in result or "8진" in result
+
+    def test_ls_keep_relay_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_use_rag(monkeypatch, True)
+        monkeypatch.setattr(rag_module, "_corpus_cache", None)
+        result = get_instruction_context("LS 킵릴레이 스텝 디바이스")
+        assert "LS" in result or "킵릴레이" in result
+
+    def test_omron_countdown_timer_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_use_rag(monkeypatch, True)
+        monkeypatch.setattr(rag_module, "_corpus_cache", None)
+        result = get_instruction_context("옴론 TIM 감산 카운트다운")
+        assert "OMRON" in result or "감산" in result
+
+    def test_rockwell_tag_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_use_rag(monkeypatch, True)
+        monkeypatch.setattr(rag_module, "_corpus_cache", None)
+        result = get_instruction_context("로크웰 XIC XIO 태그")
+        assert "ROCKWELL" in result or "XIC" in result
+
+
 # ---------------------------------------------------------------------------
 # 비정상 경로: corpus 파일 없음
 # ---------------------------------------------------------------------------

@@ -19,8 +19,97 @@ from app.models import (
     LadderRung,
 )
 
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
 _COMMENT_RE = re.compile(r"^\s*//\s?(.*)$")
+# FB 인스턴스 호출: TON_1(IN := <식>, PT := T#5s);  /  C1(CU := <식>, RESET := .., PV := 10);
+_FB_CALL_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*\((.*)\)\s*;\s*$")
+_FB_ARG_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*$")
+
+
+def _branches_from_expr(
+    expr: str, allocator: DeviceAllocator | None
+) -> list[LadderBranch]:
+    """불리언식 → DNF 곱항별 입력 브랜치(직렬 접점들)."""
+
+    def addr(sym: str) -> str:
+        return allocator.address_of(sym) or "" if allocator else ""
+
+    branches: list[LadderBranch] = []
+    for term in to_dnf(parse(expr)):
+        literals = sorted(term, key=lambda lit: (lit[0], lit[1]))
+        branches.append(
+            LadderBranch(
+                elements=[
+                    LadderElement(
+                        element_type=(
+                            ElementType.CONTACT_NC if negated else ElementType.CONTACT_NO
+                        ),
+                        symbol=nm,
+                        address=addr(nm),
+                    )
+                    for nm, negated in literals
+                ]
+            )
+        )
+    return branches
+
+
+def _rung_from_fb_call(
+    name: str,
+    args_text: str,
+    comment: str,
+    allocator: DeviceAllocator | None,
+) -> list[LadderRung]:
+    """FB 호출 → 렁(들). 타이머/카운터 본체 렁 + (카운터 RESET 시) 별도 리셋 렁.
+
+    인자 `IN`(타이머)/`CU`(카운터)를 인에이블 조건으로, `PT`/`PV`를 프리셋으로 쓴다.
+    카운터의 `RESET` 조건은 ``... RST C`` 별도 렁으로 내보낸다 — 누락하면 실기
+    카운터가 리셋되지 않는다(XGK 차등검증이 잡은 회귀; 그 전엔 RESET 이 버려졌다).
+    """
+    args: dict[str, str] = {}
+    for piece in args_text.split(","):
+        m = _FB_ARG_RE.match(piece)
+        if m:
+            args[m.group(1).upper()] = m.group(2)
+    is_counter = "CU" in args
+    enable_expr = args.get("CU") if is_counter else args.get("IN")
+    preset = args.get("PV") if is_counter else args.get("PT")
+    if enable_expr is None:
+        return []  # 인식 불가 FB 호출은 무시
+
+    def addr(sym: str) -> str:
+        return allocator.address_of(sym) or "" if allocator else ""
+
+    el_type = ElementType.COUNTER if is_counter else ElementType.TIMER
+    body = LadderRung(
+        comment=comment,
+        input_branches=_branches_from_expr(enable_expr, allocator),
+        outputs=[
+            LadderElement(
+                element_type=el_type,
+                symbol=name,
+                address=addr(name),
+                description=(preset or "").strip(),
+            )
+        ],
+    )
+    rungs = [body]
+    reset_expr = (args.get("R") or args.get("RESET")) if is_counter else None
+    if reset_expr is not None and reset_expr.strip().upper() not in ("FALSE", "0", ""):
+        rungs.append(
+            LadderRung(
+                comment=f"{name} 리셋",
+                input_branches=_branches_from_expr(reset_expr, allocator),
+                outputs=[
+                    LadderElement(
+                        element_type=ElementType.COIL_RESET,
+                        symbol=name,
+                        address=addr(name),
+                    )
+                ],
+            )
+        )
+    return rungs
 
 
 def _rung_from_assignment(
@@ -69,6 +158,14 @@ def transpile_st(
     pending_comment = ""
 
     for line in st_code.splitlines():
+        fb = _FB_CALL_RE.match(line)
+        if fb:
+            rungs.extend(
+                _rung_from_fb_call(fb.group(1), fb.group(2), pending_comment, allocator)
+            )
+            pending_comment = ""
+            continue
+
         assign = _ASSIGN_RE.match(line)
         if assign:
             rungs.append(

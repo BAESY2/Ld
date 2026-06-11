@@ -1,0 +1,34 @@
+{
+  "name": "mode_auto_manual",
+  "request": "자동/수동 모드 선택으로 밸브를 제어하세요. 모드 선택 스위치(MODE_AUTO)가 자동이면 자동 명령(AUTO_CMD)으로, 수동이면 수동 명령(MAN_CMD)으로 밸브(VALVE)를 엽니다. 어느 모드든 시스템 정지(SYS_STOP)가 입력되면 밸브를 닫습니다.",
+  "spec": {
+    "title": "자동/수동 모드 밸브 제어",
+    "io_points": [
+      {"symbol": "MODE_AUTO", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "모드 선택(TRUE=자동, FALSE=수동)"},
+      {"symbol": "AUTO_CMD",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "자동 개방 명령"},
+      {"symbol": "MAN_CMD",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "수동 개방 명령"},
+      {"symbol": "SYS_STOP",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "시스템 정지"},
+      {"symbol": "VALVE",     "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "밸브 출력"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "CLOSED",    "is_initial": true,  "on_entry": [],                "description": "밸브 닫힘"},
+      {"name": "OPEN_AUTO", "is_initial": false, "on_entry": ["VALVE := TRUE;"], "description": "자동 개방"},
+      {"name": "OPEN_MAN",  "is_initial": false, "on_entry": ["VALVE := TRUE;"], "description": "수동 개방"}
+    ],
+    "transitions": [
+      {"from_state": "CLOSED",    "to_state": "OPEN_AUTO", "condition": "MODE_AUTO AND AUTO_CMD AND NOT SYS_STOP",     "description": "자동 개방"},
+      {"from_state": "CLOSED",    "to_state": "OPEN_MAN",  "condition": "NOT MODE_AUTO AND MAN_CMD AND NOT SYS_STOP",  "description": "수동 개방"},
+      {"from_state": "OPEN_AUTO", "to_state": "CLOSED",    "condition": "SYS_STOP OR NOT AUTO_CMD",                   "description": "자동 닫힘"},
+      {"from_state": "OPEN_MAN",  "to_state": "CLOSED",    "condition": "SYS_STOP OR NOT MAN_CMD",                    "description": "수동 닫힘"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "VALVE := ((MODE_AUTO AND AUTO_CMD) OR (NOT MODE_AUTO AND MAN_CMD)) AND NOT SYS_STOP;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 1
+  }
+}

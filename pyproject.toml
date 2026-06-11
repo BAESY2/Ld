@@ -9,6 +9,9 @@ dependencies = [
   "z3-solver>=4.13",
 ]
 
+[project.scripts]
+plc-gen = "app.gen:main"
+
 [project.optional-dependencies]
 # 웹 서버(라이브 미리보기) — LLM 없이 결정론 경로만 (맥에서 가볍게 실행)
 web = [

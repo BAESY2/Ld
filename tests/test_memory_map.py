@@ -107,3 +107,26 @@ def test_merge_double_coils_produces_or_merge() -> None:
 
     # 병합 후에는 더 이상 이중코일이 아님
     assert detect_double_coils(result.code) == {}
+
+
+# --- 정확성 버그 수정 (다중문/주석/FB콜) ---
+def test_multistatement_line_double_coil_detected() -> None:
+    """한 줄에 두 대입(`OUT := A; OUT := B;`)도 이중코일로 검출한다."""
+    dups = detect_double_coils("OUT := A;  OUT := B;")
+    assert dups == {"OUT": ["A", "B"]}
+
+
+def test_comment_line_not_flagged() -> None:
+    """주석 안의 `:=` 는 코일로 보지 않는다."""
+    assert detect_double_coils("// X := Y;\nX := Z;") == {}
+
+
+def test_fb_call_not_double_coil() -> None:
+    """타이머/카운터 FB 호출은 코일이 아니다."""
+    st = "T1(IN := START, PT := T#500ms);\nM := A;"
+    assert detect_double_coils(st) == {}
+
+
+def test_three_way_double_coil() -> None:
+    dups = detect_double_coils("OUT := A;\nOUT := B;\nOUT := C;")
+    assert dups["OUT"] == ["A", "B", "C"]

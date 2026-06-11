@@ -1,0 +1,36 @@
+{
+  "name": "motor_jog_run",
+  "request": "모터를 운전(RUN)과 조그(JOG) 두 방식으로 제어하세요. 기동 버튼(START_PB)을 누르면 모터가 연속 운전(MOTOR_RUN)하며 자기유지되고 정지 버튼(STOP_PB)으로 멈춥니다. 조그 버튼(JOG_PB)을 누르고 있는 동안에만 조그 출력(MOTOR_JOG)이 동작하며 떼면 멈춥니다(자기유지 없음). 연속 운전과 조그는 동시에 동작하면 안 됩니다.",
+  "spec": {
+    "title": "모터 조그/연속운전 모드",
+    "io_points": [
+      {"symbol": "START_PB",  "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "기동 버튼(a접점)"},
+      {"symbol": "STOP_PB",   "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "정지 버튼"},
+      {"symbol": "JOG_PB",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "조그 버튼(누름 동안만)"},
+      {"symbol": "MOTOR_RUN", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "연속 운전 출력(자기유지)"},
+      {"symbol": "MOTOR_JOG", "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "조그 출력(모멘터리)"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "IDLE",    "is_initial": true,  "on_entry": [],                      "description": "대기"},
+      {"name": "RUNNING", "is_initial": false, "on_entry": ["MOTOR_RUN := TRUE;"],  "description": "연속 운전"},
+      {"name": "JOGGING", "is_initial": false, "on_entry": ["MOTOR_JOG := TRUE;"],  "description": "조그"}
+    ],
+    "transitions": [
+      {"from_state": "IDLE",    "to_state": "RUNNING", "condition": "START_PB AND NOT JOG_PB AND NOT STOP_PB", "description": "연속 기동"},
+      {"from_state": "RUNNING", "to_state": "IDLE",    "condition": "STOP_PB",                                "description": "정지"},
+      {"from_state": "IDLE",    "to_state": "JOGGING", "condition": "JOG_PB AND NOT START_PB",                "description": "조그 시작"},
+      {"from_state": "JOGGING", "to_state": "IDLE",    "condition": "NOT JOG_PB",                             "description": "조그 해제"}
+    ],
+    "interlocks": [
+      {"output_a": "MOTOR_RUN", "output_b": "MOTOR_JOG", "reason": "연속운전/조그 동시 동작 금지"}
+    ]
+  },
+  "golden_st": "MOTOR_RUN := (START_PB OR MOTOR_RUN) AND NOT STOP_PB AND NOT JOG_PB;\nMOTOR_JOG := JOG_PB AND NOT MOTOR_RUN;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

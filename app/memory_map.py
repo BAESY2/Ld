@@ -9,31 +9,27 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from app.models import DeviceClass, StateMachineSpec
-
-# 디바이스 클래스별 주소 자릿수
-_DIGIT_WIDTH: dict[DeviceClass, int] = {
-    DeviceClass.P: 4,
-    DeviceClass.M: 4,
-    DeviceClass.T: 4,
-    DeviceClass.C: 4,
-    DeviceClass.L: 4,
-    DeviceClass.K: 4,
-    DeviceClass.D: 5,
-}
+from app.models import DeviceClass, IODirection, StateMachineSpec
+from app.vendors.profiles import DEFAULT_PROFILE, VendorProfile
 
 
 class DeviceAllocator:
-    """심볼 ↔ 주소 1:1 매핑. 같은 심볼은 항상 같은 주소를 돌려준다."""
+    """심볼 ↔ 주소 1:1 매핑. 같은 심볼은 항상 같은 주소를 돌려준다.
 
-    def __init__(self) -> None:
+    주소 표기는 ``VendorProfile`` 이 담당한다(기본값 LS_XGK = 기존 동작 보존).
+    벤더를 바꾸면 같은 명세가 미쓰비시 X/Y(8진)·지멘스 byte.bit 등으로 렌더된다.
+    """
+
+    def __init__(self, profile: VendorProfile = DEFAULT_PROFILE) -> None:
+        self._profile = profile
         self._symbol_to_addr: dict[str, str] = {}
         self._addr_to_symbol: dict[str, str] = {}
-        self._next_index: dict[DeviceClass, int] = {dc: 0 for dc in DeviceClass}
+        # 인덱스 공간은 디바이스 문자 기준(LS 는 입출력이 'P' 를 공유)
+        self._next_index: dict[str, int] = {}
 
-    def _format(self, device_class: DeviceClass, index: int) -> str:
-        width = _DIGIT_WIDTH[device_class]
-        return f"{device_class.value}{index:0{width}d}"
+    @property
+    def profile(self) -> VendorProfile:
+        return self._profile
 
     def _claim(self, symbol: str, address: str) -> None:
         owner = self._addr_to_symbol.get(address)
@@ -49,6 +45,7 @@ class DeviceAllocator:
         symbol: str,
         device_class: DeviceClass,
         fixed_address: str | None = None,
+        direction: IODirection | None = None,
     ) -> str:
         """심볼에 주소를 발급한다. 재호출 시 캐시된 주소 반환. 충돌 시 ValueError."""
         existing = self._symbol_to_addr.get(symbol)
@@ -63,10 +60,12 @@ class DeviceAllocator:
             self._claim(symbol, fixed_address)
             return fixed_address
 
-        # 자동 발급: 빈 인덱스를 찾을 때까지 전진
+        # 자동 발급: 빈 인덱스를 찾을 때까지 전진(디바이스 문자별 인덱스 공간)
+        key = self._profile.index_key(device_class, direction)
         while True:
-            addr = self._format(device_class, self._next_index[device_class])
-            self._next_index[device_class] += 1
+            idx = self._next_index.get(key, 0)
+            self._next_index[key] = idx + 1
+            addr = self._profile.format_address(device_class, idx, direction)
             if addr not in self._addr_to_symbol:
                 self._claim(symbol, addr)
                 return addr
@@ -87,10 +86,12 @@ class DeviceAllocator:
         # 고정 주소 먼저 점유(충돌 회피)
         for io in spec.io_points:
             if io.fixed_address is not None:
-                self.allocate(io.symbol, io.device_class, io.fixed_address)
+                self.allocate(
+                    io.symbol, io.device_class, io.fixed_address, direction=io.direction
+                )
         for io in spec.io_points:
             if io.fixed_address is None:
-                self.allocate(io.symbol, io.device_class)
+                self.allocate(io.symbol, io.device_class, direction=io.direction)
         for t in spec.timers:
             self.allocate(t.name, DeviceClass.T)
         for c in spec.counters:
@@ -113,15 +114,36 @@ class DeviceAllocator:
 # ---------------------------------------------------------------------------
 # 이중 코일 검출 / 병합
 # ---------------------------------------------------------------------------
-# `SYMBOL := expr;` 형태의 단순 대입문. 좌변은 식별자 1개.
-_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*;\s*$")
+# `SYMBOL := expr;` 형태의 단순 대입문. 좌변은 식별자 1개, 우변엔 `;` 불가.
+_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*([^;]+?)\s*;\s*$")
+# 문장 단위(세미콜론 분할 후) 대입 매처.
+_STMT_ASSIGN_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:=\s*(.+?)\s*$")
+# FB 인스턴스 호출 `TON_1(IN := .., PT := ..)` — 코일 아님.
+_FB_CALL_RE = re.compile(r"^\s*[A-Za-z_]\w*\s*\(.*\)\s*$")
+
+
+def _statements(st_code: str) -> list[str]:
+    """주석(//)을 제거하고 세미콜론으로 분할한 문장 목록."""
+    stmts: list[str] = []
+    for line in st_code.splitlines():
+        code = line.split("//", 1)[0]
+        for piece in code.split(";"):
+            piece = piece.strip()
+            if piece:
+                stmts.append(piece)
+    return stmts
 
 
 def detect_double_coils(st_code: str) -> dict[str, list[str]]:
-    """동일 좌변 심볼에 2회 이상 대입하는 경우만 {심볼: [우변식, ...]} 로 반환."""
+    """동일 좌변 심볼에 2회 이상 대입하는 경우만 {심볼: [우변식, ...]} 로 반환.
+
+    다중문 한 줄(`OUT := A; OUT := B;`)·주석·FB 호출을 안전하게 처리한다.
+    """
     assigns: dict[str, list[str]] = {}
-    for line in st_code.splitlines():
-        m = _ASSIGN_RE.match(line)
+    for stmt in _statements(st_code):
+        if _FB_CALL_RE.match(stmt):
+            continue  # 타이머/카운터 FB 호출은 코일이 아님
+        m = _STMT_ASSIGN_RE.match(stmt)
         if not m:
             continue
         symbol, expr = m.group(1), m.group(2)

@@ -1,0 +1,35 @@
+{
+  "name": "conveyor_size_sort",
+  "request": "컨베이어에서 박스 크기에 따라 분류하세요. 박스 감지 센서(BOX_DETECT)가 켜진 상태에서 상단 광전센서(PE_TALL)가 차단되면 큰 박스이므로 대형 분기(DIV_LARGE)를, 차단되지 않으면 작은 박스이므로 소형 분기(DIV_SMALL)를 동작시킵니다. 두 분기는 동시에 동작하면 안 됩니다.",
+  "spec": {
+    "title": "컨베이어 크기 분류 디버터",
+    "io_points": [
+      {"symbol": "BOX_DETECT", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "박스 감지 센서"},
+      {"symbol": "PE_TALL",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "상단 광전센서(TRUE=큰 박스)"},
+      {"symbol": "DIV_LARGE",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "대형 분기 액추에이터"},
+      {"symbol": "DIV_SMALL",  "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "소형 분기 액추에이터"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "WAIT",       "is_initial": true,  "on_entry": [],                      "description": "대기"},
+      {"name": "SORT_LARGE", "is_initial": false, "on_entry": ["DIV_LARGE := TRUE;"],  "description": "대형 분류"},
+      {"name": "SORT_SMALL", "is_initial": false, "on_entry": ["DIV_SMALL := TRUE;"],  "description": "소형 분류"}
+    ],
+    "transitions": [
+      {"from_state": "WAIT",       "to_state": "SORT_LARGE", "condition": "BOX_DETECT AND PE_TALL",     "description": "큰 박스 감지"},
+      {"from_state": "WAIT",       "to_state": "SORT_SMALL", "condition": "BOX_DETECT AND NOT PE_TALL", "description": "작은 박스 감지"},
+      {"from_state": "SORT_LARGE", "to_state": "WAIT",       "condition": "NOT BOX_DETECT",             "description": "통과 완료"},
+      {"from_state": "SORT_SMALL", "to_state": "WAIT",       "condition": "NOT BOX_DETECT",             "description": "통과 완료"}
+    ],
+    "interlocks": [
+      {"output_a": "DIV_LARGE", "output_b": "DIV_SMALL", "reason": "대형/소형 분기 동시 동작 금지"}
+    ]
+  },
+  "golden_st": "DIV_LARGE := BOX_DETECT AND PE_TALL AND NOT DIV_SMALL;\nDIV_SMALL := BOX_DETECT AND NOT PE_TALL AND NOT DIV_LARGE;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

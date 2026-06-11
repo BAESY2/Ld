@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🧭 래더 설계 마법사</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#c9d1d9;
+          --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950; --err:#f85149; --amber:#d29922; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,system-ui,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--fg); min-height:100vh; }
+  header { padding:12px 18px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:16px; margin:0; }
+  header .sp { flex:1; }
+  header a { color:var(--accent); text-decoration:none; font-size:13px; }
+  .wrap { max-width:1100px; margin:0 auto; padding:18px; }
+  .step { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:18px 0 8px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; transition:.15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card .cat { font-size:11px; color:var(--accent); }
+  .card h3 { margin:4px 0 6px; font-size:15px; }
+  .card p { margin:0; font-size:12px; color:var(--muted); }
+  .fields { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:8px; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input { font:inherit; background:#0d1117; color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:7px 10px; }
+  button.go { margin-top:14px; background:var(--accent); color:#08111f; border:none; border-radius:8px;
+              padding:10px 18px; font-size:15px; font-weight:700; cursor:pointer; }
+  button.go:disabled { opacity:.5; }
+  .result { display:none; margin-top:18px; }
+  .verdict { font-size:13px; padding:3px 10px; border-radius:12px; }
+  .verdict.ok { background:#10311c; color:var(--ok); } .verdict.fail { background:#3a1416; color:var(--err); }
+  .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; margin-top:12px; overflow:auto; }
+  .box h3 { margin:0 0 8px; font-size:13px; color:var(--muted); }
+  pre { margin:0; white-space:pre-wrap; font:13px/1.6 ui-monospace,Menlo,monospace; }
+  .safety { color:var(--amber); font-size:12px; border:1px solid var(--amber); border-radius:8px; padding:8px 10px; margin-top:12px; }
+  .dlrow { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .dlrow button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:7px 12px; cursor:pointer; }
+  .catgroup { margin-top:6px; }
+  .cathdr { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin:14px 0 8px; text-transform:uppercase; letter-spacing:.04em; }
+  .cathdr .badge { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1px 8px; font-size:11px; color:var(--accent); }
+  .badge-ok { background:#10311c; color:var(--ok); border-radius:12px; padding:2px 10px; font-size:12px; font-weight:700; }
+  .badge-fail { background:#3a1416; color:var(--err); border-radius:12px; padding:2px 10px; font-size:12px; font-weight:700; }
+  .cmdrow { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; align-items:center; }
+  .cmdrow button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:12px; }
+  .pill-allow { color:var(--ok); font-weight:700; }
+  .pill-deny { color:var(--err); font-weight:700; }
+  .muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧭 래더 설계 마법사</h1>
+  <span style="font-size:12px;color:var(--muted)">PLC를 몰라도 — 고르고, 채우고, 설계</span>
+  <span class="sp"></span>
+  <a href="/index.html">에디터</a><a href="/generate.html">파일 생성기</a>
+</header>
+
+<div class="wrap">
+  <div class="safety" style="margin-bottom:14px">⚠️ 이 도구는 <b>로직 보조</b> 도구입니다. 생성 코드는 안전인증이 아니며, E-stop·가드 등 안전기능은 반드시 하드와이어 안전릴레이/안전PLC로 구현하세요(ISO 13849/IEC 62061).</div>
+  <div class="step">① 평문으로 적어보세요 (또는 아래에서 고르세요)</div>
+  <div style="display:flex;gap:8px;margin-bottom:6px">
+    <input id="nl" style="flex:1;font-size:15px;padding:10px 12px"
+      placeholder="예: 버튼 누르면 모터 돌고 정지 누르면 멈추게 / 5초 뒤에 램프 켜기 / 부품 10개 세면 배출"/>
+    <button class="go" style="margin-top:0;padding:10px 16px" id="nlgo">이해하기 ▶</button>
+  </div>
+  <div id="nlmsg" style="font-size:12px;color:var(--muted);min-height:16px"></div>
+  <div id="nlsafety" style="display:none;margin-top:8px;padding:10px 12px;
+    border:1px solid var(--amber);border-radius:8px;background:rgba(245,158,11,.08);
+    color:var(--amber);font-size:13px;font-weight:600"></div>
+
+  <div class="step">② 무엇을 만들까요? <span class="muted">(카테고리별 21개 템플릿)</span></div>
+  <div id="cards"></div>
+
+  <div id="form" style="display:none">
+    <div class="step">③ 신호 이름·값을 정하세요 (그대로 둬도 동작합니다)</div>
+    <div class="fields" id="fields"></div>
+    <button class="go" id="go">설계하기 ▶</button>
+  </div>
+
+  <div class="result" id="result">
+    <div class="step">④ 결과 <span id="verdict" class="verdict"></span></div>
+    <div class="box"><h3>래더 다이어그램</h3><div id="ladder"></div></div>
+    <div class="box"><h3>이렇게 동작합니다 (평문 설명)</h3><pre id="explain"></pre></div>
+    <div class="box">
+      <h3>가상 PLC 테스트 (디지털 트윈) <button id="simgo" style="font-size:12px;padding:3px 10px;margin-left:8px">▶ 가상 가동</button></h3>
+      <div id="simmsg" style="font-size:12px;color:var(--muted);margin-bottom:8px">버튼을 누르면 입력을 차례로 눌러보며 가상 PLC를 돌려 출력 변화를 보여줍니다.</div>
+      <div id="simgrid" style="overflow:auto"></div>
+    </div>
+    <div class="box">
+      <h3>XGK 니모닉 + 자체검증
+        <button id="xgkgo" style="font-size:12px;padding:3px 10px;margin-left:8px">▶ 자체검증</button>
+        <span id="xgkbadge" style="margin-left:8px"></span>
+      </h3>
+      <div id="xgkmsg" class="muted" style="margin-bottom:8px">검증된 ST 를 LS XGK 니모닉으로 내보내고, 같은 입력 타임라인으로 둘을 함께 돌려 <b>출력이 샘플 단위로 일치(✓)</b>하는지 증명합니다.</div>
+      <pre id="xgktext"></pre>
+    </div>
+    <div class="box">
+      <h3>안전커널 미리보기 <span class="muted">(하드웨어 없이 deny-by-default 게이팅 시연)</span></h3>
+      <div id="safetymsg" class="muted" style="margin-bottom:8px">아래 예시 명령을 안전커널이 통과/차단하는지 보여줍니다 — 실기로 나가기 전 검증 게이트입니다.</div>
+      <div id="safetycmds"></div>
+    </div>
+    <div class="box"><h3>생성된 ST 코드</h3><pre id="st"></pre></div>
+    <div class="safety" id="safety"></div>
+    <div class="dlrow">
+      <button id="dl-files">📦 프로젝트 파일 생성(ZIP)</button>
+      <span id="dlmsg" style="color:var(--muted);font-size:12px;align-self:center"></span>
+    </div>
+  </div>
+</div>
+
+<script src="/ladder-render.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let recipes = [], current = null, lastST = "", lastProject = null;
+let lastRecipe = null, lastAnswers = {};
+
+function cardHtml(r) {
+  return `<div class="card" data-id="${r.id}"><div class="cat">${r.category}</div>
+     <h3>${r.title}</h3><p>${r.description}</p>
+     ${r.safety_note ? `<p style="color:var(--amber);margin-top:6px">⚠️ ${r.safety_note}</p>` : ""}</div>`;
+}
+
+async function load() {
+  // 카테고리(뿌리산업/안전/순차/모션 …) 그룹으로 21개를 탐색할 수 있게 표시
+  const grouped = await (await fetch("/api/recipes/grouped")).json();
+  recipes = grouped.recipes;
+  $("cards").innerHTML = grouped.groups.map(g =>
+    `<div class="catgroup">
+       <div class="cathdr">${g.category} <span class="badge">${g.count}</span></div>
+       <div class="cards">${g.recipes.map(cardHtml).join("")}</div>
+     </div>`).join("");
+  document.querySelectorAll(".card").forEach(c => c.onclick = () => selectRecipe(c.dataset.id));
+}
+
+function selectRecipe(id) {
+  current = recipes.find(r => r.id === id);
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+  $("fields").innerHTML = current.fields.map(f =>
+    `<label class="f">${f.label}<input data-key="${f.key}" value="${f.default}"
+       ${f.kind === "int" || f.kind === "time_sec" ? 'type="number" min="1"' : ""}/></label>`).join("");
+  $("form").style.display = "block";
+  $("result").style.display = "none";
+  $("form").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function answers() {
+  const a = {};
+  document.querySelectorAll("#fields input").forEach(i => a[i.dataset.key] = i.value.trim());
+  return a;
+}
+
+function renderDesign(d) {
+  if (!d || (!d.ok && d.error)) { if (d && d.error) alert(d.error); return; }
+  lastST = d.structured_text;
+  $("ladder").innerHTML = window.LadderRender.svg(d.ladder);
+  $("explain").textContent = d.explanation;
+  $("st").textContent = d.structured_text;
+  const v = $("verdict");
+  v.className = "verdict " + (d.ok ? "ok" : "fail");
+  v.textContent = d.ok ? "로직 검사 통과 (안전인증 아님)" : "로직 경고 있음";
+  $("safety").textContent = (d.safety_note ? "⚠️ " + d.safety_note + "\n\n" : "") + "⚠️ " + d.safety_notice;
+  // 새 패널 초기화 — 이번 설계의 레시피/답변을 기억해 자체검증·안전미리보기에 쓴다.
+  lastRecipe = current ? current.id : null;
+  lastAnswers = answers();
+  $("xgkbadge").innerHTML = "";
+  $("xgktext").textContent = "";
+  $("safetycmds").innerHTML = "";
+  $("result").style.display = "block";
+  $("dlmsg").textContent = "";
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (lastRecipe) { runVerifyXgk(); buildSafetyPreview(); }
+}
+
+// XGK 자체검증 — 에미트된 LS_XGK 가 검증된 ST 와 샘플 단위로 일치(✓)함을 증명
+async function runVerifyXgk() {
+  $("xgkgo").disabled = true; $("xgkbadge").innerHTML = ""; $("xgkmsg").textContent = "에미트 후 ST 와 대조 중…";
+  try {
+    const body = lastRecipe
+      ? { recipe: lastRecipe, answers: lastAnswers }
+      : { st_code: lastST };
+    const r = await (await fetch("/api/verify-xgk", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })).json();
+    if (!r.ok) { $("xgkmsg").textContent = "오류: " + (r.error || "실패"); return; }
+    $("xgkbadge").innerHTML = r.agree
+      ? `<span class="badge-ok">✓ 일치 (에미트 == 검증된 ST)</span>`
+      : `<span class="badge-fail">✗ ${r.mismatches.length}개 불일치</span>`;
+    $("xgktext").textContent = r.xgk_text || "(니모닉 없음)";
+    $("xgkmsg").textContent = r.agree
+      ? "이 LS XGK 니모닉은 검증된 ST 와 동일하게 동작합니다(출력 트레이스 샘플 단위 일치)."
+      : ("불일치 출력: " + r.mismatches.map(m => m.output).join(", "));
+  } catch (e) { $("xgkmsg").textContent = "오류: " + e.message; }
+  finally { $("xgkgo").disabled = false; }
+}
+$("xgkgo").onclick = runVerifyXgk;
+
+// 안전커널 미리보기 — 예시 명령 몇 개를 통과/차단으로 시연(하드웨어 불요)
+async function previewCmd(cmd, label, el) {
+  el.textContent = "검사 중…";
+  try {
+    const r = await (await fetch("/api/safety-preview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipe: lastRecipe, answers: lastAnswers, command: cmd }),
+    })).json();
+    if (!r.ok) { el.innerHTML = `<span class="pill-deny">오류</span> ${r.error || ""}`; return; }
+    el.innerHTML = r.allowed
+      ? `<span class="pill-allow">✓ 허용</span> <span class="muted">${r.reason}</span>`
+      : `<span class="pill-deny">⛔ 차단</span> <span class="muted">${r.reason}</span>`;
+  } catch (e) { el.innerHTML = `<span class="pill-deny">오류</span> ${e.message}`; }
+}
+
+async function buildSafetyPreview() {
+  $("safetycmds").innerHTML = "<span class='muted'>입력 심볼 확인 중…</span>";
+  // 명세의 입력 심볼을 안전커널에서 받아온다(빈 명령은 항상 통과 → 심볼 조회용).
+  const probe = await (await fetch("/api/safety-preview", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipe: lastRecipe, answers: lastAnswers, command: {} }),
+  })).json();
+  if (!probe.ok) { $("safetycmds").textContent = probe.error || "실패"; return; }
+  const ins = probe.input_symbols || [];
+  // 예시 ①: 명세의 첫 입력을 켜는 안전 명령(통과 기대)
+  // 예시 ②: 명세에 없는 심볼을 켜는 명령(deny-by-default 차단 기대)
+  const examples = [];
+  if (ins[0]) examples.push({ label: `${ins[0]} 켜기 (정상 입력)`, cmd: { [ins[0]]: true } });
+  examples.push({ label: "GHOST_CMD 켜기 (명세 밖 심볼)", cmd: { GHOST_CMD: true } });
+  $("safetycmds").innerHTML = examples.map((ex, i) =>
+    `<div class="cmdrow">
+       <button data-i="${i}">${ex.label} ▶</button>
+       <span id="sp-${i}" class="muted">대기</span>
+     </div>`).join("");
+  document.querySelectorAll("#safetycmds button").forEach(b => {
+    const i = +b.dataset.i;
+    b.onclick = () => previewCmd(examples[i].cmd, examples[i].label, $("sp-" + i));
+  });
+}
+
+async function nlDesign() {
+  const text = $("nl").value.trim();
+  if (!text) return;
+  $("nlgo").disabled = true; $("nlmsg").textContent = "이해하는 중…";
+  try {
+    const d = await (await fetch("/api/nl-design", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, autobuild: true }),
+    })).json();
+    // 매칭된 레시피 카드 선택 + 추출값으로 폼 채우기
+    selectRecipe(d.recipe);
+    for (const [k, v] of Object.entries(d.filled_answers || {})) {
+      const el = document.querySelector(`#fields input[data-key="${k}"]`);
+      if (el) el.value = v;
+    }
+    let msg = d.suggestion || "";
+    if (d.questions && d.questions.length) msg += "  ❓ " + d.questions.join(" / ");
+    $("nlmsg").textContent = msg;
+    const sb = $("nlsafety");                // 안전필수(비상정지) 경고 배너
+    if (d.safety_warning) { sb.textContent = d.safety_warning; sb.style.display = "block"; }
+    else { sb.style.display = "none"; }
+    if (d.design) renderDesign(d.design);   // 곧장 결과 표시
+  } catch (e) { $("nlmsg").textContent = "오류: " + e.message; }
+  finally { $("nlgo").disabled = false; }
+}
+// 가상 PLC 테스트 — 입력을 차례로 펄스/유지하며 스캔 가동, 타이밍 그리드 표시
+async function runSim() {
+  if (!lastST) return;
+  $("simgo").disabled = true; $("simmsg").textContent = "가상 가동 중…";
+  try {
+    // 1차: 입력 목록 파악
+    const probe = await (await fetch("/api/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ st_code: lastST, inputs_timeline: [], duration_ms: 100, step_ms: 100 }),
+    })).json();
+    const ins = probe.inputs || [];
+    // 입력을 250ms 간격으로 차례차례 ON(유지) → 로직 자극
+    const timeline = [];
+    ins.forEach((s, i) => { timeline.push([300 + i * 600, { [s]: true }]); });
+    const dur = Math.max(3000, 600 * ins.length + 2000);
+    const r = await (await fetch("/api/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ st_code: lastST, inputs_timeline: timeline, duration_ms: dur, step_ms: 200 }),
+    })).json();
+    renderSim(r);
+    $("simmsg").textContent = "입력(파랑)을 차례로 눌렀을 때 출력(초록)이 어떻게 변하는지 — 시간 →";
+  } catch (e) { $("simmsg").textContent = "오류: " + e.message; }
+  finally { $("simgo").disabled = false; }
+}
+
+function renderSim(r) {
+  if (!r.ok) { $("simgrid").textContent = r.error || "실패"; return; }
+  const cols = r.samples.length;
+  const cell = (on, blue) => `<td style="width:8px;height:16px;padding:0;background:${on ? (blue ? "#58a6ff" : "#3fb950") : "#161b22"};border:1px solid #0d1117"></td>`;
+  const row = (sym, blue) => `<tr><td style="padding:2px 8px;color:${blue ? "#58a6ff" : "#3fb950"};white-space:nowrap;font-size:12px">${sym}</td>` +
+    r.samples.map(s => cell((blue ? s.inputs : s.outputs)[sym], blue)).join("") + "</tr>";
+  const html = `<table style="border-collapse:collapse">` +
+    r.inputs.map(s => row(s, true)).join("") +
+    r.outputs.map(s => row(s, false)).join("") +
+    `</table>`;
+  $("simgrid").innerHTML = html;
+}
+$("simgo").onclick = runSim;
+
+$("nlgo").onclick = nlDesign;
+$("nl").addEventListener("keydown", (e) => { if (e.key === "Enter") nlDesign(); });
+
+$("go").onclick = async () => {
+  if (!current) return;
+  $("go").disabled = true;
+  try {
+    const res = await fetch("/api/wizard", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipe: current.id, answers: answers() }),
+    });
+    renderDesign(await res.json());
+  } catch (e) { alert("오류: " + e.message); }
+  finally { $("go").disabled = false; }
+};
+
+// 파일 생성: 생성된 ST 를 결정론 파이프라인에 넣어 프로젝트 파일 생성 후 ZIP
+$("dl-files").onclick = async () => {
+  if (!lastST) return;
+  $("dlmsg").textContent = "생성 중…";
+  const res = await fetch("/api/generate/files", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ st_code: lastST, name: (current.id + "_" + Date.now()),
+                           vendors: ["LS_XGK", "MITSUBISHI_FX"] }),
+  });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true }); let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (/^event: manifest/m.test(frame)) {
+        const data = frame.split("\n").filter(l => l.startsWith("data: ")).map(l => l.slice(6)).join("\n");
+        try { lastProject = JSON.parse(data).project; } catch {}
+      }
+    }
+  }
+  if (lastProject) { $("dlmsg").textContent = "완료 — 다운로드 시작"; window.location = `/api/generated/${lastProject}.zip`; }
+  else $("dlmsg").textContent = "생성 실패";
+};
+
+load();
+</script>
+</body>
+</html>

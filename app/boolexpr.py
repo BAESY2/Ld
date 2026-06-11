@@ -39,13 +39,28 @@ class Or:
     operands: tuple[Node, ...]
 
 
-Node = Var | Const | Not | And | Or
+@dataclass(frozen=True)
+class Cmp:
+    """수치 비교(아날로그 1단계): 변수 vs 정수 리터럴. 예: LEVEL < 300."""
+
+    var: str
+    op: str  # "<" ">" "<=" ">=" "=" "<>"
+    value: int
+
+
+Node = Var | Const | Not | And | Or | Cmp
+
+# NOT (a op b) 를 비교 연산자 반전으로 환원(NNF 폐쇄 유지)
+_CMP_NEG = {"<": ">=", ">": "<=", "<=": ">", ">=": "<", "=": "<>", "<>": "="}
 
 
 # ---------------------------------------------------------------------------
 # 파서 (우선순위 NOT > AND > OR)
 # ---------------------------------------------------------------------------
-_TOKEN_RE = re.compile(r"\s*(\(|\)|[A-Za-z_]\w*)")
+# 식별자는 점표기 멤버 접근(예: T1.Q, C1.CV)을 단일 토큰으로 허용한다.
+_TOKEN_RE = re.compile(r"\s*(\(|\)|<>|<=|>=|<|>|=|\d+|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+_CMP_OPS = {"<", ">", "<=", ">=", "=", "<>"}
+_MIRROR = {"<": ">", ">": "<", "<=": ">=", ">=": "<=", "=": "=", "<>": "<>"}
 
 
 def _tokenize(expr: str) -> list[str]:
@@ -111,6 +126,20 @@ def parse(expr: str) -> Node:
             return Const(True)
         if upper == "FALSE":
             return Const(False)
+        nxt = peek()
+        if nxt in _CMP_OPS:
+            op = advance()
+            rhs = peek()
+            if sym.isdigit():
+                # 300 < LEVEL  ≡  LEVEL > 300 (변수를 좌변으로 정규화)
+                if rhs is None or not re.fullmatch(r"[A-Za-z_]\w*", rhs):
+                    raise ValueError(f"비교식 우변에 변수가 필요합니다: {expr!r}")
+                return Cmp(advance(), _MIRROR[op], int(sym))
+            if rhs is None or not rhs.isdigit():
+                raise ValueError(f"비교식 우변에 정수 리터럴이 필요합니다: {expr!r}")
+            return Cmp(sym, op, int(advance()))
+        if sym.isdigit():
+            raise ValueError(f"숫자 단독은 불리언이 아닙니다: {expr!r}")
         return Var(sym)
 
     node = parse_or()
@@ -122,6 +151,9 @@ def parse(expr: str) -> Node:
 # ---------------------------------------------------------------------------
 # DNF (Sum-of-Products)
 # ---------------------------------------------------------------------------
+# DNF 항 폭발 가드(지수 폭발로 인한 행 방지). 초과 시 ValueError.
+_MAX_DNF_TERMS = 4096
+
 # 리터럴: (이름, 부정여부)  예: ("A", False) = A,  ("B", True) = NOT B
 Literal = tuple[str, bool]
 # 곱항(AND term): 리터럴 집합.  None = 항상 거짓(FALSE)
@@ -143,6 +175,8 @@ def _to_nnf(node: Node, negate: bool = False) -> Node:
         case Or(operands):
             children = [_to_nnf(o, negate) for o in operands]
             return And(tuple(children)) if negate else Or(tuple(children))
+        case Cmp(var, op, value):
+            return Cmp(var, _CMP_NEG[op], value) if negate else node
     raise TypeError(f"알 수 없는 노드: {node!r}")
 
 
@@ -162,6 +196,11 @@ def to_dnf(node: Node) -> list[Term]:
                 return [frozenset({(name, True)})]
             case Const(value):
                 return [frozenset()] if value else []
+            case Cmp():
+                raise ValueError(
+                    "비교식은 래더(DNF) 변환을 아직 지원하지 않습니다 — "
+                    "아날로그 1단계(시뮬레이션 전용)."
+                )
             case Or(operands):
                 terms: list[Term] = []
                 for o in operands:
@@ -179,6 +218,11 @@ def to_dnf(node: Node) -> list[Term]:
                     acc = new_acc
                     if not acc:  # 한쪽이 FALSE 면 전체 FALSE
                         return []
+                    if len(acc) > _MAX_DNF_TERMS:
+                        raise ValueError(
+                            f"DNF 항이 {_MAX_DNF_TERMS}개를 초과했습니다(식이 너무 복잡). "
+                            "패턴/LLM 경로로 분해하세요."
+                        )
                 return acc
         raise TypeError(f"NNF 위반 노드: {n!r}")
 

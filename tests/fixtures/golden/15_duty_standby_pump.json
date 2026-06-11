@@ -1,0 +1,34 @@
+{
+  "name": "duty_standby_pump",
+  "request": "리드/래그(주/예비) 펌프 2대를 제어하세요. 수요 신호(DEMAND)가 있으면 리드 펌프(PUMP_LEAD)가 운전하고 자기유지됩니다. 수요가 높아지면(HIGH_DEMAND) 래그 펌프(PUMP_LAG)가 추가로 투입됩니다. 시스템 정지(SYS_STOP)가 입력되면 두 펌프 모두 정지합니다.",
+  "spec": {
+    "title": "리드/래그 펌프 듀티-스탠바이",
+    "io_points": [
+      {"symbol": "DEMAND",      "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "급수 수요(저압 등)"},
+      {"symbol": "HIGH_DEMAND", "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "고수요(래그 투입 조건)"},
+      {"symbol": "SYS_STOP",    "direction": "INPUT",  "data_type": "BOOL", "device_class": "P", "description": "시스템 정지"},
+      {"symbol": "PUMP_LEAD",   "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "리드(주) 펌프"},
+      {"symbol": "PUMP_LAG",    "direction": "OUTPUT", "data_type": "BOOL", "device_class": "P", "description": "래그(예비) 펌프"}
+    ],
+    "timers": [],
+    "counters": [],
+    "states": [
+      {"name": "OFF",    "is_initial": true,  "on_entry": [],                     "description": "정지"},
+      {"name": "LEAD",   "is_initial": false, "on_entry": ["PUMP_LEAD := TRUE;"],  "description": "리드 운전"},
+      {"name": "LAG_ON", "is_initial": false, "on_entry": ["PUMP_LAG := TRUE;"],   "description": "래그 추가 투입"}
+    ],
+    "transitions": [
+      {"from_state": "OFF",    "to_state": "LEAD",   "condition": "DEMAND AND NOT SYS_STOP",      "description": "수요 → 리드 기동"},
+      {"from_state": "LEAD",   "to_state": "OFF",    "condition": "SYS_STOP",                     "description": "정지"},
+      {"from_state": "LEAD",   "to_state": "LAG_ON", "condition": "HIGH_DEMAND AND NOT SYS_STOP", "description": "고수요 → 래그 투입"},
+      {"from_state": "LAG_ON", "to_state": "LEAD",   "condition": "NOT HIGH_DEMAND",              "description": "수요 완화 → 래그 해제"}
+    ],
+    "interlocks": []
+  },
+  "golden_st": "PUMP_LEAD := (DEMAND OR PUMP_LEAD) AND NOT SYS_STOP;\nPUMP_LAG := (HIGH_DEMAND OR PUMP_LAG) AND NOT SYS_STOP AND PUMP_LEAD;",
+  "expect": {
+    "double_coils": 0,
+    "interlock_errors": 0,
+    "min_rungs": 2
+  }
+}

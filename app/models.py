@@ -90,14 +90,29 @@ class TimerSpec(BaseModel):
     name: str
     timer_type: TimerType = TimerType.TON
     preset_ms: int = Field(..., ge=0, description="프리셋 시간(ms)")
+    enable_condition: str = Field(
+        default="", description="타이머 IN(인에이블) 불리언식 (예: 'MOTOR_RUN')"
+    )
     description: str = ""
+
+    @property
+    def done_ref(self) -> str:
+        """다운스트림에서 참조할 완료비트 (예: 'T1.Q')."""
+        return f"{self.name}.Q"
 
 
 class CounterSpec(BaseModel):
     name: str
     counter_type: CounterType = CounterType.CTU
     preset: int = Field(..., ge=0)
+    count_condition: str = Field(default="", description="CU(증가) 펄스 불리언식")
+    reset_condition: str = Field(default="", description="R(리셋) 불리언식")
     description: str = ""
+
+    @property
+    def done_ref(self) -> str:
+        """완료비트 참조 (CV >= PV), 예: 'C1.Q'."""
+        return f"{self.name}.Q"
 
 
 class Transition(BaseModel):
@@ -129,6 +144,19 @@ class Interlock(BaseModel):
     reason: str = Field(default="", description="인터락 사유 (예: 정/역 동시 구동 금지)")
 
 
+class DerivedOutput(BaseModel):
+    """on_entry 로 구동되지 않는 조합(파생) 출력.
+
+    예: 경음기 ``HORN := (LATCH_A OR LATCH_B) AND NOT ALM_ACK``.
+    expression 은 boolexpr 가 파싱 가능한 불리언식(AND/OR/NOT/괄호/심볼).
+    이 필드 덕분에 합성기가 상태구동이 아닌 출력도 결정론적으로 덮을 수 있다.
+    """
+
+    output: str
+    expression: str = Field(..., description="불리언식 RHS (예: '(A OR B) AND NOT C')")
+    description: str = ""
+
+
 class StateMachineSpec(BaseModel):
     """analyst(A1) 산출물 — 전체 상태머신 명세."""
 
@@ -139,6 +167,10 @@ class StateMachineSpec(BaseModel):
     states: list[SfcState] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)
     interlocks: list[Interlock] = Field(default_factory=list)
+    derived_outputs: list[DerivedOutput] = Field(
+        default_factory=list,
+        description="상태구동이 아닌 조합 출력(예: 알람 경음기)을 불리언식으로 정의",
+    )
 
 
 # ---------------------------------------------------------------------------
