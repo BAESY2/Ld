@@ -708,20 +708,23 @@ function drawLabels(ctx){
       if(labelMode===0)continue;
       if(labelMode===1&&l.pr===2)continue;
     }
-    const p=P(l.x,l.y,l.z), w=Math.max(44,l.tg.length*7.2,(l.sub||"").length*5.6)+12, h=l.sub?26:17;
-    let by=p[1]-h-12, guard=0;
+    /* 핵심 모드는 콤팩트 칩(태그만·소형·반투명) — 설비 가림 최소화. 전체 모드만 풀 칩 */
+    const compact=labelMode===1&&!editable;
+    const sub=compact?null:l.sub;
+    const p=P(l.x,l.y,l.z), w=Math.max(40,l.tg.length*(compact?6.4:7.2),(sub||"").length*5.6)+(compact?8:12), h=sub?26:(compact?14:17);
+    let by=p[1]-h-(compact?8:12), guard=0;
     while(guard++<10&&placed.some(r=>Math.abs(p[0]-r.cx)<(w+r.w)/2+5&&by<r.by+r.h+3&&by+h>r.by-3))by=Math.min(by,placed.reduce((m,r)=>Math.abs(p[0]-r.cx)<(w+r.w)/2+5?Math.min(m,r.by):m,by))-h-5;
     placed.push({cx:p[0],w,by,h});
     const bx=p[0]-w/2;
     CHIPS.push({bx,by,w,h,ax:p[0],ay:p[1],tg:l.tg,sub:l.sub});
-    seg(ctx,[p[0],p[1]],[p[0],by+h],"rgba(160,180,200,.35)",1);
+    seg(ctx,[p[0],p[1]],[p[0],by+h],compact?"rgba(160,180,200,.22)":"rgba(160,180,200,.35)",1);
     ctx.beginPath();ctx.roundRect(bx,by,w,h,4);
-    ctx.fillStyle="rgba(13,18,25,.82)";ctx.fill();
+    ctx.fillStyle=compact?"rgba(13,18,25,.58)":"rgba(13,18,25,.82)";ctx.fill();
     if(editMode&&EDITKEY[l.tg]){
       ctx.setLineDash([4,3]);ctx.strokeStyle="#58a6ff";ctx.lineWidth=1.6;ctx.stroke();ctx.setLineDash([]);
-    }else{ctx.strokeStyle=l.c||"#3a4756";ctx.lineWidth=1;ctx.stroke();}
-    txt(ctx,[p[0],by+11.5],l.tg,l.c||"#dce4f0",9.5,"center",true);
-    if(l.sub)txt(ctx,[p[0],by+22],l.sub,"#7f8a9a",8.5);
+    }else{ctx.strokeStyle=compact?"rgba(58,71,86,.7)":(l.c||"#3a4756");ctx.lineWidth=1;ctx.stroke();}
+    txt(ctx,[p[0],by+(compact?10:11.5)],l.tg,l.c||"#dce4f0",compact?8.5:9.5,"center",true);
+    if(sub)txt(ctx,[p[0],by+22],sub,"#7f8a9a",8.5);
   }
   LB.length=0;
 }
@@ -848,6 +851,30 @@ function rotBox(cx,cy,ang,w,d,h,z0,c,kb){
     face(c2,pts.map(p2=>P(p2[0],p2[1],z0+h)),shade(c,1.12),EDGE);
   });
 }
+/* 화면→바닥(z=0) 역투영 — 경로 그리기/장애물 배치용 */
+function unP(e){
+  const r=cvs.getBoundingClientRect();
+  const mx=(e.clientX-r.left-cam.px)/cam.z, my=(e.clientY-r.top-cam.py)/cam.z;
+  if(VIEW_MODE==="top")return[(mx-view.tox)/view.ts,(my-view.toy)/view.ts];
+  const sx=(mx-view.ox)/(0.866*view.s), sy=(my-view.oy)/(0.5*view.s);
+  return[(sx+sy)/2,(sy-sx)/2];
+}
+/* 점→폴리라인 최근접 투영(누적거리·거리²) */
+function pathProj(path,x,y){
+  let best={dist:0,d2:1e9},acc=0;
+  for(let i=0;i<path.length-1;i++){
+    const a=path[i],b2=path[i+1];
+    const dx=b2[0]-a[0],dy=b2[1]-a[1],L2=dx*dx+dy*dy;
+    let f=L2?((x-a[0])*dx+(y-a[1])*dy)/L2:0;f=Math.max(0,Math.min(1,f));
+    const qx=a[0]+dx*f,qy=a[1]+dy*f;
+    const d2=(x-qx)*(x-qx)+(y-qy)*(y-qy);
+    if(d2<best.d2)best={dist:acc+Math.sqrt(L2)*f,d2};
+    acc+=Math.sqrt(L2);
+  }
+  return best;
+}
+/* 경로 편집 상태(AGV 섹터): 사용자가 바닥 클릭으로 차량 경로를 직접 그린다 */
+const PEDIT={mode:null,veh:"amr",pts:[]};
 /* 폴리라인 경로: 누적거리 → 위치+헤딩 (AGV 코너 회전 주행) */
 function pathLen(path){
   let L2=0;
@@ -1955,6 +1982,8 @@ agv:{
            ["IN_POS_LAMP",[[14.72,5.05],[13.5,4.4],[13.5,3.6]]]],
  init:()=>({dist:0,x:2.6,y:3.0,ang:0,carry:false,hd0:0,done:0,stack:0,
    unloaded:false,prevPos:false,loadAnim:0,batt:86,missions:[],mlog:[],nodesOv:{},
+   customPaths:(()=>{try{return JSON.parse(localStorage.getItem("hands_agvpaths")||"{}");}catch(e){return{};}})(),
+   obstacles:[],
    fleet:[
     {id:"AMR-902",type:"amr",name:"잠입·롤러탑재 AMR 600kg",path:"amr",
      nodes:["ST-A","ST-C","CHG-2"],dist:2.0,x:6.2,y:4.45,ang:0,
@@ -2000,28 +2029,41 @@ agv:{
    /* ── 플릿 실행기: 경로 주행(코너 회전) + 승강 모션 ── */
    for(const v of st.fleet){
      if(cur.faults.estop||v.batt<=3)continue;
-     const path=FLEET_PATHS[v.path],PL=pathLen(path),loop=v.path==="amr";
+     const custom=st.customPaths&&st.customPaths[v.path];
+     const path=custom||FLEET_PATHS[v.path],PL=pathLen(path),loop=v.path==="amr";
+     if(v.dist>PL)v.dist=0;
      const cmd=v.prog.length?v.prog[v.pc%v.prog.length]:null;
      if(!cmd)continue;
      const spd=v.type==="fork"?0.7:1.0;
      const nd=n=>{
+       const nx2=st.nodesOv[n]!==undefined?st.nodesOv[n]:NODEXY[n][0];
+       if(custom)return pathProj(path,nx2,NODEXY[n][1]).dist;
        const base=NODE_DIST[n]?NODE_DIST[n][1]:0;
-       const ov=st.nodesOv[n]!==undefined?st.nodesOv[n]-NODEXY[n][0]:0;
-       return Math.max(0,Math.min(PL,base+ov));
+       return Math.max(0,Math.min(PL,base+(nx2-NODEXY[n][0])));
      };
+     /* 장애물: 전방 0.75m 내 경로상 장애물 → 정지(시나리오 제어) */
+     const obs=(st.obstacles||[]).map(o2=>pathProj(path,o2.x,o2.y)).filter(o2=>o2.d2<0.4);
+     const blocked=d3=>obs.some(o2=>{
+       const fw=loop?((o2.dist-d3+PL)%PL):o2.dist-d3;
+       return fw>0.02&&fw<0.75;});
      let mv=false;
      if(cmd.op==="MOVE"||cmd.op==="DOCK"){
-       const tgt=cmd.op==="DOCK"?nd(v.type==="fork"?"OUT":"CHG-2"):nd(cmd.arg);
-       if(loop){
-         const fwd=(tgt-v.dist+PL)%PL;
-         if(fwd>0.05){v.dist=(v.dist+Math.min(fwd,spd*dt))%PL;mv=true;}
-         else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
-         else v.pc++;
+       if(blocked(v.dist)){
+         if(!v.blk){v.blk=true;logEv("warn","ACS: "+v.id+" 경로 장애물 감지 — 안전 정지");}
        }else{
-         const d2=tgt-v.dist;
-         if(Math.abs(d2)>0.05){v.dist+=Math.sign(d2)*Math.min(Math.abs(d2),spd*dt);mv=true;}
-         else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
-         else v.pc++;
+         v.blk=false;
+         const tgt=cmd.op==="DOCK"?nd(v.type==="fork"?"OUT":"CHG-2"):nd(cmd.arg);
+         if(loop){
+           const fwd=(tgt-v.dist+PL)%PL;
+           if(fwd>0.05){v.dist=(v.dist+Math.min(fwd,spd*dt))%PL;mv=true;}
+           else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
+           else v.pc++;
+         }else{
+           const d2=tgt-v.dist;
+           if(Math.abs(d2)>0.05){v.dist+=Math.sign(d2)*Math.min(Math.abs(d2),spd*dt);mv=true;}
+           else if(cmd.op==="DOCK"){v.batt=Math.min(100,v.batt+1.4*dt);if(v.batt>80)v.pc++;}
+           else v.pc++;
+         }
        }
      }else if(cmd.op==="LOAD"){
        v.lift=Math.min(1,v.lift+dt*0.8);
@@ -2046,8 +2088,31 @@ agv:{
  draw(ctx,st,val,t){
    /* 경로(코너 포함) — 차종별 색 */
    drawPath(ctx,AGV_MAIN,"rgba(88,224,255,.5)",t);
-   drawPath(ctx,FLEET_PATHS.amr,"rgba(185,163,255,.4)",t);
-   drawPath(ctx,FLEET_PATHS.fork,"rgba(240,194,107,.38)",t);
+   drawPath(ctx,(st.customPaths&&st.customPaths.amr)||FLEET_PATHS.amr,"rgba(185,163,255,.4)",t);
+   drawPath(ctx,(st.customPaths&&st.customPaths.fork)||FLEET_PATHS.fork,"rgba(240,194,107,.38)",t);
+   /* 경로 그리기 미리보기(사용자 웨이포인트) */
+   if(PEDIT.mode==="draw"&&PEDIT.pts.length){
+     for(let i=0;i<PEDIT.pts.length;i++){
+       const q=P(PEDIT.pts[i][0],PEDIT.pts[i][1],0.02);
+       dq(999,c2=>{c2.beginPath();c2.arc(q[0],q[1],4,0,7);
+         c2.fillStyle="#7ee787";c2.fill();
+         c2.font="700 10px ui-monospace";c2.fillStyle="#7ee787";
+         c2.fillText(String(i+1),q[0]+6,q[1]-4);});
+       if(i>0)seg(ctx,P(PEDIT.pts[i-1][0],PEDIT.pts[i-1][1],0.02),
+         P(PEDIT.pts[i][0],PEDIT.pts[i][1],0.02),"rgba(126,231,135,.8)",2.4);
+     }
+   }
+   /* 장애물(시나리오) — 차량이 앞에서 정지 */
+   for(const o2 of(st.obstacles||[])){
+     sh(o2.x-0.22,o2.y-0.2,0.45,0.4,0.3);
+     cyl3(o2.x,o2.y,0,0.2,0.55,"#d9821c");
+     box3(o2.x-0.05,o2.y-0.05,0.55,0.1,0.1,0.1,"#fff");
+     dq(o2.x+o2.y+1,c2=>{
+       const q=P(o2.x,o2.y,0.02);
+       c2.save();c2.strokeStyle="rgba(248,81,73,.6)";c2.setLineDash([4,4]);
+       c2.lineWidth=1.6;c2.beginPath();c2.arc(q[0],q[1],0.75*view.s*0.7,0,7);c2.stroke();c2.restore();
+     });
+   }
    const stMark=(x,y,c,name,tg)=>{
      seg(ctx,P(x-0.55,y-0.45,0.015),P(x+0.55,y-0.45,0.015),c,2);
      seg(ctx,P(x-0.55,y+0.45,0.015),P(x+0.55,y+0.45,0.015),c,2);
@@ -3009,6 +3074,15 @@ function updateDOM(r,dt,t){
      `<button class="xbtn" id="acsstop">전 미션 취소</button>`+
      `<button class="xbtn" id="acsfleet" style="background:#1c3a4f">⌨ 플릿 매니저(상위 코딩)</button></div>`+
      (st2.batt<20?'<div class="alm warn" style="margin-top:8px"><i></i><span>저전압 — 충전 완료(40%)까지 미션 차단</span></div>':"")+
+     `<div class="vrf"><h4>시나리오 제어 · 사용자 경로</h4></div>`+
+     `<div style="display:flex;gap:6px;flex-wrap:wrap">`+
+     `<button class="xbtn${PEDIT.mode==="draw"?" on":""}" id="sc_draw">✏ 경로 그리기</button>`+
+     `<button class="xbtn" id="sc_veh">대상: ${PEDIT.veh==="amr"?"AMR-902":"FLT-903"}</button>`+
+     `<button class="xbtn" id="sc_apply" ${PEDIT.pts.length<2?"disabled":""}>경로 적용(${PEDIT.pts.length}점)</button>`+
+     `<button class="xbtn" id="sc_reset">기본 복원</button>`+
+     `<button class="xbtn${PEDIT.mode==="obs"?" on":""}" id="sc_obs">🚧 장애물 모드</button>`+
+     `<button class="xbtn" id="sc_rush">⚡ 러시(미션×5)</button></div>`+
+     `<div class="hint" style="font-size:11.5px;color:var(--mut);margin-top:6px">경로 그리기: 3D 바닥을 클릭해 웨이포인트를 찍고 '경로 적용' — 선택 차량이 그 경로로 주행합니다(저장됨). 장애물 모드: 바닥 클릭으로 배치/제거 — 전방 차량이 안전 정지.</div>`+
      `<div class="vrf"><h4>미션 이력</h4></div>`+
      (st2.mlog.length?st2.mlog.map(l2=>`<div class="alm"><i></i><span class="t">${l2.t}</span><span>${l2.id} ${l2.msg}</span></div>`).join(""):'<div class="hint" style="font-size:12px;color:var(--mut)">이력 없음</div>');
     const g1=document.getElementById("acsgo");
@@ -3021,6 +3095,42 @@ function updateDOM(r,dt,t){
     if(g2)g2.onclick=()=>{cur.sst.missions=[];logEv("warn","ACS 전 미션 취소");};
     const g3=document.getElementById("acsfleet");
     if(g3)g3.onclick=()=>openFleetTool();
+    const sd=document.getElementById("sc_draw");
+    if(sd)sd.onclick=()=>{
+      PEDIT.mode=PEDIT.mode==="draw"?null:"draw";PEDIT.pts=[];
+      logEv("op",PEDIT.mode?"경로 그리기 시작 — 3D 바닥을 클릭하세요 ("+(PEDIT.veh==="amr"?"AMR-902":"FLT-903")+")":"경로 그리기 종료");};
+    const sv=document.getElementById("sc_veh");
+    if(sv)sv.onclick=()=>{PEDIT.veh=PEDIT.veh==="amr"?"fork":"amr";PEDIT.pts=[];};
+    const sa=document.getElementById("sc_apply");
+    if(sa)sa.onclick=()=>{
+      if(PEDIT.pts.length<2)return;
+      const st3=cur.sst;
+      st3.customPaths=st3.customPaths||{};
+      const pts=PEDIT.pts.slice();
+      if(PEDIT.veh==="amr")pts.push(pts[0].slice()); /* AMR은 순환 루프로 닫음 */
+      st3.customPaths[PEDIT.veh]=pts;
+      const v=st3.fleet.find(x=>x.path===PEDIT.veh);
+      if(v){v.dist=0;v.pc=0;}
+      try{localStorage.setItem("hands_agvpaths",JSON.stringify(st3.customPaths));}catch(e){}
+      logEv("op","사용자 경로 적용 — "+(PEDIT.veh==="amr"?"AMR-902 순환":"FLT-903")+" "+PEDIT.pts.length+"점 (저장됨)");
+      PEDIT.mode=null;PEDIT.pts=[];};
+    const sr=document.getElementById("sc_reset");
+    if(sr)sr.onclick=()=>{
+      const st3=cur.sst;
+      delete (st3.customPaths||{})[PEDIT.veh];
+      try{localStorage.setItem("hands_agvpaths",JSON.stringify(st3.customPaths||{}));}catch(e){}
+      const v=st3.fleet.find(x=>x.path===PEDIT.veh);
+      if(v){v.dist=0;v.pc=0;}
+      logEv("op","기본 경로 복원 — "+(PEDIT.veh==="amr"?"AMR-902":"FLT-903"));};
+    const so=document.getElementById("sc_obs");
+    if(so)so.onclick=()=>{
+      PEDIT.mode=PEDIT.mode==="obs"?null:"obs";
+      logEv(PEDIT.mode?"warn":"op",PEDIT.mode?"장애물 모드 — 3D 바닥 클릭으로 배치/제거":"장애물 모드 종료");};
+    const su=document.getElementById("sc_rush");
+    if(su)su.onclick=()=>{
+      const st3=cur.sst;
+      for(let k=0;k<5;k++)st3.missions.push({id:"M"+String(++st3.mseq||(st3.mseq=1)).padStart(3,"0"),src:"ST-H",dst:"ST-B"});
+      logEv("warn","⚡ 러시 시나리오 — 미션 5건 일괄 투입(피크 부하)");};
   }
   document.getElementById("alarms").innerHTML=cur.log.slice(0,40).map(e=>
    `<div class="alm ${e.lv}"><i></i><span class="t">${e.t}</span><span>${e.msg}</span></div>`).join("")
@@ -3243,6 +3353,25 @@ document.getElementById("wtabs").addEventListener("click",e=>{
   if(b)wtab(b.dataset.w);
 });
 function pickDevice(e){
+  /* AGV 섹터 시나리오 모드: 바닥 클릭 = 웨이포인트 추가 / 장애물 배치·제거 */
+  if(cur.sst&&cur.sst.fleet&&PEDIT.mode){
+    const[wx,wy]=unP(e);
+    if(wx>0.3&&wx<16.5&&wy>0.3&&wy<7.2){
+      if(PEDIT.mode==="draw"){
+        PEDIT.pts.push([+wx.toFixed(2),+wy.toFixed(2)]);
+        logEv("op","웨이포인트 "+PEDIT.pts.length+" — ("+wx.toFixed(1)+", "+wy.toFixed(1)+")");
+        return;
+      }
+      if(PEDIT.mode==="obs"){
+        const st=cur.sst;st.obstacles=st.obstacles||[];
+        const hi2=st.obstacles.findIndex(o2=>Math.hypot(o2.x-wx,o2.y-wy)<0.5);
+        if(hi2>=0){st.obstacles.splice(hi2,1);logEv("op","장애물 제거 — 차량 재출발");}
+        else{st.obstacles.push({x:+wx.toFixed(2),y:+wy.toFixed(2)});
+          logEv("warn","장애물 배치 — ("+wx.toFixed(1)+", "+wy.toFixed(1)+") 전방 차량 안전 정지");}
+        return;
+      }
+    }
+  }
   const hit=chipAt(e);
   if(hit){
     devOpen=hit.tg;
