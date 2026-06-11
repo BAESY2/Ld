@@ -98,6 +98,15 @@ function pfRobot(){
   return {group:g,sh,el,arc};
 }
 
+function makePartsPool(env,n){
+  const pool=[];
+  for(let i=0;i<n;i++){
+    const p=box(0.28,0.26,0.28,mat([0x3b82f6,0x7c5cff,0xd29922,0x3fa86b][i%4]));
+    p.visible=false;env.set.add(p);pool.push(p);
+  }
+  return pool;
+}
+
 /* ── 씬 빌더(라인별) ── */
 const BUILDERS={
  motor_start_stop(env){
@@ -213,6 +222,123 @@ const BUILDERS={
     }
     sparks.geometry.setDrawRange(0,n);
     sparks.geometry.attributes.position.needsUpdate=true;
+  };
+ }
+,
+ count_eject(env){
+  const bt=pfBelt(env.set,2,2.0,11,0.75);
+  for(const dy of[-0.14,0.7])
+    env.set.add(at(box(0.06,1.0,0.06,mat(0x222a34)),9.19,2.0+dy+0.14,0.5));
+  env.set.add(at(box(0.12,0.1,0.1,mat(0x1a212b)),9.16,2.78,0.92));
+  const beam=new (T()).Mesh(new (T()).CylinderGeometry(0.015,0.015,0.86,8),
+    new (T()).MeshBasicMaterial({color:0xff5b5b,transparent:true,opacity:0.25}));
+  beam.rotation.x=Math.PI/2;at(beam,9.19,2.31,0.92);env.set.add(beam);
+  const cylBody=at(box(0.56,0.32,0.4,mat(0x37424f)),10.7,1.62,0.78);env.set.add(cylBody);
+  const rod=box(0.16,0.14,0.8,mat(0x9aa7b5,{metalness:0.6}));env.set.add(rod);
+  env.set.add(at(box(0.78,0.5,0.78,mat(0x6e532a)),10.71,3.95,0.25));
+  env.set.add(at(box(0.9,0.5,0.85,mat(0x54442a)),13.4,2.32,0.25));
+  const lb=labelSprite("SN-101","#ff8f8f");at(lb,9.19,2.6,1.5);env.set.add(lb);
+  const pool=makePartsPool(env,10);
+  env.upd=(L,dt)=>{
+    bt.offset.x-=1.1*(L.speedF||1)*dt*0.9;
+    beam.material.opacity=L.sst.blocked?0.95:0.22;
+    const q=W2T(10.7,1.85+L.sst.rod*0.5,0.74);rod.position.set(q[0],q[1],q[2]);
+    pool.forEach((p,i)=>{
+      const sp=L.sst.parts[i];
+      if(sp&&sp.st!==9){p.visible=true;
+        const q2=W2T(sp.x,sp.y,sp.z+0.13);p.position.set(q2[0],q2[1],q2[2]);}
+      else p.visible=false;
+    });
+  };
+ },
+ conveyor_divert(env){
+  const bt=pfBelt(env.set,2,2.0,11,0.75);
+  for(const dy of[-0.14,0.7])
+    env.set.add(at(box(0.07,1.62,0.07,mat(0x39434f)),8.55,2.0+dy+0.14,0.81));
+  env.set.add(at(box(0.3,0.22,0.95,mat(0x2c3743)),8.55,2.3,1.7));
+  env.set.add(at(box(0.16,0.28,0.3,mat(0x1a212b)),8.55,2.33,1.42));
+  const cone=new (T()).Mesh(new (T()).ConeGeometry(0.38,0.62,4),
+    new (T()).MeshBasicMaterial({color:0xbfe3ff,transparent:true,opacity:0}));
+  at(cone,8.55,2.33,1.05);env.set.add(cone);
+  const piv=new (T()).Group();
+  const q0=W2T(10.5,1.95,0.9);piv.position.set(q0[0],q0[1],q0[2]);env.set.add(piv);
+  const arm=box(0.08,0.12,0.8,mat(0x566472));arm.position.z=0.4;piv.add(arm);
+  env.set.add(at(box(0.85,0.5,0.8,mat(0x6e3a3a)),10.67,3.8,0.25));
+  env.set.add(at(box(0.95,0.5,0.9,mat(0x3f5a3f)),13.6,2.35,0.25));
+  const lb=labelSprite("VS-701","#8ec9ff");at(lb,8.55,2.3,2.15);env.set.add(lb);
+  const pool=makePartsPool(env,10);
+  const ngm=mat(0x8a4040);
+  env.upd=(L,dt)=>{
+    bt.offset.x-=1.0*(L.speedF||1)*dt*0.9;
+    cone.material.opacity=L.sst.flash*0.35;
+    piv.rotation.y=-L.sst.armB*0.95;
+    pool.forEach((p,i)=>{
+      const sp=L.sst.parts[i];
+      if(sp&&sp.st!==9){p.visible=true;
+        p.material=sp.ng?ngm:p.userData.m||(p.userData.m=p.material);
+        const q2=W2T(sp.x,sp.y,sp.z+0.13);p.position.set(q2[0],q2[1],q2[2]);}
+      else p.visible=false;
+    });
+  };
+ },
+ cascade_conveyor(env){
+  const bts=[pfBelt(env.set,1.0,2.0,5.0,1.35),
+             pfBelt(env.set,6.2,2.0,5.0,0.95),
+             pfBelt(env.set,11.4,2.0,5.0,0.55)];
+  env.set.add(at(box(0.95,0.5,0.9,mat(0x54442a)),17.1,2.3,0.25));
+  const lamps=[6.15,11.35,16.55].map((x,i)=>{
+    const pl=new (T()).PointLight(0x3fb950,0,3);
+    at(pl,x,2.0,[1.5,1.1,0.7][i]);env.set.add(pl);return pl;
+  });
+  const lb=labelSprite("CV-601~3","#7ee787");at(lb,8.6,2.3,2.2);env.set.add(lb);
+  const pool=makePartsPool(env,12);
+  env.upd=(L,dt)=>{
+    bts.forEach((bt,i)=>{bt.offset.x-=L.sst.spd[i]*dt*0.9;});
+    const run=["CONV_UP","CONV_MID","CONV_DOWN"];
+    lamps.forEach((pl,i)=>pl.intensity=L.plc.val(run[i])?1.1:0);
+    pool.forEach((p,i)=>{
+      const sp=L.sst.parts[i];
+      if(sp&&!sp.done){p.visible=true;
+        const q2=W2T(sp.x,2.32,sp.z+0.14);p.position.set(q2[0],q2[1],q2[2]);}
+      else p.visible=false;
+    });
+  };
+ },
+ duty_standby(env){
+  env.set.add(at(box(2.2,0.5,1.9,mat(0x2b3743)),2.45,3.0,0.25));
+  const water=new (T()).Mesh(new (T()).BoxGeometry(1.9,0.06,1.6),
+    new (T()).MeshStandardMaterial({color:0x2e5e8e,transparent:true,opacity:0.8}));
+  at(water,2.45,3.0,0.46);env.set.add(water);
+  const pumps=[];
+  for(const[py,sym,tx]of[[2.35,"PUMP_LEAD","P-801A"],[3.55,"PUMP_LAG","P-801B"]]){
+    env.set.add(at(box(0.6,0.5,0.6,mat(0x44528a)),4.75,py,0.25));
+    const vol=cyl(0.26,0.45,mat(0x3a4654));at(vol,5.3,py,0.22);env.set.add(vol);
+    const pl=new (T()).PointLight(0x3fb950,0,2.5);at(pl,5.3,py,0.7);env.set.add(pl);
+    const lb2=labelSprite(tx,"#8ec9ff");at(lb2,4.95,py,1.25);env.set.add(lb2);
+    const pipe=new (T()).Mesh(new (T()).CylinderGeometry(0.05,0.05,5.4,10),
+      new (T()).MeshStandardMaterial({color:0x566472,metalness:0.5,roughness:0.5,emissive:0x000000}));
+    pipe.rotation.z=Math.PI/2;at(pipe,8.3,py,2.7);env.set.add(pipe);
+    const rise=new (T()).Mesh(new (T()).CylinderGeometry(0.05,0.05,2.45,10),pipe.material);
+    at(rise,5.6,py,1.5);env.set.add(rise);
+    pumps.push({sym,pl,pm:pipe.material});
+  }
+  const tank=cyl(1.05,2.3,mat(0x46535f,{roughness:0.5}));at(tank,11.5,3.0,1.7);env.set.add(tank);
+  for(const[lx,ly]of[[10.6,2.3],[12.4,2.3],[10.6,3.7],[12.4,3.7]])
+    env.set.add(at(box(0.16,0.55,0.16,mat(0x39434f)),lx,ly,0.28));
+  const gauge=new (T()).Mesh(new (T()).BoxGeometry(0.08,1.94,0.04),
+    new (T()).MeshBasicMaterial({color:0x58a6ff}));
+  env.set.add(gauge);
+  const lb3=labelSprite("TK-801","#9fb3c8");at(lb3,11.5,3.0,3.3);env.set.add(lb3);
+  env.upd=(L,dt,t)=>{
+    const st=L.sst;
+    pumps.forEach(p2=>{
+      const on=L.plc.val(p2.sym);
+      p2.pl.intensity=on?1.2:0;
+      p2.pm.emissive.setHex(on?0x1a4a6e:0x000000);
+    });
+    const h=Math.max(0.02,st.level*1.94);
+    gauge.scale.y=h/1.94;
+    const q=W2T(12.65,3.55,0.62+h/2);gauge.position.set(q[0],q[1],q[2]);
   };
  }
 };
