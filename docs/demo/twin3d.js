@@ -54,7 +54,9 @@ function pfBelt(g,x0,y0,len,zTop){
     const dr=cyl(0.09,0.5,dark);dr.rotation.x=Math.PI/2;
     g.add(at(dr,e,y0+0.31,zTop-0.05));
   }
-  return bt;
+  /* drive(v,dt): 엔진 속도[m/s]를 그대로 적산 — UV = 이동거리/타일(1.1m) */
+  let dist=0;
+  return {tex:bt,drive:(v,dt)=>{dist+=v*dt;bt.offset.x=-dist/1.1;}};
 }
 function pfFence(g,x0,y0,x1,y1){
   const ym=mat(0xcaa011),ht=hazardTex();ht.repeat.set(6,1);
@@ -126,7 +128,7 @@ const BUILDERS={
     p.visible=false;env.set.add(p);parts.push(p);
   }
   env.upd=(L,dt)=>{
-    bt.offset.x=-L.sst.belt*1.4;
+    bt.drive(L.sst.spd,dt); /* 엔진 램프 속도 그대로 */
     lamp1.intensity=L.plc.val("MOTOR")?1.2:0;
     parts.forEach((p,i)=>{
       const sp=L.sst.parts[i];
@@ -176,10 +178,10 @@ const BUILDERS={
  },
  weld_cell(env){
   pfFence(env.set,5.0,1.2,9.7,4.5);
-  pfBelt(env.set,1.2,2.05,3.6,0.75);
-  pfBelt(env.set,9.9,2.05,3.4,0.75);
-  pfBelt(env.set,5.35,2.05,1.7,0.75);
-  pfBelt(env.set,8.0,2.05,1.55,0.75);
+  const wbts=[pfBelt(env.set,1.2,2.05,3.6,0.75),
+    pfBelt(env.set,9.9,2.05,3.4,0.75),
+    pfBelt(env.set,5.35,2.05,1.7,0.75),
+    pfBelt(env.set,8.0,2.05,1.55,0.75)];
   env.set.add(at(box(0.66,0.78,0.66,mat(0x3a4654)),7.6,2.28,0.39));
   const rob=pfRobot();
   const q0=W2T(6.3,2.95,0);rob.group.position.set(q0[0],q0[1],q0[2]);
@@ -196,10 +198,30 @@ const BUILDERS={
   env.set.add(sparks);
   const sp=[];
   const lb=labelSprite("RB-401","#f0a14c");at(lb,6.3,2.95,2.3);env.set.add(lb);
+  const SHX=6.3,SHY=2.95,SHZ=0.66,L1=0.85,L2=0.84;
   env.upd=(L,dt,t)=>{
     const st=L.sst,a0=st.arm,a=a0*a0*(3-2*a0);
-    rob.sh.rotation.z=-0.5*a;
-    rob.el.rotation.z=1.5*a-0.4;
+    wbts.forEach(b2=>b2.drive(0.5,dt)); /* 엔진 셀 벨트 0.5m/s 동일 */
+    /* 엔진과 동일한 타깃 산출(티칭 오프셋 + 위브) */
+    const rc=L.devCfg["RB-401"]||{};
+    const ro=rc.off||[0,0,0];
+    const wv=L.plc.val("WELD")?Math.sin(st.weaveT*9)*0.07:0;
+    const home=[6.85,2.95,2.0];
+    const goal=[7.55+ro[0]+wv,2.3+ro[1],1.04+ro[2]];
+    const tx2=home[0]+(goal[0]-home[0])*a,
+          ty2=home[1]+(goal[1]-home[1])*a,
+          tz2=home[2]+(goal[2]-home[2])*a;
+    /* 요(턴테이블) + 평면 2링크 IK */
+    const dx=tx2-SHX,dy=ty2-SHY,dz=tz2-SHZ;
+    const yaw=Math.atan2(dy,dx);
+    rob.group.rotation.y=-yaw;
+    const r2=Math.hypot(dx,dy);
+    let d=Math.hypot(r2,dz);
+    d=Math.min(d,L1+L2-0.01);
+    const a1=Math.atan2(dz,r2)+Math.acos((d*d+L1*L1-L2*L2)/(2*d*L1));
+    const a2=Math.acos((L1*L1+L2*L2-d*d)/(2*L1*L2));
+    rob.sh.rotation.z=a1-Math.PI/2;     /* 0=수직 기준 */
+    rob.el.rotation.z=a2-Math.PI;       /* 펴짐=π */
     rob.arc.intensity=L.plc.val("WELD")?(2.5+Math.random()*3):0;
     const cg=st.clamp;
     const c1=W2T(7.27,1.96+cg*0.16,0.93),c2=W2T(7.27,2.7-cg*0.16,0.93);
@@ -209,7 +231,7 @@ const BUILDERS={
     part.visible=(st.out!==undefined||st.partX>1.55);
     const pq=W2T(px,2.34,0.84);part.position.set(pq[0],pq[1],pq[2]);
     if(L.plc.val("WELD")&&sp.length<240)
-      for(let i=0;i<5;i++)sp.push({x:7.55,y:2.3,z:1.05,
+      for(let i=0;i<5;i++)sp.push({x:goal[0],y:goal[1],z:goal[2],
         vx:(Math.random()-.5)*2.4,vy:Math.random()*1.8,vz:(Math.random()-.5)*2.4,life:0.5});
     const pos=sparks.geometry.attributes.position.array;
     let n=0;
@@ -240,7 +262,7 @@ const BUILDERS={
   const lb=labelSprite("SN-101","#ff8f8f");at(lb,9.19,2.6,1.5);env.set.add(lb);
   const pool=makePartsPool(env,10);
   env.upd=(L,dt)=>{
-    bt.offset.x-=1.1*(L.speedF||1)*dt*0.9;
+    bt.drive(1.1*(L.speedF||1),dt); /* 검수 라인 엔진 속도식 동일 */
     beam.material.opacity=L.sst.blocked?0.95:0.22;
     const q=W2T(10.7,1.85+L.sst.rod*0.5,0.74);rod.position.set(q[0],q[1],q[2]);
     pool.forEach((p,i)=>{
@@ -269,7 +291,7 @@ const BUILDERS={
   const pool=makePartsPool(env,10);
   const ngm=mat(0x8a4040);
   env.upd=(L,dt)=>{
-    bt.offset.x-=1.0*(L.speedF||1)*dt*0.9;
+    bt.drive(1.0*(L.speedF||1),dt); /* 비전 라인 엔진 속도식 동일 */
     cone.material.opacity=L.sst.flash*0.35;
     piv.rotation.y=-L.sst.armB*0.95;
     pool.forEach((p,i)=>{
@@ -293,7 +315,7 @@ const BUILDERS={
   const lb=labelSprite("CV-601~3","#7ee787");at(lb,8.6,2.3,2.2);env.set.add(lb);
   const pool=makePartsPool(env,12);
   env.upd=(L,dt)=>{
-    bts.forEach((bt,i)=>{bt.offset.x-=L.sst.spd[i]*dt*0.9;});
+    bts.forEach((bt,i)=>bt.drive(L.sst.spd[i],dt)); /* 벨트별 램프 속도 동일 */
     const run=["CONV_UP","CONV_MID","CONV_DOWN"];
     lamps.forEach((pl,i)=>pl.intensity=L.plc.val(run[i])?1.1:0);
     pool.forEach((p,i)=>{
@@ -448,19 +470,35 @@ const Twin3D={
   const W=container.clientWidth,H=container.clientHeight;
   const r=new TT.WebGLRenderer({antialias:true});
   r.setSize(W,H);r.setPixelRatio(Math.min(devicePixelRatio,2));
-  r.shadowMap.enabled=true;container.appendChild(r.domElement);
+  r.shadowMap.enabled=true;
+  if(TT.PCFSoftShadowMap!==undefined)r.shadowMap.type=TT.PCFSoftShadowMap;
+  if(TT.ACESFilmicToneMapping!==undefined){r.toneMapping=TT.ACESFilmicToneMapping;r.toneMappingExposure=1.05;}
+  if(TT.SRGBColorSpace!==undefined)r.outputColorSpace=TT.SRGBColorSpace;
+  else if(TT.sRGBEncoding!==undefined)r.outputEncoding=TT.sRGBEncoding;
+  container.appendChild(r.domElement);
   const sc=new TT.Scene();
   sc.background=new TT.Color(0x0a0f16);
   sc.fog=new TT.Fog(0x0a0f16,20,55);
-  sc.add(new TT.AmbientLight(0x8899bb,0.55));
+  sc.add(new TT.AmbientLight(0x7788aa,0.35));
+  sc.add(new TT.HemisphereLight(0x9db4d8,0x1a1f27,0.5));
   const sun=new TT.DirectionalLight(0xffeedd,1.0);
   sun.position.set(7,13,5);sun.castShadow=true;
   sun.shadow.mapSize.set(2048,2048);
   sun.shadow.camera.left=-12;sun.shadow.camera.right=12;
   sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;
   sc.add(sun);
+  const fc=document.createElement("canvas");fc.width=512;fc.height=512;
+  const fg=fc.getContext("2d");
+  fg.fillStyle="#262c34";fg.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){fg.fillStyle="rgba("+(20+Math.random()*40|0)+","+(24+Math.random()*44|0)+","+(30+Math.random()*48|0)+",.35)";
+    fg.fillRect(Math.random()*512,Math.random()*512,2,2);}
+  fg.strokeStyle="rgba(0,0,0,.45)";fg.lineWidth=3;
+  for(let i=0;i<=512;i+=128){fg.beginPath();fg.moveTo(i,0);fg.lineTo(i,512);fg.stroke();
+    fg.beginPath();fg.moveTo(0,i);fg.lineTo(512,i);fg.stroke();}
+  const ftex=new TT.CanvasTexture(fc);
+  ftex.wrapS=ftex.wrapT=TT.RepeatWrapping;ftex.repeat.set(6,4);
   const floor=new TT.Mesh(new TT.PlaneGeometry(26,16),
-    new TT.MeshStandardMaterial({color:0x20262e,roughness:0.95}));
+    new TT.MeshStandardMaterial({map:ftex,roughness:0.92}));
   floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;sc.add(floor);
   const grid=new TT.GridHelper(26,26,0x33404e,0x191f27);
   grid.position.y=0.002;sc.add(grid);
