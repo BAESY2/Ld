@@ -4997,13 +4997,19 @@ th{background:#eef2f6}pre{background:#f4f6f8;border:1px solid #d6dde4;padding:10
 ${rowsIO.map(r2=>`<tr><td>${r2[0]}</td><td>${r2[1]}</td><td>${r2[2]}</td><td>${esc(r2[3])}</td></tr>`).join("")}</table>
 <h2>3. 구조화 텍스트(ST · IEC 61131-3)</h2><pre>${esc(cur.d.st)}</pre>
 ${il?`<h2>4. ${m.v} 니모닉(IL) — 동봉 .il 파일</h2><pre>${esc(il)}</pre>`:""}
+<p style="font-size:12px;color:#555">동봉 파일: 니모닉(.il) · <b>변수/설명 CSV</b>(XG5000 '변수/설명' 편집기 가져오기/붙여넣기 호환 — 디바이스·변수·설명문 3열, UTF-8 BOM)</p>
 <h2>${il?5:4}. 결선도(직배선)</h2><div style="background:#0d1117;padding:12px;border-radius:8px">${wiringSvg(cur)}</div>
 <div class="warn">⚠ 본 검증은 로직 보조이며 기능안전 인증이 아닙니다. E-stop·가드 등 안전기능은
 하드와이어 안전회로로 구현해야 합니다(ISO 13849 / IEC 62061).</div>
 </body></html>`);
   w.document.close();
-  if(il)dl(cur.id+"_xgk.il",il,"text/plain");
-  logEv("op","납품 패키지 발행 — "+cur.d.title+" ("+m.model+")");
+  if(il)dl(cur.id+"_"+m.v.toLowerCase()+".il",il,"text/plain");
+  /* XG5000 변수/설명 가져오기용 CSV(BOM — 엑셀/한글 호환). 변수/설명 편집기에
+     붙여넣기 또는 CSV 가져오기로 즉시 투입 가능한 형식 */
+  const csv="\uFEFF디바이스,변수,설명문\n"+rowsIO
+    .map(r2=>`${r2[0]},${r2[1]},"${(r2[3]||"").replace(/"/g,'""')}"`).join("\n")+"\n";
+  dl(cur.id+"_vars.csv",csv,"text/csv");
+  logEv("op","납품 패키지 발행 — "+cur.d.title+" ("+m.model+") · .il + 변수 CSV 동봉");
 }
 
 /* ── 공장 템플릿: 실공장형 라인 구성을 일괄 생성 ── */
