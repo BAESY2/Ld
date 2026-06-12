@@ -2526,7 +2526,10 @@ agv:{
    if(o.HOMING){
      if(!st.wasHoming){st.hd0=st.dist;st.wasHoming=true;}
      st.dist=st.hd0*(1-Math.min(1,tH.acc/tH.preset));
-     if(tH.acc/tH.preset>0.85)st.loadAnim=Math.min(1,st.loadAnim+dt*2);
+     if(tH.acc/tH.preset>0.85){
+       if(st.loadAnim<0.05&&(st.stockIn||0)>0)st.stockIn--; /* 적치품 픽업 */
+       st.loadAnim=Math.min(1,st.loadAnim+dt*2);
+     }
    }else st.wasHoming=false;
    if(o.MOVING){st.carry=true;st.dist=L*Math.min(1,tM.acc/tM.preset);}
    if(o.IN_POS_LAMP){
@@ -2658,6 +2661,10 @@ agv:{
    dq(2+3+1,c2=>lamp(c2,P(1.85,3.0,0.95),2.6,"#3fb950",val("HOMING")||(t*2%1)<0.5));
    box3(1.6,3.85,0,1.1,0.95,0.12,"#5a4a30");
    box3(1.75,3.95,0.12,0.8,0.75,0.5,"#7a5c2e");
+   /* 연계 적치(도장 완료품) — ST-H 인바운드 버퍼 */
+   for(let i=0;i<Math.min(4,st.stockIn||0);i++)
+     box3(0.6,2.3+i*0.0+ (i%2)*0.62,0.05+(i/2|0)*0.5,0.55,0.55,0.45,"#c0727e");
+   if((st.stockIn||0)>0)tag3(0.9,2.6,1.2,"BUF-IN",`연계 적치 ${st.stockIn}`,"#c0727e",2);
    /* RACK 자재 + 하역장 스택 */
    box3(2.75,0.95,0,0.95,0.85,0.12,"#5a4a30");
    box3(2.9,1.05,0.12,0.65,0.6,0.5,"#7a5c2e");
@@ -3488,6 +3495,7 @@ SCENES.cluster.avail=()=>1;
    하류가 멈추면 투입 대기(queue)가 쌓이는 것까지 보인다. */
 SCENES.paint.feed=st=>{st.queue=(st.queue||0)+1;};
 SCENES.agv.feed=st=>{
+  st.stockIn=(st.stockIn||0)+1; /* 도장 완료품이 도크에 실물 적치 */
   st.missions.push({id:"M"+String(++st.mseq||(st.mseq=1)).padStart(3,"0"),
     src:"ST-H",dst:"ST-B",link:true});
 };
@@ -4738,7 +4746,13 @@ function updateOverview(){
   }).join("");
   if(html!==_ovHtml){_ovHtml=html;el.innerHTML=html;}
   const pc=document.getElementById("pjcount");
-  if(pc)pc.textContent=ids.length+"개 라인 가동 · 카탈로그 "+(window.DEMO_ALL?Object.keys(window.DEMO_ALL).length:0)+"종";
+  if(pc){
+    const cb=LINES.transfer_line,cp=LINES.paint_booth,ca=LINES.motion_home_move;
+    const chain=(cb&&cp&&ca)
+      ?" · 체인 차체 "+cb.sst.count+" → 도장 "+cp.sst.count+" → 출하 "+ca.sst.done
+      :"";
+    pc.textContent=ids.length+"개 라인 가동"+chain+" · 카탈로그 "+(window.DEMO_ALL?Object.keys(window.DEMO_ALL).length:0)+"종";
+  }
 }
 document.getElementById("overview").addEventListener("click",e=>{
   const del=e.target.closest(".ovdel");
