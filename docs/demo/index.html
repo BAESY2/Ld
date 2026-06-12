@@ -2421,6 +2421,8 @@ generic:{
    });
    stackLight(12.2,1.6,!outs.some(s2=>val(s2)),false,outs.some(s2=>val(s2)));
    ledBoard(4.2,1.2,"사이클",String(st.cycles).padStart(4,"0"));
+   if((st.queue||0)>0)ledBoard(12.6,1.25,"투입 대기(연계)",String(st.queue).padStart(2,"0"),
+     st.queue>3?"#f5b14c":"#7ee787");
  }},
 
 /* ---- 정량 충전(병입) 라인 — 로드셀 아날로그 폐루프 ---- */
@@ -3499,10 +3501,18 @@ SCENES.agv.feed=st=>{
   st.missions.push({id:"M"+String(++st.mseq||(st.mseq=1)).padStart(3,"0"),
     src:"ST-H",dst:"ST-B",link:true});
 };
+SCENES.generic.feed=st=>{st.queue=(st.queue||0)+1;};
+SCENES.palletz.feed=st=>{st.queue=(st.queue||0)+1;};
+SCENES.wrap.feed=st=>{st.queue=(st.queue||0)+1;};
 const LINKS=[
  {from:"transfer_line",to:"paint_booth",label:"차체 완성 → 도장 투입 대기"},
  {from:"paint_booth",to:"motion_home_move",label:"도장 완료 → AGV 출하 미션"}
 ];
+function addLinks(uids,names){
+  for(let i=0;i<uids.length-1;i++)
+    LINKS.push({from:uids[i],to:uids[i+1],
+      label:(names[i]||uids[i])+" → "+(names[i+1]||uids[i+1])+" 투입"});
+}
 const _linkProd={};
 function tickLinks(){
   for(const lk of LINKS){
@@ -4907,6 +4917,7 @@ function addLine(recipe,name){
   updateOverview();
   show(uid);
   logEv("op","라인 생성 — "+u.name+" ("+recipe+")");
+  return uid;
 }
 function removeLine(uid){
   const i=ids.indexOf(uid);
@@ -4915,6 +4926,8 @@ function removeLine(uid){
   ids.splice(i,1);
   delete LINES[uid];delete DEMO[uid];delete META[uid];delete KPI[uid];delete OV[uid];
   USER_LINES=USER_LINES.filter(u=>u.uid!==uid);persistLines();
+  for(let i=LINKS.length-1;i>=0;i--)
+    if(LINKS[i].from===uid||LINKS[i].to===uid)LINKS.splice(i,1);
   updateOverview();
 }
 /* 내장 산업 라인 — 엔진 합성·검증 산출물(DEMO_ALL)에서 등록(반도체·이차전지) */
@@ -5072,11 +5085,15 @@ const TEMPLATES=[
   lines:["oht_transport","motion_home_move"]}];
 function applyTemplate(ti){
   const t2=TEMPLATES[ti];if(!t2)return;
-  let made=0;
+  const uids=[],names=[];
   t2.lines.forEach(rid=>{
-    if(window.DEMO_ALL&&window.DEMO_ALL[rid]){addLine(rid);made++;}
+    if(window.DEMO_ALL&&window.DEMO_ALL[rid]){
+      const uid=addLine(rid);
+      if(uid){uids.push(uid);names.push((window.DEMO_ALL[rid].title||rid).slice(0,10));}
+    }
   });
-  logEv("op","공장 템플릿 적용 — "+t2.name+" ("+made+"개 라인 생성)");
+  addLinks(uids,names); /* 공정 순서대로 자동 연계(상류 완성→하류 투입 대기) */
+  logEv("op","공장 템플릿 적용 — "+t2.name+" ("+uids.length+"개 라인 · 연계 "+Math.max(0,uids.length-1)+"건)");
 }
 
 /* 프로젝트 바 */
