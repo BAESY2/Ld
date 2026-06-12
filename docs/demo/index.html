@@ -1372,6 +1372,8 @@ async function bakeVehicles(){
     if(!window.Twin3D||!window.Twin3D.bake)return;
     for(const k of["agv","amr","fork","robot"])
       if(!SPR[k])SPR[k]=window.Twin3D.bake(k,24,220);
+    for(const k of["chamber","efem","foup","loadlock"])
+      if(!SPR[k])SPR[k]=window.Twin3D.bake(k,1,240);
     logEv("op","차량 스프라이트 베이크 — 실사풍 렌더 적용(24방위·환경광 베이크)");
   }catch(e){}
 }
@@ -3186,12 +3188,19 @@ cluster:{
    face(ctx,[P(1.4,0.5,0.006),P(15.6,0.5,0.006),P(15.6,5.6,0.006),P(1.4,5.6,0.006)],"rgba(212,230,250,.08)");
    /* EFEM(대기측) + 로드포트 FOUP 2기 */
    sh(3.3,4.2,4.0,0.95,0.28);
-   box3(3.4,4.25,0,3.8,0.85,1.7,"#46535f");
-   box3(3.5,4.3,1.7,3.6,0.75,0.1,"#525f6c");
+   if(SPR.efem)dq(5.3+4.65+0.8,c2=>sprite(c2,"efem",5.3,4.65,0,1.0));
+   else{
+     box3(3.4,4.25,0,3.8,0.85,1.7,"#46535f");
+     box3(3.5,4.3,1.7,3.6,0.75,0.1,"#525f6c");
+   }
    tag3(5.3,4.6,2.1,"EF-70","EFEM(대기 로봇)","#8ec9ff",2);
    for(const lx of[4.2,5.6]){
      box3(lx-0.3,5.15,0,0.6,0.5,0.85,"#39434f");
-     box3(lx-0.26,5.18,0.85,0.52,0.44,0.42,"#cdd5de");
+     if(SPR.foup)dq(lx+5.4+1.0,c2=>{
+       const q=P(lx,5.4,0.85),s2=SPR.foup,w=(s2.ext*2)*0.92*view.s;
+       c2.drawImage(s2.frames[0],q[0]-w/2,q[1]-w*0.86,w,w);
+     });
+     else box3(lx-0.26,5.18,0.85,0.52,0.44,0.42,"#cdd5de");
    }
    tag3(4.9,5.4,1.6,"LP-1·2","로드포트 FOUP","#9fb3c8",2);
    /* EFEM 로봇 재장전 암(웨이퍼 반출 직후) */
@@ -3203,8 +3212,11 @@ cluster:{
    /* 로드락(LL-A) — 압력 게이지 */
    const llx=HUB[0]+Math.cos(ANG_LL)*2.0, lly=HUB[1]+Math.sin(ANG_LL)*1.55;
    sh(llx-0.55,lly-0.45,1.1,0.9,0.3);
-   box3(llx-0.55,lly-0.45,0,1.1,0.9,0.85,"#3c4854");
-   box3(llx-0.45,lly-0.38,0.85,0.9,0.76,0.12,"#525f6c");
+   if(SPR.loadlock)dq(llx+lly+0.5,c2=>sprite(c2,"loadlock",llx,lly,0,1.0));
+   else{
+     box3(llx-0.55,lly-0.45,0,1.1,0.9,0.85,"#3c4854");
+     box3(llx-0.45,lly-0.38,0.85,0.9,0.76,0.12,"#525f6c");
+   }
    dq(llx+lly+1.6,c2=>{
      const q=P(llx,lly,1.25);
      const pv=st.llP>=1?st.llP.toFixed(0)+" Torr":st.llP.toExponential(0)+" Torr";
@@ -3230,9 +3242,12 @@ cluster:{
    ANG_PM.forEach((a,i)=>{
      const px=HUB[0]+Math.cos(a)*2.1, py=HUB[1]+Math.sin(a)*1.7;
      sh(px-0.5,py-0.42,1.0,0.85,0.3);
-     cyl3(px,py,0,0.52,0.8,"#46535f");
-     cyl3(px,py,0.8,0.4,0.16,"#525f6c");
-     box3(px+0.45,py-0.2,0,0.36,0.4,0.55,"#39434f");
+     if(SPR.chamber)dq(px+py+0.5,c2=>sprite(c2,"chamber",px,py,0,1.0));
+     else{
+       cyl3(px,py,0,0.52,0.8,"#46535f");
+       cyl3(px,py,0.8,0.4,0.16,"#525f6c");
+       box3(px+0.45,py-0.2,0,0.36,0.4,0.55,"#39434f");
+     }
      const on=i===st.pm&&st.glow>0.1;
      dq(px+py+1.6,c2=>lamp(c2,P(px,py,1.05),3,on?"#b9a3ff":"#27313c",on));
      if(on)dq(px+py+1.7,c2=>{
