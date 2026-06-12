@@ -216,6 +216,22 @@ function pfPallet(){
   const strap=box(0.94,0.5,0.04,mat(0x2f3a46));strap.position.set(0,0.42,0);g.add(strap);
   return {group:g};
 }
+function pfFormRack(){
+  const TT=T();
+  const g=new TT.Group();
+  const body=box(4.6,2.5,1.3,mat(0x37424f,{metalness:0.35,roughness:0.5}));
+  body.position.y=1.25;g.add(body);
+  const top=box(4.4,0.1,1.2,mat(0x46535f));top.position.y=2.55;g.add(top);
+  for(let r2=0;r2<4;r2++)for(let c3=0;c3<8;c3++){
+    const ch=box(0.42,0.38,0.06,mat(0x222a34,{roughness:0.4}));
+    ch.position.set(-1.95+c3*0.56,0.55+r2*0.52,0.66);g.add(ch);
+    const led=box(0.06,0.04,0.02,mat(0x58e0ff,{emissive:0x2fa0c0,emissiveIntensity:0.8}));
+    led.position.set(-1.78+c3*0.56,0.72+r2*0.52,0.69);g.add(led);
+  }
+  const duct=box(4.4,0.18,0.5,mat(0x9aa5b1,{metalness:0.6,roughness:0.35}));
+  duct.position.set(0,2.72,0);g.add(duct);
+  return {group:g};
+}
 const _BAKE_KINDS={
   agv:{mk:()=>pfAGV().group,ext:1.55},
   amr:{mk:()=>pfAMR().group,ext:1.55},
@@ -226,7 +242,8 @@ const _BAKE_KINDS={
   foup:{mk:()=>pfFOUP().group,ext:0.55},
   loadlock:{mk:()=>pfLoadlock().group,ext:1.0},
   biw:{mk:()=>pfBIW().group,ext:1.9},
-  pallet:{mk:()=>pfPallet().group,ext:0.95}};
+  pallet:{mk:()=>pfPallet().group,ext:0.95},
+  rack:{mk:()=>pfFormRack().group,ext:2.75}};
 function bakeSprites(kind,n,px){
   const TT=T();
   const cfg=_BAKE_KINDS[kind];
