@@ -908,7 +908,11 @@ async function bakeVehicles(){
     if(!window.Twin3D||!window.Twin3D.bake)return;
     for(const k of["agv","amr","fork","robot"])
       if(!SPR[k])SPR[k]=window.Twin3D.bake(k,24,220);
+<<<<<<< HEAD
+    for(const k of["chamber","efem","foup","loadlock","biw","rack"])
+=======
     for(const k of["chamber","efem","foup","loadlock","biw"])
+>>>>>>> origin/main
       if(!SPR[k])SPR[k]=window.Twin3D.bake(k,1,240);
     if(!SPR.pallet)SPR.pallet=window.Twin3D.bake("pallet",24,200);
     logEv("op","차량 스프라이트 베이크 — 실사풍 렌더 적용(24방위·환경광 베이크)");
@@ -2352,8 +2356,10 @@ bodyline:{
        st.bodies=st.bodies.map(b=>b+1).filter(b=>{
          if(b>3){st.count++;return false;}
          return true;});
+       st.trRet=1; /* 바 복귀 애니(텔레포트 금지) */
      }
      st.tr=0;
+     if(st.trRet>0)st.trRet=Math.max(0,st.trRet-dt/1.4);
    }
    /* 신규 차체 투입: ST1 공석 + 사이클 휴지 시 측면에서 진입 */
    const busy=o.CLAMP||o.WELD_A||o.WELD_B||o.TRANSFER;
@@ -2382,7 +2388,7 @@ bodyline:{
    /* 트랜스퍼 레일 2열 + 바 */
    box3(1.5,2.62,0.22,13.6,0.1,0.14,"#3c4854");
    box3(1.5,3.58,0.22,13.6,0.1,0.14,"#3c4854");
-   const barX=1.7+st.tr*3.2;
+   const barX=1.7+(val("TRANSFER")?st.tr:(st.trRet||0))*3.2;
    box3(barX,2.78,0.3,11.6,0.74,0.14,val("TRANSFER")?"#2c5dad":"#33404e");
    tag3(8,3.15,0.65,"TR-530","트랜스퍼 바 서보",val("TRANSFER")?"#8ec9ff":"#5d6c7c",2);
    const stx=s=>2.9+s*3.2;
@@ -2950,8 +2956,11 @@ battery:{
  draw(ctx,st,val,t){
    /* 화성 랙 캐비닛 */
    sh(5.5,1.75,4.8,1.5,0.3);
-   box3(5.6,1.85,0,4.6,1.3,2.5,"#37424f");
-   box3(5.6,1.85,2.5,4.6,1.3,0.1,"#46535f");
+   if(SPR.rack)dq(7.9+2.5+0.8,c2=>sprite(c2,"rack",7.9,2.5,0,1.0));
+   else{
+     box3(5.6,1.85,0,4.6,1.3,2.5,"#37424f");
+     box3(5.6,1.85,2.5,4.6,1.3,0.1,"#46535f");
+   }
    for(let i=0;i<4;i++)
      dq(5.9+i*1.15+1.85+1.3,c2=>lamp(c2,P(6.1+i*1.15,1.86,2.1),2,val("CHARGER")?"#58e0ff":"#27313c",val("CHARGER")));
    tag3(7.9,1.95,2.9,"FM-810","화성 랙 8채널 · CHG-810","#9fb3c8");
