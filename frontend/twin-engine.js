@@ -908,11 +908,7 @@ async function bakeVehicles(){
     if(!window.Twin3D||!window.Twin3D.bake)return;
     for(const k of["agv","amr","fork","robot"])
       if(!SPR[k])SPR[k]=window.Twin3D.bake(k,24,220);
-<<<<<<< HEAD
     for(const k of["chamber","efem","foup","loadlock","biw","rack"])
-=======
-    for(const k of["chamber","efem","foup","loadlock","biw"])
->>>>>>> origin/main
       if(!SPR[k])SPR[k]=window.Twin3D.bake(k,1,240);
     if(!SPR.pallet)SPR.pallet=window.Twin3D.bake("pallet",24,200);
     logEv("op","차량 스프라이트 베이크 — 실사풍 렌더 적용(24방위·환경광 베이크)");
