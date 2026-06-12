@@ -142,12 +142,66 @@ function pfFork(){
   return {group:g};
 }
 /* ── 스프라이트 베이크: 프리팹을 N방위 디메트릭 오프스크린 렌더 → 2D 캔버스용 ── */
-const _BAKE_KINDS={agv:()=>pfAGV().group,amr:()=>pfAMR().group,fork:()=>pfFork().group,
-  robot:()=>pfRobot().group};
+function pfChamber(){
+  const g=new (T()).Group();
+  const body=cyl(0.52,0.8,mat(0x46535f,{metalness:0.55,roughness:0.35}));
+  body.position.y=0.4;g.add(body);
+  const lid=cyl(0.4,0.16,mat(0x525f6c,{metalness:0.6,roughness:0.3}));
+  lid.position.y=0.88;g.add(lid);
+  const port=cyl(0.1,0.3,mat(0x39434f));port.rotation.z=Math.PI/2;
+  port.position.set(0.55,0.45,0);g.add(port);
+  for(let i=0;i<8;i++){
+    const bolt=cyl(0.03,0.05,mat(0x222a34));
+    bolt.position.set(Math.cos(i*Math.PI/4)*0.45,0.97,Math.sin(i*Math.PI/4)*0.45);
+    g.add(bolt);
+  }
+  const rf=box(0.36,0.55,0.4,mat(0x39434f,{roughness:0.5}));
+  rf.position.set(0.62,0.28,-0.35);g.add(rf);
+  return {group:g};
+}
+function pfEFEM(){
+  const g=new (T()).Group();
+  const body=box(3.8,1.7,0.85,mat(0x46535f,{metalness:0.4,roughness:0.4}));
+  body.position.y=0.85;g.add(body);
+  const top=box(3.6,0.1,0.75,mat(0x525f6c));top.position.y=1.75;g.add(top);
+  for(const sx of[-1.2,0,1.2]){
+    const win=box(0.7,0.5,0.04,mat(0x9fc4e8,{metalness:0.2,roughness:0.1}));
+    win.position.set(sx,1.15,0.45);g.add(win);
+  }
+  return {group:g};
+}
+function pfFOUP(){
+  const g=new (T()).Group();
+  const body=box(0.52,0.45,0.48,mat(0xcdd5de,{roughness:0.35}));
+  body.position.y=0.27;g.add(body);
+  const handle=box(0.4,0.05,0.12,mat(0x8a93a0));handle.position.y=0.53;g.add(handle);
+  const door=box(0.5,0.4,0.03,mat(0xb9c2cc));door.position.set(0,0.27,0.25);g.add(door);
+  return {group:g};
+}
+function pfLoadlock(){
+  const g=new (T()).Group();
+  const body=box(1.1,0.85,0.9,mat(0x3c4854,{metalness:0.5,roughness:0.4}));
+  body.position.y=0.43;g.add(body);
+  const lid=box(0.9,0.12,0.76,mat(0x525f6c,{metalness:0.6,roughness:0.3}));
+  lid.position.y=0.91;g.add(lid);
+  const sight=cyl(0.09,0.04,mat(0x9fc4e8,{roughness:0.1}));
+  sight.position.set(0,0.99,0);g.add(sight);
+  return {group:g};
+}
+const _BAKE_KINDS={
+  agv:{mk:()=>pfAGV().group,ext:1.55},
+  amr:{mk:()=>pfAMR().group,ext:1.55},
+  fork:{mk:()=>pfFork().group,ext:1.55},
+  robot:{mk:()=>pfRobot().group,ext:1.55},
+  chamber:{mk:()=>pfChamber().group,ext:1.0},
+  efem:{mk:()=>pfEFEM().group,ext:2.3},
+  foup:{mk:()=>pfFOUP().group,ext:0.55},
+  loadlock:{mk:()=>pfLoadlock().group,ext:1.0}};
 function bakeSprites(kind,n,px){
   const TT=T();
-  const mk=_BAKE_KINDS[kind];
-  if(!mk)return null;
+  const cfg=_BAKE_KINDS[kind];
+  if(!cfg)return null;
+  const mk=cfg.mk;
   px=px||220;n=n||24;
   const r=new TT.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
   r.setSize(px,px);r.setPixelRatio(1);
@@ -161,7 +215,7 @@ function bakeSprites(kind,n,px){
   sun.position.set(4,7,3);sc.add(sun);
   const grp=mk();sc.add(grp);
   /* 디메트릭(2:1 근사): 방위 45°·고도 30° 직교 카메라 */
-  const EXT=1.55;
+  const EXT=cfg.ext||1.55;
   const cam=new TT.OrthographicCamera(-EXT,EXT,EXT,-EXT,0.1,40);
   const el=Math.atan(0.577);
   cam.position.set(Math.cos(el)*Math.cos(-Math.PI/4)*10,Math.sin(el)*10,
