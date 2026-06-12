@@ -216,6 +216,7 @@ function pfPallet(){
   const strap=box(0.94,0.5,0.04,mat(0x2f3a46));strap.position.set(0,0.42,0);g.add(strap);
   return {group:g};
 }
+<<<<<<< HEAD
 function pfFormRack(){
   const TT=T();
   const g=new TT.Group();
@@ -232,6 +233,8 @@ function pfFormRack(){
   duct.position.set(0,2.72,0);g.add(duct);
   return {group:g};
 }
+=======
+>>>>>>> origin/main
 const _BAKE_KINDS={
   agv:{mk:()=>pfAGV().group,ext:1.55},
   amr:{mk:()=>pfAMR().group,ext:1.55},
@@ -242,8 +245,12 @@ const _BAKE_KINDS={
   foup:{mk:()=>pfFOUP().group,ext:0.55},
   loadlock:{mk:()=>pfLoadlock().group,ext:1.0},
   biw:{mk:()=>pfBIW().group,ext:1.9},
+<<<<<<< HEAD
   pallet:{mk:()=>pfPallet().group,ext:0.95},
   rack:{mk:()=>pfFormRack().group,ext:2.75}};
+=======
+  pallet:{mk:()=>pfPallet().group,ext:0.95}};
+>>>>>>> origin/main
 function bakeSprites(kind,n,px){
   const TT=T();
   const cfg=_BAKE_KINDS[kind];
