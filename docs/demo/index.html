@@ -2934,7 +2934,8 @@ paint:{
    st.fan=ramp(st.fan,o.PURGE_FAN||o.SPRAY?1:0,1.5,dt);
    const busy=o.PURGE_FAN||o.SPRAY||o.FLUSH;
    /* 행거 패널 진입 → 부스 중앙 정지 → 도장 → 배출 */
-   if(st.phase==="in"){st.hx=Math.min(7.9,st.hx+dt*1.1);if(st.hx>=7.89)st.phase="ready";}
+   if(st.phase==="in"){st.hx=Math.min(7.9,st.hx+dt*1.1);
+     if(st.hx>=7.89){st.phase="ready";if(st.queue>0)st.queue--;}}
    else if(st.phase==="ready"&&o.SPRAY)st.phase="paint";
    else if(st.phase==="paint"){
      if(o.SPRAY)st.paint=Math.min(1,st.paint+dt/18);
@@ -3006,6 +3007,8 @@ paint:{
    });
    stackLight(11.2,1.8,false,val("FLUSH"),val("SPRAY")||val("PURGE_FAN"));
    ledBoard(3.4,1.1,"도장 완료",String(st.count).padStart(4,"0"));
+   ledBoard(12.6,1.15,"투입 대기(연계)",String(st.queue||0).padStart(2,"0"),
+     (st.queue||0)>3?"#f5b14c":"#7ee787");
  }},
 
 /* ---- 파레트 랩핑기 ---- */
@@ -3479,6 +3482,34 @@ SCENES.bodyline.avail=()=>1;
 SCENES.fab.prod=st=>st.count; SCENES.fab.wip=st=>st.carry?1:0; SCENES.fab.avail=()=>1;
 SCENES.cluster.prod=st=>st.count; SCENES.cluster.wip=st=>st.wafer!=="OUT"?1:0;
 SCENES.cluster.avail=()=>1;
+
+/* ── 라인 간 연계 물류(1단계): 상류 완성 → 하류 투입 ──
+   공장 수준 연동: 상류 prod 증가를 감지해 하류 씬의 feed() 훅 호출.
+   하류가 멈추면 투입 대기(queue)가 쌓이는 것까지 보인다. */
+SCENES.paint.feed=st=>{st.queue=(st.queue||0)+1;};
+SCENES.agv.feed=st=>{
+  st.missions.push({id:"M"+String(++st.mseq||(st.mseq=1)).padStart(3,"0"),
+    src:"ST-H",dst:"ST-B",link:true});
+};
+const LINKS=[
+ {from:"transfer_line",to:"paint_booth",label:"차체 완성 → 도장 투입 대기"},
+ {from:"paint_booth",to:"motion_home_move",label:"도장 완료 → AGV 출하 미션"}
+];
+const _linkProd={};
+function tickLinks(){
+  for(const lk of LINKS){
+    const F=LINES[lk.from],T2=LINES[lk.to];
+    if(!F||!T2)continue;
+    const p=F.scene.prod?F.scene.prod(F.sst):0;
+    if(_linkProd[lk.from]===undefined){_linkProd[lk.from]=p;continue;}
+    const n=p-_linkProd[lk.from];
+    if(n>0&&T2.scene.feed){
+      for(let k=0;k<n;k++)T2.scene.feed(T2.sst,T2);
+      if(cur===F||cur===T2)logEv("op","연계 물류 — "+lk.label+" ("+n+"건)");
+    }
+    _linkProd[lk.from]=p;
+  }
+}
 SCENES.paint.prod=st=>st.count; SCENES.paint.wip=st=>st.phase!=="in"?1:0; SCENES.paint.avail=()=>1;
 SCENES.wrap.prod=st=>st.count; SCENES.wrap.wip=st=>st.out?0:1; SCENES.wrap.avail=()=>1;
 SCENES.palletz.prod=st=>st.count; SCENES.palletz.wip=st=>st.boxes.length; SCENES.palletz.avail=()=>1;
@@ -4680,6 +4711,7 @@ function loop(now){
     const r=simLine(LINES[id],dt,now/1000);
     if(LINES[id]===cur)rActive=r;
   }
+  tickLinks();
   if(FACT.on&&window.Twin3D&&window.Twin3D.active==="__factory__")
     window.Twin3D.updateFactory(LINES,dt,now/1000);
   else if(GL3D.on&&window.Twin3D&&window.Twin3D.active===cur.id)
