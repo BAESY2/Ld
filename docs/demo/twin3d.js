@@ -188,6 +188,34 @@ function pfLoadlock(){
   sight.position.set(0,0.99,0);g.add(sight);
   return {group:g};
 }
+function pfBIW(){
+  const g=new (T()).Group();
+  const m=mat(0xaab2bc,{metalness:0.7,roughness:0.32});
+  const m2=mat(0x959ea8,{metalness:0.7,roughness:0.35});
+  const base=box(2.6,0.36,1.3,m);base.position.y=0.6;g.add(base);
+  const cab=box(1.35,0.42,1.06,m2);cab.position.set(-0.05,1.0,0);g.add(cab);
+  const hood=box(0.55,0.2,1.18,m);hood.position.set(-1.0,0.72,0);g.add(hood);
+  const trunk=box(0.5,0.24,1.18,m);trunk.position.set(1.02,0.74,0);g.add(trunk);
+  for(const sx of[-0.85,0.85])for(const sz of[-0.62,0.62]){
+    const arch=cyl(0.26,0.08,mat(0x2a2f36));
+    arch.rotation.x=Math.PI/2;arch.position.set(sx,0.5,sz);g.add(arch);
+  }
+  const wsh=box(1.0,0.04,0.95,mat(0x6f8aa8,{metalness:0.4,roughness:0.15}));
+  wsh.rotation.z=0.6;wsh.position.set(-0.75,0.95,0);g.add(wsh);
+  return {group:g};
+}
+function pfPallet(){
+  const g=new (T()).Group();
+  const deck=box(1.15,0.12,0.92,mat(0x8a6a3a,{roughness:0.8}));
+  deck.position.y=0.1;g.add(deck);
+  for(const sx of[-0.48,0,0.48]){
+    const sk=box(0.12,0.09,0.92,mat(0x6e532a));sk.position.set(sx,0.02,0);g.add(sk);
+  }
+  const b1=box(0.92,0.5,0.7,mat(0x9a7b4a,{roughness:0.75}));b1.position.y=0.42;g.add(b1);
+  const b2=box(0.6,0.4,0.5,mat(0x8a6c3e,{roughness:0.75}));b2.position.set(0.1,0.86,0.05);g.add(b2);
+  const strap=box(0.94,0.5,0.04,mat(0x2f3a46));strap.position.set(0,0.42,0);g.add(strap);
+  return {group:g};
+}
 const _BAKE_KINDS={
   agv:{mk:()=>pfAGV().group,ext:1.55},
   amr:{mk:()=>pfAMR().group,ext:1.55},
@@ -196,7 +224,9 @@ const _BAKE_KINDS={
   chamber:{mk:()=>pfChamber().group,ext:1.0},
   efem:{mk:()=>pfEFEM().group,ext:2.3},
   foup:{mk:()=>pfFOUP().group,ext:0.55},
-  loadlock:{mk:()=>pfLoadlock().group,ext:1.0}};
+  loadlock:{mk:()=>pfLoadlock().group,ext:1.0},
+  biw:{mk:()=>pfBIW().group,ext:1.9},
+  pallet:{mk:()=>pfPallet().group,ext:0.95}};
 function bakeSprites(kind,n,px){
   const TT=T();
   const cfg=_BAKE_KINDS[kind];
